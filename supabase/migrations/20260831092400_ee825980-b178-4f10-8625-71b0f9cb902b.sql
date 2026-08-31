@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.recompute_risk() FROM anon, authenticated;
