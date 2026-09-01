@@ -7,8 +7,8 @@ export function RiskBadge({
   className,
 }: {
   level: string;
-  score?: number;
-  className?: string;
+  score?: number | undefined;
+  className?: string | undefined;
 }) {
   return (
     <span
@@ -47,8 +47,8 @@ export function Stat({
 }: {
   label: string;
   value: string | number;
-  hint?: string;
-  tone?: string;
+  hint?: string | undefined;
+  tone?: string | undefined;
 }) {
   return (
     <div className="panel p-4">
