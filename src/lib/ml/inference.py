@@ -23,13 +23,23 @@ import psycopg2
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 from dotenv import load_dotenv
 
-from .features import (
-    CANONICAL_FEATURES,
-    FEATURE_SCHEMA_VERSION,
-    extract_features_for_zone,
-    validate_feature_vector,
-)
-from .artifact import load_model_artifact, ModelArtifact
+try:
+    from .features import (
+        CANONICAL_FEATURES,
+        FEATURE_SCHEMA_VERSION,
+        extract_features_for_zone,
+        validate_feature_vector,
+    )
+    from .artifact import load_model_artifact, ModelArtifact
+except (ImportError, ValueError):
+    sys.path.insert(0, os.path.dirname(__file__))
+    from features import (
+        CANONICAL_FEATURES,
+        FEATURE_SCHEMA_VERSION,
+        extract_features_for_zone,
+        validate_feature_vector,
+    )
+    from artifact import load_model_artifact, ModelArtifact
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")

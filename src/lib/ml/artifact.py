@@ -8,7 +8,10 @@ Supports versioned JSON artifacts with full cryptographic provenance.
 import json, os, math
 from datetime import datetime, timezone
 import numpy as np
-from .features import CANONICAL_FEATURES, FEATURE_SCHEMA_VERSION, validate_feature_vector
+try:
+    from .features import CANONICAL_FEATURES, FEATURE_SCHEMA_VERSION, validate_feature_vector
+except (ImportError, ValueError):
+    from features import CANONICAL_FEATURES, FEATURE_SCHEMA_VERSION, validate_feature_vector
 
 class ModelArtifact:
     """Encapsulates a trained, versioned model artifact."""
