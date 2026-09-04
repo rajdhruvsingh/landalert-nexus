@@ -277,6 +277,11 @@ function Dashboard() {
                   </div>
                 );
               })}
+            {data.roads.length === 0 && (
+              <p className="p-4 text-sm text-muted-foreground">
+                No road segments mapped yet.
+              </p>
+            )}
           </div>
         </div>
 
