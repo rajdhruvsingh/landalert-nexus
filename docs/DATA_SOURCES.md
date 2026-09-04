@@ -247,3 +247,27 @@ Integration: download daily HDF5/NetCDF → sample at zone centroids → upsert 
 | Rainfall thresholds | 1 of 8 states (Sikkim calibrated)                  | 7 states (state-level estimates from published literature)                                             |
 | Soil moisture       | All 15 (real ERA5-Land data after first ingestion) | None (pre-ingestion: cosine-function fixture)                                                          |
 
+---
+
+## Satellite Imagery & Vegetation Layers (`Copernicus Sentinel-2`)
+
+### Role & Architectural Scope
+- **Provider**: European Space Agency (ESA) Copernicus Sentinel-2 via Sentinel Hub / Copernicus Data Space Ecosystem (CDSE).
+- **Layers Available**:
+  1. `TRUE-COLOR`: Natural color imagery (Bands 4, 3, 2).
+  2. `NDVI`: Normalized Difference Vegetation Index ((B08 - B04) / (B08 + B04)), visualizing canopy loss and defoliated slope surfaces.
+- **Strict Non-Detection Disclaimer**:
+  > [!IMPORTANT]
+  > This feature provides **supplementary visual context only**.
+  > It strictly **DOES NOT** perform automated landslide scar detection, optical change detection, or hazard prediction. Automated satellite-based scar detection is an independent computer-vision discipline requiring orthorectified multi-temporal cloud-masked surface reflectance pairs and trained segmentation models.
+
+### Rate Limiting & Quota Management
+- To stay strictly within free-tier quotas (typically 10,000 processing units/month), all tile requests are proxied via `/api/satellite/tiles` with **24-hour server-side caching** (`Cache-Control: public, max-age=86400`).
+- The layer is defaulted to **OFF** and requires explicit operator toggle.
+- If `SENTINEL_HUB_INSTANCE_ID` is not set or `SATELLITE_LAYER_ENABLED=false`, the UI gracefully hides the layer toggle to prevent broken tile rendering.
+
+### Mandatory Attribution
+Whenever the layer is displayed, the following license attribution is rendered per ESA/Copernicus terms:
+`© Copernicus Sentinel data 2026 / Sentinel Hub | Supplementary Visual Context Only`
+
+

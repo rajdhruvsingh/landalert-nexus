@@ -19,6 +19,7 @@ import { getZonesGeoJson, getLandslidesGeoJson } from "./gis.service";
 import { ingestLiveRainfallImpl } from "./monitoring.functions";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getSatelliteLayerStatus, fetchSatelliteTile } from "./satellite.service";
 
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
 
@@ -429,6 +430,63 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           ...cors,
         },
       });
+    }
+
+    // 11. Satellite Imagery Status (Sentinel-2 / Copernicus)
+    if (pathname === "/api/satellite/status" && request.method === "GET") {
+      const status = getSatelliteLayerStatus();
+      return jsonResponse(status, 200, cors);
+    }
+
+    // 12. Satellite Tiles Proxy with Server-side Caching (TTL 24h)
+    if (pathname === "/api/satellite/tiles" && request.method === "GET") {
+      const status = getSatelliteLayerStatus();
+      if (!status.enabled || !status.configured) {
+        return jsonResponse(
+          {
+            error: "SATELLITE_LAYER_UNAVAILABLE",
+            configured: status.configured,
+            enabled: status.enabled,
+            message: "Sentinel Hub / Copernicus credentials not configured or feature disabled.",
+          },
+          503,
+          cors,
+        );
+      }
+
+      const layerParam = (url.searchParams.get("layer") || "TRUE-COLOR").toUpperCase();
+      const z = Number(url.searchParams.get("z"));
+      const x = Number(url.searchParams.get("x"));
+      const y = Number(url.searchParams.get("y"));
+
+      if (isNaN(z) || isNaN(x) || isNaN(y) || (layerParam !== "TRUE-COLOR" && layerParam !== "NDVI")) {
+        return errorResponse(
+          "Invalid parameters: required layer=TRUE-COLOR|NDVI, and numeric z, x, y coordinates.",
+          "INVALID_PARAMS",
+          400,
+          cors,
+        );
+      }
+
+      try {
+        const { buffer, contentType, cached } = await fetchSatelliteTile(layerParam as "TRUE-COLOR" | "NDVI", z, x, y);
+        return new Response(buffer, {
+          status: 200,
+          headers: {
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=86400",
+            "X-Tile-Cache": cached ? "HIT" : "MISS",
+            ...cors,
+          },
+        });
+      } catch (err) {
+        return errorResponse(
+          err instanceof Error ? err.message : "Failed to fetch satellite tile",
+          "SATELLITE_UPSTREAM_ERROR",
+          502,
+          cors,
+        );
+      }
     }
 
     return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404, cors);
