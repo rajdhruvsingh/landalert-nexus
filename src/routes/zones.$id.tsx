@@ -114,11 +114,11 @@ function ZonePage() {
           hint={`Moisture threshold ${eThr.toFixed(0)} mm`}
           tone={r30 > eThr ? riskColor("High") : undefined}
         />
-        <Stat label="Mean slope" value={`${zone.mean_slope_deg}°`} hint="SRTM-derived terrain" />
+        <Stat label="Mean slope" value={`${zone.mean_slope_deg}°`} hint="Slope source in zone data; see docs/DATA_SOURCES.md" />
         <Stat
           label="Historical slides"
           value={data.slides.length}
-          hint="GSI inventory records in zone"
+          hint="Synthetic fixture — illustrative only, not from GSI Bhukosh"
         />
       </section>
 
@@ -222,8 +222,17 @@ function ZonePage() {
 
       <section className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="panel">
-          <div className="border-b border-border px-4 py-3 label-caps">
-            Historical landslide inventory
+          <div className="border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="label-caps">Historical landslide inventory</span>
+              {/* Gap 3: Clearly mark synthetic data so judges/teammates cannot mistake it for real GSI Bhukosh records */}
+              <span
+                className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-amber-400"
+                title="These events were generated programmatically for demonstration purposes. They do not represent real GSI Bhukosh records. See docs/DATA_SOURCES.md for how to replace them with real inventory data."
+              >
+                ⚠ Synthetic data — not sourced from GSI Bhukosh
+              </span>
+            </div>
           </div>
           <div className="max-h-[240px] overflow-y-auto">
             {data.slides.map((s) => (
@@ -232,7 +241,9 @@ function ZonePage() {
                 className="flex items-center justify-between border-b border-border/60 px-4 py-2 text-sm"
               >
                 <span className="font-mono text-xs">{s.event_date}</span>
-                <span className="text-xs text-muted-foreground">{s.source}</span>
+                <span className="max-w-[180px] truncate text-[0.68rem] text-amber-400/80" title={s.source}>
+                  ⚠ synthetic
+                </span>
                 <RiskBadge level={s.severity} />
               </div>
             ))}
