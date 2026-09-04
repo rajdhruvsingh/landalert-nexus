@@ -105,14 +105,49 @@ ON CONFLICT DO NOTHING;
 
 ### Important limitation: Single-centroid sampling artifact
 
+### Multi-point slope sampling results (Task 3 audit)
+
+`compute_slope_from_dem.ts` was upgraded from single-centroid sampling to a 3x3 spatial grid (~250m spacing, 9 evaluation centers, central finite differences over ±90m SRTM pixels). The script stores both `mean_slope_deg` and `slope_p90_deg` (90th percentile) in `risk_zones`, with `slope_p90_deg` operationalized in `recompute_risk()` and ML feature extraction.
+
+#### Measured Values Across Monitored Zones:
+- **Zone 1 (Tamenglong)**: Mean = 11.6°, P90 = 13.9°, Max = 16.9°
+- **Zone 2 (Noney)**: Mean = 16.1°, P90 = 24.2°, Max = 25.5°
+- **Zone 3 (Aizawl East)**: Mean = 18.4°, P90 = 26.4°, Max = 28.1°
+- **Zone 4 (Lunglei Slopes)**: Mean = 29.4°, P90 = 38.8°, Max = 40.1°
+- **Zone 5 (Shillong-Sohra)**: Mean = 7.2°, P90 = 13.7°, Max = 19.8°
+- **Zone 6 (Jaintia Hills Ridge)**: Mean = 6.3°, P90 = 10.6°, Max = 12.1°
+- **Zone 7 (Kohima Ridge)**: Mean = 12.4°, P90 = 17.5°, Max = 18.6°
+- **Zone 8 (Dimapur Foothills)**: Mean = 0.7°, P90 = 1.1°, Max = 1.3°
+- **Zone 9 (Papum Pare)**: Mean = 6.8°, P90 = 13.5°, Max = 15.0°
+- **Zone 10 (Dibang Valley)**: Mean = 27.7°, P90 = 36.9°, Max = 39.0°
+- **Zone 11 (Gangtok-Singtam Corridor)**: Mean = 18.1°, P90 = 24.6°, Max = 26.8°
+- **Zone 12 (Mangan North)**: Mean = 23.5°, P90 = 33.9°, Max = 34.4°
+- **Zone 13 (Haflong Hills)**: Mean = 14.3°, P90 = 24.7°, Max = 29.7°
+- **Zone 14 (Karbi Anglong West)**: Mean = 0.8°, P90 = 1.4°, Max = 1.8°
+- **Zone 15 (Ambassa Hills)**: Mean = 3.1°, P90 = 5.6°, Max = 6.5°
+
+#### Documented Discrepancies vs Published District Literature:
+
 > [!WARNING]
-> **Single-Point Centroid Limitation**: `compute_slope_from_dem.ts` evaluates terrain slope at a single point (the zone's nominal centroid coordinate) plus four $\pm 100\text{ m}$ neighbors. This produces implausibly flat values for certain zones whose names describe steep terrain:
+> **Spatial Centroid vs High-Relief Discrepancy Analysis**:
+> While multi-point 3x3 sampling substantially increased captured relief for steep hill zones (e.g. Lunglei P90=38.8°, Dibang Valley P90=36.9°, Mangan P90=33.9°), three specific zones exhibit persistent discrepancies with published GSI/NDMA district hazard figures because the nominal zone coordinates are located on flat valley/plateau floors rather than the hazardous failure scarps:
 >
-> - **Shillong-Sohra Escarpment (Zone 5, computed 1.0°)**: The Shillong Plateau is an uplifted tabular tableland (peneplain) sitting at ~1,500 m elevation. The centroid coordinate (25.30°N, 91.72°E) lands directly on the flat plateau surface, whereas the catastrophic landslide hazards occur along the vertical canyon rims and escarpment drop-offs (40–60° slopes) plunging toward Bangladesh.
-> - **Dimapur Foothills (Zone 8, computed 0.0°)**: The centroid coordinate sits on the flat alluvial valley floor (150 m elevation), whereas slope instability occurs on the ascending hills flanking the Nagaland ridge.
-> - **Karbi Anglong West (Zone 14, computed 0.3°)**: Centroid is located on the low plains portion of the district.
+> 1. **Shillong-Sohra Escarpment (Zone 5)**:
+>    - *Computed*: Mean = 7.2°, P90 = 13.7°, Max = 19.8° (improved from 1.0° centroid).
+>    - *Published Literature*: GSI Meghalaya Hazard Zonation Report (2015) cites 45.8° (canyon scarps 40–60°).
+>    - *Discrepancy Cause*: The zone centroid (25.30°N, 91.72°E) is on the Cherrapunji tabular plateau. The 250m grid begins to capture canyon incision (max 19.8°), but the near-vertical escarpment plunging toward Bangladesh is located 2–5 km further south along gorge rims.
 >
-> **Hazard Mitigation Principle**: For operational landslide susceptibility modeling, single-centroid averages are inadequate for zones with high internal terrain relief. The representative hazard slope should be evaluated as the **90th percentile or maximum slope** sampled across a multi-point spatial grid or zonal polygon rather than the centroid mean. In the interim, Tier 1 published district ranges (e.g. GSI Zonation reports or NDMA Atlas) provide the hazardous slope estimates.
+> 2. **Dimapur Foothills (Zone 8)**:
+>    - *Computed*: Mean = 0.7°, P90 = 1.1°, Max = 1.3° (improved from 0.0°).
+>    - *Published Range*: NDMA NER Atlas cites 21.5° for the ascending foothill slopes.
+>    - *Discrepancy Cause*: Centroid (25.90°N, 93.73°E) sits directly on the flat alluvial floodplain (~150m elevation). Actual slope failure corridors (e.g. Pagla Pahar / Chumukedima flank on NH-29) occur on the Patkai ridge flanks several kilometers southeast.
+>
+> 3. **Karbi Anglong West (Zone 14)**:
+>    - *Computed*: Mean = 0.8°, P90 = 1.4°, Max = 1.8° (improved from 0.3°).
+>    - *Published Range*: Regional studies cite 24.6° for dissected hill tracts.
+>    - *Discrepancy Cause*: Centroid (26.05°N, 93.10°E) is positioned in the low river plains of the district; the steep landslide-prone terrain is concentrated in the Hamren/Jirikinding hilly plateau sector further south.
+>
+> **Scientific Integrity Protocol**: Per task directives, these values are stored exactly as measured from the SRTM DEM without arbitrary manual adjustments. Future iterations should replace point centroids with full zonal watershed boundary polygons.
 
 ### How to run the DEM slope script
 

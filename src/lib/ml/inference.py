@@ -147,7 +147,7 @@ class LandslideRiskInferenceEngine:
                 f"Detail — 72-hr rainfall: {feats['rain_1d']:.1f}mm / 3-day {feats['rain_3d']:.1f}mm "
                 f"(vs zone threshold ratio: {feats['rain_3d_vs_e_thr']:.2f}). "
                 f"Soil moisture: {feats['soil_moisture_latest']*100.0:.1f}% ({sm_status}). "
-                f"Mean terrain slope: {float(z_row['mean_slope_deg']):.1f}°. "
+                f"Terrain slope: {float(z_row.get('slope_p90_deg', z_row['mean_slope_deg'])):.1f}° (p90 hazard slope). "
                 f"Model: {self.artifact.model_version} (ML Probability: {proba:.3f}). "
                 f"Combined operational score: {risk_score}/100 → {risk_level}."
             )

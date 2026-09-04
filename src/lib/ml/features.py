@@ -247,7 +247,13 @@ def extract_features_for_zone(zone_row, as_of_date, weather_df, real_events_df, 
     soil_d = compute_soil_moisture_features(zid, as_of_date, weather_df)
     sm_status = soil_d.pop("soil_moisture_status")
 
-    terrain_d = compute_terrain_features(float(zone_row["mean_slope_deg"]))
+    # Task 3: Use 90th-percentile slope per hazard mitigation principle, falling back to mean_slope_deg
+    slope_val = float(
+        zone_row["slope_p90_deg"]
+        if ("slope_p90_deg" in zone_row and pd.notna(zone_row["slope_p90_deg"]))
+        else zone_row["mean_slope_deg"]
+    )
+    terrain_d = compute_terrain_features(slope_val)
 
     prox_cutoff = as_of_date if temporal_proximity else None
     prox_d = compute_proximity_features(
