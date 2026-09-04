@@ -93,6 +93,19 @@ function ZonePage() {
             {zone.district} district · {zone.state} ·{" "}
             {zone.population.toLocaleString("en-IN")} residents
           </p>
+          {data.activeModel && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary">
+                Model: {data.activeModel.model_version}
+              </span>
+              <span className="rounded border border-border px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
+                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%: {data.activeModel.recall_at_80_precision ?? "N/A"}
+              </span>
+              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400">
+                Data-Limited (N=8 positives)
+              </span>
+            </div>
+          )}
         </div>
         <RiskBadge
           level={zone.current_risk_level}
@@ -150,7 +163,28 @@ function ZonePage() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-4 label-caps">Soil moisture (%)</div>
+          <div className="mt-4 flex items-center justify-between">
+            <span className="label-caps">Soil moisture (%)</span>
+            {zone.soil_moisture_status === "fallback" ? (
+              <span
+                className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-amber-400"
+                title="ERA5-Land historical soil moisture was unavailable for this region; fallback proxy 50% used."
+              >
+                ⚠ Fallback proxy (50%)
+              </span>
+            ) : zone.soil_moisture_status === "measured" ? (
+              <span
+                className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-emerald-400"
+                title="ERA5-Land 0-3cm normalized to 0.40 m³/m³ field capacity"
+              >
+                ✓ Observed ERA5-Land
+              </span>
+            ) : zone.soil_moisture_status === "stale" ? (
+              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-amber-400">
+                ⚠ Stale reading
+              </span>
+            ) : null}
+          </div>
           <div className="mt-2 h-[150px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={daily}>

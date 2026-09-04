@@ -25,10 +25,11 @@ export type AlertRow = Database["public"]["Tables"]["alerts"]["Row"];
 export type RoadRow = Database["public"]["Tables"]["road_segments"]["Row"];
 export type ReadingRow = Database["public"]["Tables"]["weather_readings"]["Row"];
 export type SlideRow = Database["public"]["Tables"]["historical_landslides"]["Row"];
+export type ModelConfigRow = Database["public"]["Tables"]["risk_model_config"]["Row"];
 
 export const getOverview = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const [zones, roads, alerts] = await Promise.all([
+  const [zones, roads, alerts, modelConfig] = await Promise.all([
     sb.from("risk_zones").select("*").order("risk_score", { ascending: false }),
     sb.from("road_segments").select("*"),
     sb
@@ -36,12 +37,18 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
       .select("*")
       .order("dispatched_at", { ascending: false })
       .limit(30),
+    sb
+      .from("risk_model_config")
+      .select("*")
+      .eq("is_active", true)
+      .maybeSingle(),
   ]);
   if (zones.error) throw new Error(zones.error.message);
   return {
     zones: zones.data ?? [],
     roads: roads.data ?? [],
     alerts: alerts.data ?? [],
+    activeModel: modelConfig.data ?? null,
   };
 });
 
@@ -49,7 +56,7 @@ export const getZoneDetail = createServerFn({ method: "GET" })
   .inputValidator((data: { id: number }) => ({ id: Number(data.id) }))
   .handler(async ({ data }) => {
     const sb = publicClient();
-    const [zone, readings, roads, slides, alerts] = await Promise.all([
+    const [zone, readings, roads, slides, alerts, modelConfig] = await Promise.all([
       sb.from("risk_zones").select("*").eq("id", data.id).maybeSingle(),
       sb
         .from("weather_readings")
@@ -68,6 +75,11 @@ export const getZoneDetail = createServerFn({ method: "GET" })
         .eq("zone_id", data.id)
         .order("dispatched_at", { ascending: false })
         .limit(10),
+      sb
+        .from("risk_model_config")
+        .select("*")
+        .eq("is_active", true)
+        .maybeSingle(),
     ]);
     return {
       zone: zone.data ?? null,
@@ -75,8 +87,20 @@ export const getZoneDetail = createServerFn({ method: "GET" })
       roads: roads.data ?? [],
       slides: slides.data ?? [],
       alerts: alerts.data ?? [],
+      activeModel: modelConfig.data ?? null,
     };
   });
+
+export const getActiveModelConfig = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("risk_model_config")
+    .select("*")
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+});
 
 /**
  * Demo control used in the end-to-end walkthrough: inject a rainfall spike for a

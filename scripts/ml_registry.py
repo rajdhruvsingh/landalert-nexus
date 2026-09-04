@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""
+scripts/ml_registry.py
+======================
+Model Registry CLI for LandAlert-Nexus.
+Enforces the lifecycle:
+  Candidate -> Automated Validation -> Approval -> Active -> Rollback
+"""
+
+import os, sys, json, argparse
+import psycopg2
+from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.abspath("."))
+from src.lib.ml.artifact import load_model_artifact
+
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+
+def get_db():
+    return psycopg2.connect(DATABASE_URL)
+
+def cmd_list(args):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, model_version, status, is_active, pr_auc, recall_at_80_precision,
+               artifact_path, dataset_fingerprint, trained_at, activated_at
+        FROM public.risk_model_config
+        ORDER BY id;
+    """)
+    rows = cur.fetchall()
+    print("=" * 110)
+    print(f"{'ID':<4} {'Version':<18} {'Status':<12} {'Active':<8} {'PR-AUC':<8} {'R@80p':<8} {'Fingerprint':<18} {'Artifact Path'}")
+    print("-" * 110)
+    for r in rows:
+        rid, ver, status, active, prauc, r80, art, fp, trained, act_at = r
+        prauc_str = f"{prauc:.4f}" if prauc is not None else "NULL"
+        r80_str = f"{r80:.4f}" if r80 is not None else "NULL"
+        fp_str = fp[:16] if fp else "—"
+        art_str = art if art else "—"
+        print(f"{rid:<4} {ver:<18} {status:<12} {str(active):<8} {prauc_str:<8} {r80_str:<8} {fp_str:<18} {art_str}")
+    print("=" * 110)
+    conn.close()
+
+def cmd_register(args):
+    artifact_path = args.artifact_path
+    if not os.path.isfile(artifact_path):
+        print(f"ERROR: Artifact file not found: {artifact_path}")
+        sys.exit(1)
+
+    with open(artifact_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    ver = data["model_version"]
+    prauc = data["metrics"].get("pr_auc")
+    r80 = data["metrics"].get("recall_at_80_precision")
+    fp = data.get("dataset_fingerprint")
+    schema_ver = data.get("feature_schema_version", "v1.0.0")
+    notes = data.get("provenance", {}).get("notes", "")
+
+    conn = get_db()
+    cur = conn.cursor()
+    # Check if version already exists
+    cur.execute("SELECT id, is_active, status FROM public.risk_model_config WHERE model_version = %s;", (ver,))
+    existing = cur.fetchone()
+
+    if existing:
+        print(f"Model version '{ver}' already exists in registry (id={existing[0]}, status={existing[2]}). Updating artifact metadata...")
+        cur.execute("""
+            UPDATE public.risk_model_config
+            SET artifact_path = %s,
+                feature_schema_version = %s,
+                dataset_fingerprint = %s,
+                pr_auc = %s,
+                recall_at_80_precision = %s
+            WHERE model_version = %s;
+        """, (artifact_path, schema_ver, fp, prauc, r80, ver))
+    else:
+        print(f"Registering new model '{ver}' as candidate...")
+        cur.execute("""
+            INSERT INTO public.risk_model_config (
+                model_version, status, is_active, artifact_path, feature_schema_version,
+                pr_auc, recall_at_80_precision, dataset_fingerprint,
+                weight_intensity, weight_antecedent, weight_soil_moisture, weight_slope, weight_history,
+                cutoff_moderate, cutoff_high, cutoff_severe, notes, trained_at
+            ) VALUES (
+                %s, 'candidate', false, %s, %s,
+                %s, %s, %s,
+                0.32, 0.22, 0.18, 0.16, 0.12,
+                42.0, 58.0, 72.0, %s, now()
+            );
+        """, (ver, artifact_path, schema_ver, prauc, r80, fp, notes))
+
+    conn.commit()
+    conn.close()
+    print(f"Successfully registered '{ver}' with artifact {artifact_path}.")
+
+def cmd_gate(args):
+    ver = args.model_version
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, artifact_path, pr_auc, status FROM public.risk_model_config WHERE model_version = %s;", (ver,))
+    row = cur.fetchone()
+    if not row:
+        print(f"ERROR: Model '{ver}' not found in registry.")
+        sys.exit(1)
+
+    rid, art_path, prauc, status = row
+    print(f"Evaluating candidate gate for model '{ver}' (id={rid}, status={status})...")
+
+    failures = []
+    # 1. Artifact must exist
+    if not art_path or not os.path.isfile(art_path):
+        failures.append(f"Artifact path '{art_path}' is missing or invalid on disk")
+    else:
+        try:
+            art = load_model_artifact(art_path)
+            if len(art.weights) != 19:
+                failures.append(f"Artifact weights length ({len(art.weights)}) != 19 canonical features")
+        except Exception as e:
+            failures.append(f"Artifact failed to load: {e}")
+
+    # 2. PR-AUC must be non-null and >= 0.25 (chance)
+    if prauc is None:
+        failures.append("PR-AUC is NULL; model evaluation has not been performed")
+    elif prauc < 0.25:
+        failures.append(f"PR-AUC ({prauc:.4f}) is below chance baseline (0.25)")
+
+    if failures:
+        print(f"VALIDATION GATE FAILED for '{ver}':")
+        for f in failures:
+            print(f"  [REJECT] {f}")
+        conn.close()
+        sys.exit(1)
+    else:
+        print(f"All validation criteria passed for '{ver}'. Marking status='validated'...")
+        cur.execute("UPDATE public.risk_model_config SET status = 'validated' WHERE id = %s;", (rid,))
+        conn.commit()
+        conn.close()
+        print(f"Model '{ver}' is now VALIDATED and eligible for activation.")
+
+def cmd_activate(args):
+    ver = args.model_version
+    reason = args.reason or "Manual activation via registry CLI"
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, status, is_active FROM public.risk_model_config WHERE model_version = %s;", (ver,))
+    target = cur.fetchone()
+    if not target:
+        print(f"ERROR: Model '{ver}' not found in registry.")
+        sys.exit(1)
+
+    tid, tstatus, is_active = target
+    if is_active:
+        print(f"Model '{ver}' is already active.")
+        conn.close()
+        return
+
+    if tstatus not in ["validated", "active"]:
+        print(f"ERROR: Cannot activate model with status='{tstatus}'. Run 'gate' first to validate.")
+        sys.exit(1)
+
+    cur.execute("SELECT model_version FROM public.risk_model_config WHERE is_active = true;")
+    cur_active = cur.fetchone()
+    prev_ver = cur_active[0] if cur_active else "none"
+
+    print(f"Activating model '{ver}' (replacing '{prev_ver}')...")
+    # Begin transaction
+    cur.execute("""
+        UPDATE public.risk_model_config
+        SET is_active = false,
+            status = 'retired',
+            retired_at = now()
+        WHERE is_active = true;
+    """)
+
+    cur.execute("""
+        UPDATE public.risk_model_config
+        SET is_active = true,
+            status = 'active',
+            activated_at = now()
+        WHERE id = %s;
+    """, (tid,))
+
+    cur.execute("""
+        INSERT INTO public.risk_model_activation_log (model_version, action, previous_active_version, reason)
+        VALUES (%s, 'activated', %s, %s);
+    """, (ver, prev_ver, reason))
+
+    # Trigger risk recomputation
+    cur.execute("SELECT public.recompute_risk();")
+    conn.commit()
+    conn.close()
+    print(f"Successfully activated model '{ver}'. recompute_risk() executed.")
+
+def cmd_rollback(args):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, model_version FROM public.risk_model_config WHERE is_active = true;")
+    cur_active = cur.fetchone()
+    if not cur_active:
+        print("ERROR: No currently active model found to roll back.")
+        sys.exit(1)
+
+    cur_id, cur_ver = cur_active
+
+    # Find previous active version from log
+    cur.execute("""
+        SELECT previous_active_version
+        FROM public.risk_model_activation_log
+        WHERE action = 'activated' AND model_version = %s
+        ORDER BY id DESC LIMIT 1;
+    """, (cur_ver,))
+    log_row = cur.fetchone()
+
+    prev_ver = None
+    if log_row and log_row[0] and log_row[0] != "none":
+        prev_ver = log_row[0]
+    else:
+        # Fallback to highest id inactive model
+        cur.execute("SELECT model_version FROM public.risk_model_config WHERE is_active = false ORDER BY id DESC LIMIT 1;")
+        fb_row = cur.fetchone()
+        if fb_row:
+            prev_ver = fb_row[0]
+
+    if not prev_ver:
+        print("ERROR: No eligible previous model version found to roll back to.")
+        sys.exit(1)
+
+    print(f"Rolling back active model from '{cur_ver}' to '{prev_ver}'...")
+    cur.execute("""
+        UPDATE public.risk_model_config
+        SET is_active = false,
+            status = 'retired',
+            retired_at = now()
+        WHERE id = %s;
+    """, (cur_id,))
+
+    cur.execute("""
+        UPDATE public.risk_model_config
+        SET is_active = true,
+            status = 'active',
+            activated_at = now()
+        WHERE model_version = %s;
+    """, (prev_ver,))
+
+    cur.execute("""
+        INSERT INTO public.risk_model_activation_log (model_version, action, previous_active_version, reason)
+        VALUES (%s, 'rolled_back', %s, 'Operator rollback request');
+    """, (prev_ver, cur_ver))
+
+    cur.execute("SELECT public.recompute_risk();")
+    conn.commit()
+    conn.close()
+    print(f"Rollback complete: active model is now '{prev_ver}'. recompute_risk() executed.")
+
+def main():
+    parser = argparse.ArgumentParser(description="LandAlert-Nexus Model Registry CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    p_list = subparsers.add_parser("list", help="List all registered models")
+    p_list.set_defaults(func=cmd_list)
+
+    p_reg = subparsers.add_parser("register", help="Register a model artifact as candidate")
+    p_reg.add_argument("artifact_path", help="Path to model artifact JSON")
+    p_reg.set_defaults(func=cmd_register)
+
+    p_gate = subparsers.add_parser("gate", help="Run automated validation safety gate on candidate")
+    p_gate.add_argument("model_version", help="Model version string")
+    p_gate.set_defaults(func=cmd_gate)
+
+    p_act = subparsers.add_parser("activate", help="Promote a validated model to active")
+    p_act.add_argument("model_version", help="Model version string")
+    p_act.add_argument("--reason", default="", help="Activation rationale")
+    p_act.set_defaults(func=cmd_activate)
+
+    p_roll = subparsers.add_parser("rollback", help="Roll back to previous active model")
+    p_roll.set_defaults(func=cmd_rollback)
+
+    args = parser.parse_args()
+    args.func(args)
+
+if __name__ == "__main__":
+    main()

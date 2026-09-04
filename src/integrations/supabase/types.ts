@@ -108,6 +108,9 @@ export type Database = {
           mean_slope_deg: number
           population: number
           risk_score: number
+          soil_moisture_pct: number | null
+          soil_moisture_reading_time: string | null
+          soil_moisture_status: "measured" | "stale" | "missing" | "fallback"
           state: string
           threshold_e_mm: number
           zone_name: string
@@ -123,6 +126,9 @@ export type Database = {
           mean_slope_deg?: number
           population?: number
           risk_score?: number
+          soil_moisture_pct?: number | null
+          soil_moisture_reading_time?: string | null
+          soil_moisture_status?: "measured" | "stale" | "missing" | "fallback"
           state: string
           threshold_e_mm?: number
           zone_name: string
@@ -138,6 +144,9 @@ export type Database = {
           mean_slope_deg?: number
           population?: number
           risk_score?: number
+          soil_moisture_pct?: number | null
+          soil_moisture_reading_time?: string | null
+          soil_moisture_status?: "measured" | "stale" | "missing" | "fallback"
           state?: string
           threshold_e_mm?: number
           zone_name?: string
@@ -219,6 +228,102 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      risk_model_config: {
+        Row: {
+          activated_at: string | null
+          artifact_path: string | null
+          created_at: string
+          cutoff_high: number
+          cutoff_severe: number
+          dataset_fingerprint: string | null
+          feature_schema_version: string | null
+          id: number
+          is_active: boolean
+          model_version: string
+          notes: string | null
+          pr_auc: number | null
+          recall_at_80_precision: number | null
+          status: string
+          w_antecedent: number
+          w_historical: number
+          w_intensity: number
+          w_slope: number
+          w_soil_moisture: number
+        }
+        Insert: {
+          activated_at?: string | null
+          artifact_path?: string | null
+          created_at?: string
+          cutoff_high?: number
+          cutoff_severe?: number
+          dataset_fingerprint?: string | null
+          feature_schema_version?: string | null
+          id?: number
+          is_active?: boolean
+          model_version: string
+          notes?: string | null
+          pr_auc?: number | null
+          recall_at_80_precision?: number | null
+          status?: string
+          w_antecedent: number
+          w_historical: number
+          w_intensity: number
+          w_slope: number
+          w_soil_moisture: number
+        }
+        Update: {
+          activated_at?: string | null
+          artifact_path?: string | null
+          created_at?: string
+          cutoff_high?: number
+          cutoff_severe?: number
+          dataset_fingerprint?: string | null
+          feature_schema_version?: string | null
+          id?: number
+          is_active?: boolean
+          model_version?: string
+          notes?: string | null
+          pr_auc?: number | null
+          recall_at_80_precision?: number | null
+          status?: string
+          w_antecedent?: number
+          w_historical?: number
+          w_intensity?: number
+          w_slope?: number
+          w_soil_moisture?: number
+        }
+        Relationships: []
+      }
+      model_activation_log: {
+        Row: {
+          action: string
+          activated_at: string
+          activated_by: string
+          id: number
+          model_version: string
+          previous_version: string | null
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          activated_at?: string
+          activated_by: string
+          id?: number
+          model_version: string
+          previous_version?: string | null
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          activated_at?: string
+          activated_by?: string
+          id?: number
+          model_version?: string
+          previous_version?: string | null
+          reason?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {

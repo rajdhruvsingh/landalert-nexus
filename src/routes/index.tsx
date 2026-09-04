@@ -113,6 +113,19 @@ function Dashboard() {
             threshold equations. Every risk level carries the reasoning that produced
             it.
           </p>
+          {data.activeModel && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary">
+                Active Model: {data.activeModel.model_version}
+              </span>
+              <span className="rounded border border-border px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
+                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%: {data.activeModel.recall_at_80_precision ?? "N/A"}
+              </span>
+              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400">
+                Data-Limited Validation (N=8 real landslides)
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={runRecompute} disabled={busy}>
