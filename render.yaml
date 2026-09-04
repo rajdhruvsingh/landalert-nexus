@@ -102,3 +102,22 @@ services:
       # Generate: openssl rand -hex 32
       - key: CRON_SECRET
         sync: false
+
+      # ── SMS Gateway (MSG91) & Integration Feature Flags ───────────────────────
+      - key: MSG91_AUTH_KEY
+        sync: false
+
+      - key: MSG91_SENDER_ID
+        sync: false
+
+      - key: SMS_ENABLED
+        value: "false"
+
+      - key: SMS_SANDBOX_MODE
+        value: "true"
+
+      - key: MEDIA_UPLOAD_ENABLED
+        value: "false"
+
+      - key: SATELLITE_LAYER_ENABLED
+        value: "false"

@@ -186,7 +186,7 @@ All requests are protected by:
 
 - **Method**: `POST`
 - **Path**: `/api/alerts/dispatch`
-- **Authentication**: Public or Service Process
+- **Authentication**: Bearer token (DISPATCHER/ADMIN role) or Cron secret (`Authorization: Bearer <CRON_SECRET>`)
 - **Request Body**:
 
 ```json
@@ -194,12 +194,48 @@ All requests are protected by:
   "zoneId": 1,
   "language": "en",
   "channel": "both",
-  "idempotencyKey": "ALERT-MANUAL-1-20260904"
+  "idempotencyKey": "ALERT-MANUAL-1-20260904",
+  "justification": "Verified tension cracks and threshold exceedance on NH-10 corridor"
 }
 ```
 
-- **Description**: Evaluates threshold logic (`High` or `Severe` required), applies 6-hour cooldown deduplication (with escalation override), constructs multilingual SMS payloads (EN, AS, BN, NE), and persists to `public.alerts`.
-- **Response Status**: `201 Created` (or `200 OK` if suppressed by cooldown/idempotency)
+- **Description**: Evaluates threshold logic (`High` or `Severe` required), applies 6-hour cooldown deduplication (with escalation override for High->Severe), constructs multilingual SMS payloads (EN, AS, BN, NE), dispatches to the configured SMS provider (MSG91), and persists an authoritative record to `public.alerts`.
+- **Response Status**: `201 Created` (dispatched) or `200 OK` (cooldown suppressed or unconfigured)
+- **Response Example**:
+
+```json
+{
+  "dispatched": true,
+  "reason": "Alert created; SMS provider not configured (MSG91_AUTH_KEY required for live dispatch)",
+  "alertId": 42,
+  "riskLevel": "Severe",
+  "zoneId": 1,
+  "dispatchStatus": "SMS_PROVIDER_NOT_CONFIGURED",
+  "dispatchedAt": "2026-09-05T03:30:00.000Z"
+}
+```
+
+#### Real SMS Dispatch Lifecycle & Honest Status Codes
+
+LandAlert-Nexus integrates with a real SMS gateway (MSG91 preferred for India/NER delivery), abstracted behind the `SmsProvider` interface:
+
+| `dispatch_status`               | `status`                 | Real Meaning                                                                                                                                                                          |
+| :------------------------------ | :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SMS_PROVIDER_NOT_CONFIGURED`   | `provider_unconfigured`  | **Default when unconfigured**. `MSG91_AUTH_KEY` is not present in the server environment or `SMS_ENABLED` is `false`. The system honestly records the alert without pretending it sent. |
+| `SMS_SANDBOX_LOGGED`            | `sandbox_logged`         | **Default development mode** (`SMS_SANDBOX_MODE=true`). Validates payload structure and logs recipient mobile numbers without incurring carrier billing charges.                    |
+| `SENT`                          | `sent`                   | Provider accepted the message for delivery. Provider message ID is captured in `provider_message_id`.                                                                                 |
+| `DELIVERED`                     | `delivered`              | Downstream telecom carrier delivery receipt acknowledged.                                                                                                                             |
+| `FAILED`                        | `failed`                 | Network failure, bad auth key, invalid recipient phone number, or gateway rejection. Error recorded in `last_error`.                                                                  |
+
+#### Mandatory Production Prerequisites for Operators
+
+To deliver real, live SMS alerts to citizens and emergency authorities in India:
+1. **Environment Credentials**: Set `MSG91_AUTH_KEY`, `MSG91_SENDER_ID`, and set `SMS_ENABLED=true` and `SMS_SANDBOX_MODE=false`.
+2. **TRAI DLT Pre-Registration (Mandatory in India)**:
+   Under Telecom Regulatory Authority of India (TRAI) TCCCPR regulations, possessing MSG91 API keys alone is **insufficient** to deliver SMS in India. Operators must complete:
+   - **Principal Entity (PE) Registration** on an Indian telecom DLT portal (Jio, Airtel, or BSNL DLT).
+   - **Header / Sender ID Approval** (6-character alphabetic header, e.g., `LNDALT` or `DISMGT`).
+   - **Template Registration**: Register the exact multilingual alert templates (`ALERT_TEMPLATES` in `alert.service.ts`) with approved dynamic variables (`{#var#}`). Unregistered messages will be rejected by telecom operators at carrier gateway level.
 
 ---
 

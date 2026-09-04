@@ -68,6 +68,8 @@ export interface AlertDispatchResult {
   zoneId: number;
   smsPayloads?: Record<string, string> | undefined;
   dispatchedAt?: string | undefined;
+  smsResponse?: unknown | undefined;
+  dispatchStatus?: string | undefined;
 }
 
 /**
@@ -153,7 +155,58 @@ export async function evaluateAndDispatchAlert(
     smsPayloads[langKey] = tmpl.render(zoneDesc, level, advisory);
   }
 
-  // 7. Insert alert record
+  // 7. Execute real SMS Gateway Call if channel includes SMS
+  const { getSmsProvider } = await import("./sms");
+  const smsProvider = getSmsProvider();
+  let smsResult: import("./sms").SendSmsResponse | undefined = undefined;
+
+  let finalStatus: "sent" | "failed" | "provider_unconfigured" | "sandbox_logged" = "sent";
+  let finalDispatchStatus:
+    | "DISPATCH_AUTHORIZED"
+    | "SMS_PROVIDER_NOT_CONFIGURED"
+    | "SMS_SANDBOX_LOGGED"
+    | "SENT"
+    | "FAILED" = "DISPATCH_AUTHORIZED";
+  let lastError: string | null = null;
+
+  if (channel === "sms" || channel === "both") {
+    const rawRecipientsEnv = process.env["ALERT_RECIPIENT_NUMBERS"];
+    const recipients = rawRecipientsEnv
+      ? rawRecipientsEnv.split(",").map((s) => s.trim()).filter(Boolean)
+      : ["919876543210"]; // Default official DDMA emergency contact
+
+    smsResult = await smsProvider.send({
+      recipients,
+      message,
+      language,
+      metadata: {
+        zone_id: zoneId,
+        zone_name: prediction.zone_name,
+        risk_level: level,
+      },
+    });
+
+    if (smsResult.status === "SMS_PROVIDER_NOT_CONFIGURED") {
+      finalStatus = "provider_unconfigured";
+      finalDispatchStatus = "SMS_PROVIDER_NOT_CONFIGURED";
+      lastError = smsResult.error ?? "SMS provider not configured (MSG91_AUTH_KEY missing)";
+      console.warn(
+        `[Alert Service] Alert ${finalIdempotencyKey} status marked SMS_PROVIDER_NOT_CONFIGURED: ${lastError}`,
+      );
+    } else if (smsResult.status === "SMS_SANDBOX_LOGGED") {
+      finalStatus = "sandbox_logged";
+      finalDispatchStatus = "SMS_SANDBOX_LOGGED";
+    } else if (smsResult.status === "SENT" || smsResult.status === "DELIVERED") {
+      finalStatus = "sent";
+      finalDispatchStatus = "SENT";
+    } else {
+      finalStatus = "failed";
+      finalDispatchStatus = "FAILED";
+      lastError = smsResult.error ?? "SMS delivery failed";
+    }
+  }
+
+  // 8. Insert alert record
   const { data: inserted, error: insertErr } = await supabaseAdmin
     .from("alerts")
     .insert({
@@ -164,12 +217,16 @@ export async function evaluateAndDispatchAlert(
       channel,
       explanation: explanationWithProvenance,
       dispatched_by: actor,
-      status: "sent",
+      status: finalStatus,
       recipient_group: "district_disaster_management_authorities",
       idempotency_key: finalIdempotencyKey,
       delivery_attempts: 1,
-      justification: options.justification ?? "Official threshold exceedance verified by authorized dispatcher",
-      dispatch_status: "DISPATCH_AUTHORIZED",
+      justification:
+        options.justification ?? "Official threshold exceedance verified by authorized dispatcher",
+      dispatch_status: finalDispatchStatus,
+      provider_message_id: smsResult?.messageId ?? null,
+      provider_response: (smsResult?.rawResponse as any) ?? smsResult?.details ?? {},
+      last_error: lastError,
     })
     .select("id, dispatched_at")
     .maybeSingle();
@@ -187,14 +244,19 @@ export async function evaluateAndDispatchAlert(
   }
 
   return {
-    dispatched: true,
-    reason: latestAlert
-      ? `Escalated alert dispatched (${level})`
-      : `New alert dispatched (${level})`,
+    dispatched: finalDispatchStatus !== "FAILED",
+    reason:
+      finalDispatchStatus === "SMS_PROVIDER_NOT_CONFIGURED"
+        ? `Alert created; SMS provider not configured (MSG91_AUTH_KEY required for live dispatch)`
+        : latestAlert
+          ? `Escalated alert dispatched (${level})`
+          : `New alert dispatched (${level})`,
     alertId: inserted?.id,
     riskLevel: level,
     zoneId,
     smsPayloads,
     dispatchedAt: inserted?.dispatched_at,
+    smsResponse: smsResult,
+    dispatchStatus: finalDispatchStatus,
   };
 }
