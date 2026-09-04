@@ -100,5 +100,5 @@ services:
       # ── Cron / Ingest auth ───────────────────────────────────────────────────
       # Required to call /api/ingest-weather and /api/recompute.
       # Generate: openssl rand -hex 32
-      - key: LOVABLE_CRON_SECRET
+      - key: CRON_SECRET
         sync: false

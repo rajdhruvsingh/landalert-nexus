@@ -9,7 +9,7 @@ This document specifies the authoritative REST API contracts, authentication mec
 | Authentication Scheme    | Mechanism                                           | Scope                                                                                 |
 | :----------------------- | :-------------------------------------------------- | :------------------------------------------------------------------------------------ |
 | **Public / Anonymous**   | No credentials required (read-only)                 | Health, risk predictions, GIS layers, offline sync packages                           |
-| **Cron / Automated Job** | `Authorization: Bearer <LOVABLE_CRON_SECRET>`       | Live weather ingestion (`/api/ingest-weather`), risk recomputation (`/api/recompute`) |
+| **Cron / Automated Job** | `Authorization: Bearer <CRON_SECRET>`       | Live weather ingestion (`/api/ingest-weather`), risk recomputation (`/api/recompute`) |
 | **Service Role / Admin** | `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` | Direct database mutations, model activation, registry rollback                        |
 
 All requests are protected by:
@@ -156,7 +156,7 @@ All requests are protected by:
 
 - **Method**: `POST`
 - **Path**: `/api/ingest-weather`
-- **Authentication**: Cron secret required (`Authorization: Bearer <LOVABLE_CRON_SECRET>`)
+- **Authentication**: Cron secret required (`Authorization: Bearer <CRON_SECRET>`)
 - **Description**: Fetches 7-day observed rainfall and ERA5-Land hourly soil moisture from Open-Meteo with exponential backoff and physical bounds clamping ($[0, 1200]\text{ mm}$). Upserts to `public.weather_readings` idempotently and triggers `recompute_risk()`.
 - **Response Status**: `200 OK` (or `401 Unauthorized`)
 - **Response Example**:
@@ -176,7 +176,7 @@ All requests are protected by:
 
 - **Method**: `POST`
 - **Path**: `/api/recompute`
-- **Authentication**: Cron secret required (`Authorization: Bearer <LOVABLE_CRON_SECRET>`)
+- **Authentication**: Cron secret required (`Authorization: Bearer <CRON_SECRET>`)
 - **Description**: Triggers PL/pgSQL `recompute_risk()` across all 15 risk zones, refreshing scores, levels, explanations, and triggering alert dispatch when zones cross into `High` or `Severe`.
 - **Response Status**: `200 OK` (or `401 Unauthorized`)
 

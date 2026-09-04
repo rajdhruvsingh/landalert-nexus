@@ -195,8 +195,4 @@ The formula IS a trained model: logistic regression coefficients map directly to
 **"What's your PR-AUC?"**  
 The `risk_model_config` table has a `pr_auc` column. The current baseline (v0.1-hand-tuned) shows NULL because it was calibrated from published literature, not a training run. The evaluation notebook is ready; see `docs/MODEL_EVALUATION.md`.
 
----
 
-## Built with [Lovable](https://lovable.dev)
-
-Continue developing in the [Lovable editor](https://lovable.dev/projects/02d6690c-3c6e-453b-a8e9-8b352c8f126e). Every change committed here syncs back to Lovable.
