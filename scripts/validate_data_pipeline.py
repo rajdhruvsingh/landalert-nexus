@@ -113,8 +113,8 @@ def run_validation():
     print(f"      - glof_triggered (excluded from rainfall ML):   {len(glof_events)}")
     print(f"    Synthetic fixture records (is_synthetic=true):  {len(synth_slides)}")
 
-    if len(rainfall_positives) != 8:
-        failures.append(f"Expected exactly 8 rainfall_slope_failure real positives, got {len(rainfall_positives)}")
+    if len(rainfall_positives) != 15:
+        failures.append(f"Expected exactly 15 rainfall_slope_failure real positives, got {len(rainfall_positives)}")
     if len(glof_events) != 1:
         failures.append(f"Expected exactly 1 glof_triggered real event, got {len(glof_events)}")
     if len(synth_slides) != 30:
@@ -213,7 +213,7 @@ def run_validation():
         for z, d, c in uncovered:
             failures.append(f"Positive in zone {z} on {d} has insufficient 30d weather ({c}/30 days)")
     else:
-        print(f"  All 8 positive training events have full 30-day antecedent weather coverage: PASS")
+        print(f"  All {len(rainfall_positives)} positive training events have full 30-day antecedent weather coverage: PASS")
 
     # ─────────────────────────────────────────────────────────────────────────
     # 5. SUMMARY & VERDICT

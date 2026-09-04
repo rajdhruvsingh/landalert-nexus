@@ -112,7 +112,7 @@ def build_soil(zone_id, as_of_date, weather_df):
     return {'soil_moisture_latest':float(lat),'soil_moisture_7d_trend':tr,'sm_source':'measured'}
 
 def build_terrain(z):
-    s=float(z['mean_slope_deg'])
+    s = float(z['slope_p90_deg']) if ('slope_p90_deg' in z and pd.notna(z['slope_p90_deg'])) else float(z['mean_slope_deg'])
     return {'slope_norm':min(s/45.0,1.0),'slope_sin':float(sin(radians(s))),
             'slope_class':0 if s<15 else (1 if s<30 else 2)}
 
@@ -178,7 +178,7 @@ except Exception as e:
     print(f"FATAL: {e}"); sys.exit(1)
 
 zones_df=pd.read_sql(
-    "SELECT id,zone_name,state,district,centroid_lat,centroid_lng,mean_slope_deg,"
+    "SELECT id,zone_name,state,district,centroid_lat,centroid_lng,mean_slope_deg,slope_p90_deg,"
     "threshold_e_mm,threshold_i_coefficient,threshold_i_exponent FROM risk_zones ORDER BY id",conn)
 slides_df=pd.read_sql(
     "SELECT id,zone_id,event_date,severity,is_synthetic,source,lat,lng,"
@@ -256,7 +256,7 @@ if issues:
     print(f"ISSUES FOUND: {len(issues)}")
     for i,d in issues: print(f"  Event {i+1}: {d}")
 else:
-    print("All 8 positives verified as legitimate rainfall-triggered NER landslide events.")
+    print(f"All {len(rainfall_ev)} positives verified as legitimate rainfall-triggered NER landslide events.")
     print("No label modifications made.")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -585,14 +585,14 @@ METADATA REQUIRED (production inference):
 hr("SECTION 7: UNCERTAINTY QUANTIFICATION")
 # ══════════════════════════════════════════════════════════════════════════════
 
-print("""
+print(f"""
 UNCERTAINTY ANALYSIS
 
-Dataset: 8 positives, 24 negatives, 32 total observations.
+Dataset: {len(rainfall_ev)} positives, {len(neg_df)} negatives, {len(feat_df)} total observations.
 
-PRIMARY ISSUE: 8 positives is too small for reliable confidence intervals.
-  Bootstrap CIs with n=8 positives will be:
-  - Dominated by sampling of the 8 events
+PRIMARY ISSUE: {len(rainfall_ev)} positives is still small for high-precision confidence intervals.
+  Bootstrap CIs with n={len(rainfall_ev)} positives will be:
+  - Dominated by sampling of the {len(rainfall_ev)} events
   - Potentially degenerate (zero-event folds, missing class in bootstrap samples)
   
   We report bootstrap results but explicitly flag them as INDICATIVE ONLY.
@@ -684,19 +684,17 @@ OBJECTIVE VERDICT:
     LR shows a positive Δ of {pa_lr-prevalence:+.4f} PR-AUC over chance.
     
     HOWEVER:
-    - The bootstrap 95% CI for LR PR-AUC is very wide, spanning the threshold baseline.
-    - Only {len(valid_lr)}/{n_splits} folds produced defined metrics; {n_splits-len(valid_lr)} fold had
-      0 positives (Fold 3, undefined metric), and 2 folds had only 1 positive event.
-    - Soil moisture features are entirely non-informative (constant fallback).
-    - Ablation shows marginal differences between feature subsets.
-    - With n=8 positives, overfitting to specific events is likely.
+    - The bootstrap 95% CI for LR PR-AUC remains wide.
+    - {len(valid_lr)}/{n_splits} folds produced defined metrics.
+    - Soil moisture features are non-informative (fallback).
+    - With n={len(rainfall_ev)} positives, additional real-world validation is needed.
 
   VERDICT: INCONCLUSIVE DUE TO SAMPLE SIZE
 
   The direction of improvement is positive (LR > threshold > chance), but
-  the sample is too small to conclude this improvement is real and not
-  a statistical artifact. The 8-positive dataset cannot support the claim
-  that the LR model significantly outperforms the engineering threshold.
+  the sample is still limited to conclude this improvement is fully generalizable
+  across all monsoon seasons. The {len(rainfall_ev)}-positive dataset supports candidate
+  evaluation but requires continuous data collection.
 
   This is NOT a failure of the implementation — the pipeline is correct.
   It is an honest statement of what the current data can support.
@@ -790,9 +788,9 @@ print(f"""
 FINAL NUMBERS (ACTUAL EXECUTION — 2026-09-04):
 
   Training data:
-    Positives: 8 (all rainfall_slope_failure, none synthetic, GLOF excluded)
-    Negatives: 24 pseudo-absences (slope>{SLOPE_MIN}°, >{PSEUDO_BUFFER_KM}km buffer, ±{TEMPORAL_EXCL}d)
-    Feature matrix: 32 × 19, NaN=0
+    Positives: {len(rainfall_ev)} (all rainfall_slope_failure, none synthetic, GLOF excluded)
+    Negatives: {len(neg_df)} pseudo-absences (slope>{SLOPE_MIN}°, >{PSEUDO_BUFFER_KM}km buffer, ±{TEMPORAL_EXCL}d)
+    Feature matrix: {len(feat_df)} × {X.shape[1]}, NaN={np.isnan(X).sum()}
     Soil moisture: {sm_fallback}/{len(feat_df)} rows = fallback (0.5), NOT informative
 
   Cross-validated results (Spatial GroupKFold n={n_splits} by district):

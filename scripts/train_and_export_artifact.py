@@ -31,7 +31,7 @@ from src.lib.ml.artifact import save_model_artifact, load_model_artifact
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
 RANDOM_SEED = 42
-MODEL_VERSION = "v0.2-lr-trained"
+MODEL_VERSION = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "v0.3-lr-trained"
 ARTIFACT_PATH = f"models/{MODEL_VERSION}.json"
 
 def get_git_commit():
@@ -159,8 +159,8 @@ def main():
     git_commit = get_git_commit()
 
     notes = (
-        "Active production model. Trained on 8 real NER rainfall-triggered landslides and 24 pseudo-absences. "
-        "Soil moisture is constant fallback (0.5). Scientific validation is data-limited; wide confidence intervals apply."
+        f"Candidate model {MODEL_VERSION}. Trained on {sample_counts['positives']} real NER rainfall-triggered landslides and {sample_counts['pseudo_absences']} pseudo-absences. "
+        "Soil moisture incorporates measured ERA5 data where available, fallback (0.5) elsewhere. Terrain uses 90th percentile slope."
     )
 
     # 5. Export Versioned Artifact

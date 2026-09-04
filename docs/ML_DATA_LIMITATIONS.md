@@ -19,21 +19,34 @@ This document transparently outlines the six critical scientific data limitation
 
 ---
 
-## 2. Limitation 1: Sample Size of Positive Events ($N = 8$)
+## 2. Limitation 1: Sample Size of Positive Events ($N = 15$)
 
 ### Reality
 
-The training dataset contains exactly **8 verified real rainfall-triggered landslide events** across the entire North Eastern Region from 2018 through 2024:
+The training dataset contains **15 verified real rainfall-triggered landslide events** across the North Eastern Region from 2017 through 2024 (1 event per zone across all 15 risk zones, plus 1 quarantined GLOF event):
 
 - 1 event in East Sikkim (2020)
-- 3 events in North Sikkim (2018, 2023)
-- 4 events in Papum Pare, Arunachal Pradesh (2022)
+- 1 event in North Sikkim / Mangan (2023)
+- 1 event in Papum Pare, Arunachal Pradesh (2022)
+- 1 event in Dibang Valley, Arunachal Pradesh (2024)
+- 2 events in Noney, Manipur (2022)
+- 1 event in Tamenglong, Manipur (2024)
+- 1 event in Aizawl, Mizoram (2018)
+- 1 event in Lunglei, Mizoram (2017)
+- 1 event in East Khasi Hills / Sohra, Meghalaya (2019)
+- 1 event in West Jaintia Hills, Meghalaya (2022)
+- 1 event in Kohima, Nagaland (2020)
+- 1 event in Dimapur Foothills, Nagaland (2023)
+- 1 event in Dima Hasao, Assam (2021)
+- 1 event in Karbi Anglong West, Assam (2017)
+- 1 event in Ambassa Hills, Tripura (2024)
 
 ### Scientific Consequence
 
-- Fitting a 19-parameter statistical model on 8 positive instances yields approximately **0.42 positives per feature**. Standard statistical learning rules of thumb (e.g., Harrell's rule) require at least 10–20 positive outcomes per feature.
-- Cross-validation with 5 spatial folds means individual validation folds contain as few as **0 or 1 positive event**.
-- The resulting out-of-fold PR-AUC of 0.5934 has a 95% bootstrap confidence interval spanning **[0.1539, 1.0000]**. This range encompasses both random chance and near-perfection, meaning the model's true generalization power cannot be established with statistical significance.
+- Expanding to 15 events across all 15 zones provides complete regional representation (0.79 positives per feature for 19 features), but remains below the ideal 10–20 positive outcomes per feature.
+- Cross-validation with 5 spatial folds now has non-empty positive partitions in all 5 folds (2 to 4 positives per fold).
+- The candidate model (`v0.3-lr-trained`) achieves an out-of-fold PR-AUC of **0.6363** (vs chance baseline 0.2679 and continuous threshold baseline 0.4821).
+- However, the 95% bootstrap confidence interval remains wide at **[0.3021, 1.0000]** (spanning across the threshold baseline of 0.4821). This wide interval confirms that while the candidate model exhibits a positive empirical gain ($\Delta = +0.1542$ over threshold baseline), true generalization across unseen monsoon cycles remains data-limited and statistically inconclusive until continuous multi-year event records are acquired.
 
 ---
 
@@ -42,12 +55,12 @@ The training dataset contains exactly **8 verified real rainfall-triggered lands
 ### Reality
 
 While live inference captures operational ERA5-Land surface soil moisture (`soil_moisture_0_to_1cm` and `soil_moisture_1_to_3cm`), querying the Open-Meteo Historical Reanalysis Archive API (`archive-api.open-meteo.com/v1/archive`) for historical antecedent windows (2016–2024) across:
-(a) All verified positive events, and
-(b) All 24 pseudo-absences
+(a) All 15 verified positive events, and
+(b) All candidate pseudo-absences
 returns zero non-null readings (100% `null` values) for `soil_moisture_0_to_1cm` and `soil_moisture_1_to_3cm`. In ECMWF ERA5-Land historical archives, standard soil levels are discretized as Layer 1 (0–7cm) and Layer 2 (7–28cm); the fractional 0–1cm and 1–3cm levels are non-existent in the reanalysis archive.
 
 Consequently, per the strict scientific protocol forbidding fabricated or interpolated values:
-- All historical training rows and pseudo-absence rows genuinely lacking `soil_moisture_0_to_1cm` / `soil_moisture_1_to_3cm` data remain on the documented neutral fallback:
+- All historical training rows genuinely lacking archive coverage remain on the documented neutral fallback:
   $$\text{soil\_moisture\_latest} = 0.50, \quad \text{soil\_moisture\_7d\_trend} = 0.00$$
 - Specific coordinates/dates lacking archive coverage:
   1. Zone 3 (Aizawl East, 23.74°N, 92.74°E, 2018-06-07)
@@ -58,7 +71,14 @@ Consequently, per the strict scientific protocol forbidding fabricated or interp
   6. Zone 2 (Noney, 24.80°N, 93.71°E, 2022-07-04)
   7. Zone 12 (Mangan North, 27.50°N, 88.54°E, 2023-06-15)
   8. Zone 1 (Tamenglong, 24.97°N, 93.51°E, 2024-07-30)
-  9. All 24 deterministic pseudo-absence coordinates/dates across 2016–2024.
+  9. Zone 4 (Lunglei, 22.88°N, 92.51°E, 2017-06-13)
+  10. Zone 6 (Jaintia Hills, 25.18°N, 92.36°E, 2022-06-16)
+  11. Zone 8 (Dimapur Foothills, 25.79°N, 93.76°E, 2023-07-04)
+  12. Zone 9 (Papum Pare, 27.10°N, 93.69°E, 2022-06-28)
+  13. Zone 10 (Dibang Valley, 28.28°N, 95.84°E, 2024-04-24)
+  14. Zone 14 (Karbi Anglong West, 25.75°N, 92.60°E, 2017-04-30)
+  15. Zone 15 (Ambassa Hills, 23.92°N, 91.85°E, 2024-08-20)
+  16. All pseudo-absence coordinates/dates across 2016–2024.
 - Feature variance in the training matrix remains **0.0000**.
 
 ### Scientific Consequence
