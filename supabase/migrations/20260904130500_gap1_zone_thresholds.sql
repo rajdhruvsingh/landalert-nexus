@@ -15,22 +15,19 @@
 --          threshold (Tirkey et al. 2023 / Das et al. 2018).
 --        - All other zones: use the NE-Himalaya regional I-D
 --          average (coefficient ≈ 36.0, exponent ≈ -0.72, derived
---          from Dahal & Hasegawa 2008 / Sengupta et al. 2010 regional
---          review) and set threshold_e_mm to state-level documented
---          values where available.
+--          from Dahal & Hasegawa 2008 regional review) and set
+--          threshold_e_mm to state-level documented values where available.
 --   3. Replace the hardcoded Sikkim formula in recompute_risk()
 --      with per-row reads of these columns.
 --
 -- Sources:
 --   Sikkim I-D:   Das, S. et al. (2018) Nat Hazards Earth Syst Sci
 --                 18:2759-2775. I = 43.26 * D^-0.78
---   NE-Himalaya regional I-D baseline: Sengupta et al. (2010) Nat Hazards 54(3):503-516
---   (E-D threshold E = -11.10 + 0.62*D, valid 24 < D < 1440 hr)
---   NOTE: Mathew et al. (2014) Geomorphology 228:307-319 covers Garhwal Himalaya
---   (Uttarakhand) and is NOT applicable to NER.
---   Regional foothills I-D average: Dahal & Hasegawa (2008) Landslides 5(4):363-376: I ≈ 36.0 * D^-0.72
---   NE-Himalaya E-D threshold: Sengupta et al. (2010), valid for
---                 24 < D < 1440 hr: E(mm) = -11.10 + 0.62*D
+--   NE-Himalaya regional I-D baseline: Dahal & Hasegawa (2008) Landslides 5(4):363-376: I ≈ 36.0 * D^-0.72
+--   NE-Himalaya moisture threshold: Monga, D., & Ganguli, P. (2024) NHESS; (2026) J. Hydrol. Eng. 31(2):04025043
+--                 (E-D threshold E = -11.10 + 0.62*D, valid 24 < D < 1440 hr)
+--   NOTE: Mathew et al. (2014) covers Garhwal Himalaya (Uttarakhand) and is NOT applicable to NER.
+--   NOTE: Sengupta et al. (2010) studied only Lanta Khola (North Sikkim), not the region-wide threshold.
 --   State-level E thresholds: derived from cumulative antecedent
 --                 rainfall statistics in NDMA NER hazard reports
 --                 (2019-2022); see docs/DATA_SOURCES.md.
@@ -79,14 +76,14 @@ WHERE state = 'Mizoram';
 
 -- ---- Meghalaya -----------------------------------------------------
 -- Ref: Shillong-Sohra is one of the wettest corridors globally;
---      Sengupta et al. (2010) regional baseline applies but the
+--      Monga & Ganguli (2024 / 2026) regional baseline applies but the
 --      threshold should be higher due to chronic soil saturation.
 --      NDMA Meghalaya State DMP (2019) notes 30-day trigger >460 mm.
 UPDATE public.risk_zones
 SET threshold_e_mm           = 465.0,
     threshold_i_coefficient  = 36.0,
     threshold_i_exponent     = -0.72,
-    threshold_source         = 'NDMA Meghalaya State DMP 2019; Sengupta et al. (2010) regional baseline — state-level estimate'
+    threshold_source         = 'NDMA Meghalaya State DMP 2019; Monga & Ganguli (2024/2026) regional baseline — state-level estimate'
 WHERE state = 'Meghalaya';
 
 -- ---- Nagaland ------------------------------------------------------
@@ -96,7 +93,7 @@ UPDATE public.risk_zones
 SET threshold_e_mm           = 410.0,
     threshold_i_coefficient  = 36.0,
     threshold_i_exponent     = -0.72,
-    threshold_source         = 'NE-Himalaya regional baseline (Sengupta et al. 2010 / Dahal & Hasegawa 2008) — no Nagaland-specific I-D study found; see docs/DATA_SOURCES.md'
+    threshold_source         = 'NE-Himalaya regional baseline (Dahal & Hasegawa 2008; Monga & Ganguli 2024/2026) — no Nagaland-specific I-D study found; see docs/DATA_SOURCES.md'
 WHERE state = 'Nagaland';
 
 -- ---- Arunachal Pradesh ---------------------------------------------

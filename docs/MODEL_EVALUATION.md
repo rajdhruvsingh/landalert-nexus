@@ -13,7 +13,7 @@
 > **Mathew et al. (2014) Geomorphology 228:307-319** is NOT a NER landslide source.  
 > That paper studies **Garhwal Himalaya (Uttarakhand)**. It must not be cited for NER calibration.
 >
-> Correct NER sources: NESAC/NERDRR NER Landslide Information System; NRSC/ISRO Landslide Atlas of India (1998–2022, ~80,000 events, NER districts included); GSI Bhukosh; state-specific studies (Das 2018, Boro 2021, Saikia 2019, Pachuau 2017).
+> Correct NER sources: Monga & Ganguli (2024; 2026 J. Hydrol. Eng. 31(2):04025043); NESAC/NERDRR NER Landslide Information System; NRSC/ISRO Landslide Atlas of India (1998–2022, ~80,000 events, NER districts included); GSI Bhukosh; state-specific studies (Das 2018, Boro 2021, Saikia 2019, Pachuau 2017). Note: Sengupta et al. (2010) is a single-site North Sikkim study (Lanta Khola), not the region-wide threshold source.
 
 ---
 

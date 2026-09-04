@@ -91,8 +91,8 @@ score = w_intensity  × clamp(72hr_rainfall / zone_I-D_threshold, 0, 1)
 
 **Threshold equations** (published, not invented):
 
-- **NE-Himalaya moisture threshold**: `E(mm) = -11.10 + 0.62 × D(hr)` — Sengupta et al. (2010), valid for 24 < D < 1440 hr
-- **Sikkim I-D threshold**: `I = 43.26 × D^-0.78` — Das et al. (2018) NHESS 18:2759-2775, applied **only** to the two Sikkim zones (East Sikkim, Mangan); other zones use the NE-Himalaya regional baseline (I ≈ 36.0 × D^-0.72)
+- **NE-Himalaya moisture threshold**: `E(mm) = -11.10 + 0.62 × D(hr)` — Monga & Ganguli (2024; 2026 J. Hydrol. Eng. 31(2):04025043), valid for 24 < D < 1440 hr
+- **Sikkim I-D threshold**: `I = 43.26 × D^-0.78` — Das et al. (2018) NHESS 18:2759-2775, applied **only** to the two Sikkim zones (East Sikkim, Mangan); other zones use the NE-Himalaya regional baseline (I ≈ 36.0 × D^-0.72; Dahal & Hasegawa 2008)
 
 **Explanation strings** are generated dynamically: factors are ranked by their weighted contribution, so the explanation always names the actual dominant driver first. This is a linear-model feature attribution — no SHAP library needed for a weighted-sum formula.
 
@@ -115,7 +115,7 @@ See [`docs/MODEL_EVALUATION.md`](docs/MODEL_EVALUATION.md) for the evaluation me
 | Soil moisture | Live Open-Meteo ERA5-Land (0-3cm normalized) | Open-Meteo ERA5-Land / NASA SMAP Level-3 |
 | Historical landslides | Documented real NER events (`is_synthetic=false`) + synthetic fixtures labeled | Literature/news records; COOLR (NASA); NRSC Landslide Atlas |
 | Slope values | SRTM30m DEM computation + published studies | SRTM30m DEM via OpenTopoData; Das et al. (2018) |
-| I-D thresholds | Calibrated for Sikkim (Das 2018); regional baseline for others | Das et al. (2018); Sengupta et al. (2010); Dahal & Hasegawa (2008) |
+| I-D thresholds | Calibrated for Sikkim (Das 2018); regional baseline for others | Das et al. (2018); Dahal & Hasegawa (2008); Monga & Ganguli (2024; 2026) |
 
 The UI displays an amber "⚠ Synthetic data" badge wherever synthetic landslide records appear. See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for exactly where to obtain real data and how to load it.
 

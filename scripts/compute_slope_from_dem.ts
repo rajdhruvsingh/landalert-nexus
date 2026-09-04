@@ -18,6 +18,15 @@
  * NOTE: Does NOT overwrite zones where slope_source already cites a
  * peer-reviewed study AND the difference from the computed value is < 5°.
  * These zones are logged but skipped.
+ *
+ * LIMITATION NOTE:
+ * Centroid-only sampling (centroid ± 100m) samples only a single location
+ * in each zone. In zones with extreme relief contrast (such as Zone 5 Shillong-Sohra,
+ * where the centroid is on the flat 1500m plateau top rather than the 45-60°
+ * canyon escarpments, or Zone 8 Dimapur on the alluvial floor), centroid slope
+ * will register as nearly flat (~0-1°). For operational production, zonal
+ * polygon sampling evaluating the 90th percentile slope across the hazardous
+ * terrain is recommended.
  */
 
 import { createClient } from "@supabase/supabase-js";

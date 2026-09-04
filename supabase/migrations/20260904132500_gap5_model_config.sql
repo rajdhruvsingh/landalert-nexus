@@ -265,7 +265,7 @@ BEGIN
       '30-day antecedent: %smm vs zone E-threshold %smm. '
       'Soil moisture: %s%%. '
       'Slope: %s°. Historical events in zone: %s. '
-      'Model: %s (weights: intensity=%.2f antecedent=%.2f soil=%.2f slope=%.2f history=%.2f). '
+      'Model: %s (weights: intensity=%s antecedent=%s soil=%s slope=%s history=%s). '
       'Combined score: %s/100 → %s.',
       top_factor, pct_str,
       CASE WHEN secondary = '' THEN 'none significant' ELSE secondary END,
@@ -279,8 +279,11 @@ BEGIN
       z.mean_slope_deg,
       hist,
       cfg.model_version,
-      cfg.weight_intensity, cfg.weight_antecedent, cfg.weight_soil_moisture,
-      cfg.weight_slope, cfg.weight_history,
+      ROUND(cfg.weight_intensity::numeric, 2),
+      ROUND(cfg.weight_antecedent::numeric, 2),
+      ROUND(cfg.weight_soil_moisture::numeric, 2),
+      ROUND(cfg.weight_slope::numeric, 2),
+      ROUND(cfg.weight_history::numeric, 2),
       score, lvl
     );
 

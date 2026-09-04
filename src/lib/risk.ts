@@ -49,6 +49,8 @@ export function roadStatusClass(status: string): string {
 /**
  * Published NE-Himalaya moisture threshold: E(mm) = -11.10 + 0.62 * D(hr),
  * valid for 24 < D < 1440 hr.
+ * Source: Monga & Ganguli (2024) NHESS; Monga & Ganguli (2026) J. Hydrol. Eng. 31(2):04025043
+ * DOI: 10.1061/JHYEFF.HEENG-6638. (Note: Sengupta et al. 2010 was a single-site study of Lanta Khola).
  */
 export function moistureThresholdMm(durationHours: number): number {
   return -11.1 + 0.62 * durationHours;

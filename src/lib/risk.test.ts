@@ -6,7 +6,8 @@
  *
  *   moistureThresholdMm — NE-Himalaya moisture threshold:
  *     E(mm) = -11.10 + 0.62 * D(hr)
- *     Source: Sengupta et al. (2010) Nat Hazards 54(3):503-516
+ *     Source: Monga & Ganguli (2024) NHESS; Monga & Ganguli (2026) J. Hydrol. Eng. 31(2):04025043
+ *     DOI: 10.1061/JHYEFF.HEENG-6638
  *
  *   intensityThresholdMmPerDay — Sikkim I-D threshold:
  *     I = 43.26 * D^-0.78 (I in mm/day, D in days)
@@ -20,7 +21,7 @@ import { moistureThresholdMm, intensityThresholdMmPerDay } from "./risk";
 
 // ─── moistureThresholdMm ─────────────────────────────────────────────────────
 // E(mm) = -11.10 + 0.62 * D(hr)
-// From Sengupta et al. (2010), Table 2 — example validation cases:
+// From Monga & Ganguli (2024 / 2026) — example validation cases:
 //   D = 24 hr  → E = -11.10 + 0.62*24  = 3.78 mm  (lower boundary, valid domain start)
 //   D = 72 hr  → E = -11.10 + 0.62*72  = 33.54 mm
 //   D = 240 hr → E = -11.10 + 0.62*240 = 137.70 mm

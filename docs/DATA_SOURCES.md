@@ -20,7 +20,7 @@ This document explains where every data value in the risk engine comes from, wha
 | Zone | Real events (`is_synthetic=false`) | Source |
 |------|------------------------------------|--------|
 | Noney, Manipur (id=2) | 2 | Tupul landslide 2022 (Wikipedia, NDTV, Down to Earth); NH-37 blockage 2022 (The Hindu) |
-| Tamenglong, Manipur (id=1) | 1 | Dimthanlong mudslide 2023 (KRC Times, India Today NE) |
+| Tamenglong, Manipur (id=1) | 1 | Dimthanlong mudslide 2024-07-30 (NDTV, India Today NE, Imphal Times) |
 | Gangtok-Singtam, East Sikkim (id=11) | 1 | Teesta GLOF 2023 (Wikipedia, PIB GoI) |
 | Mangan North, Sikkim (id=12) | 1 | Road corridor slides 2023 (India Today NE) |
 | Aizawl East, Mizoram (id=3) | 1 | Urban slope failure 2018 (Pachuau & Lallianthanga 2017 study area; NDMA Mizoram DMP 2019) |
@@ -102,6 +102,16 @@ ON CONFLICT DO NOTHING;
 - Offset: ±0.0009° (≈ 90m, one SRTM pixel) in each cardinal direction
 - Result stored in `slope_source` column per zone with computation date and elevation values
 
+### Important limitation: Single-centroid sampling artifact
+
+> [!WARNING]
+> **Single-Point Centroid Limitation**: `compute_slope_from_dem.ts` evaluates terrain slope at a single point (the zone's nominal centroid coordinate) plus four $\pm 100\text{ m}$ neighbors. This produces implausibly flat values for certain zones whose names describe steep terrain:
+> - **Shillong-Sohra Escarpment (Zone 5, computed 1.0°)**: The Shillong Plateau is an uplifted tabular tableland (peneplain) sitting at ~1,500 m elevation. The centroid coordinate (25.30°N, 91.72°E) lands directly on the flat plateau surface, whereas the catastrophic landslide hazards occur along the vertical canyon rims and escarpment drop-offs (40–60° slopes) plunging toward Bangladesh.
+> - **Dimapur Foothills (Zone 8, computed 0.0°)**: The centroid coordinate sits on the flat alluvial valley floor (150 m elevation), whereas slope instability occurs on the ascending hills flanking the Nagaland ridge.
+> - **Karbi Anglong West (Zone 14, computed 0.3°)**: Centroid is located on the low plains portion of the district.
+>
+> **Hazard Mitigation Principle**: For operational landslide susceptibility modeling, single-centroid averages are inadequate for zones with high internal terrain relief. The representative hazard slope should be evaluated as the **90th percentile or maximum slope** sampled across a multi-point spatial grid or zonal polygon rather than the centroid mean. In the interim, Tier 1 published district ranges (e.g. GSI Zonation reports or NDMA Atlas) provide the hazardous slope estimates.
+
 ### How to run the DEM slope script
 
 ```bash
@@ -133,7 +143,8 @@ Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
 
 | Reference | What it provides | Region |
 |-----------|-----------------|--------|
-| Sengupta et al. (2010) | NE-Himalaya E-D threshold: E = -11.10 + 0.62×D (valid 24 < D < 1440 hr) | NE Himalaya |
+| Monga, D., & Ganguli, P. (2024; 2026) | NE-Himalaya moisture threshold: `E(mm) = -11.10 + 0.62×D(hr)` (valid 24 < D < 1440 hr). Derived from 490 rain-driven landslides (2006–2019) across the Northeastern Himalayas using non-crossing quantile regression to incorporate antecedent soil moisture. *Natural Hazards and Earth System Sciences* (2024) / *Journal of Hydrologic Engineering* (2026) 31(2):04025043 (DOI: [10.1061/JHYEFF.HEENG-6638](https://doi.org/10.1061/JHYEFF.HEENG-6638)) | NE Himalaya |
+| Sengupta, Gupta & Anbarasu (2010) *Nat Hazards* 52(1):31–42 | Single-site landslide threshold for Lanta Khola, North Sikkim (DOI: [10.1007/s11069-009-9382-3](https://doi.org/10.1007/s11069-009-9382-3)). Note: this is a local North Sikkim catchment study, NOT the source of the region-wide NE-Himalaya moisture threshold formula. | North Sikkim (local catchment only) |
 | Das et al. (2018) NHESS 18:2759-2775 | Sikkim I-D threshold: I = 43.26 × D^-0.78 | Sikkim |
 | Dikshit & Satyam (2019) Geomatics Nat Hazards Risk 10(1) | Sikkim antecedent E threshold ~420-440 mm | Sikkim |
 | Boro et al. (2021) Landslides 18(4) | Assam (Dima Hasao/Karbi Anglong) antecedent 380-400 mm | Assam |
@@ -142,6 +153,7 @@ Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
 | NDMA NER Atlas 2021 | District-level slope statistics, Table B-3 | All NER states |
 
 > ⚠ **Mathew et al. (2014) Geomorphology 228:307-319 is NOT in this list.** It covers Garhwal Himalaya. Do not cite it for NER.
+> ⚠ **Sengupta et al. (2010) is a single-catchment paper (Lanta Khola, North Sikkim).** It does not derive a region-wide threshold; Monga & Ganguli (2024/2026) derived the NE-Himalaya regional moisture equation.
 
 ### Per-state calibration status
 
