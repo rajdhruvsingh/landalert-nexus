@@ -35,7 +35,7 @@ services:
     # Install Node deps → install Python deps → run Nitro node-server build.
     # pip install is required because ML inference spawns python3 at request time.
     # ---------------------------------------------------------------------------
-    buildCommand: npm ci && pip install -r requirements.txt && NITRO_PRESET=node-server npm run build
+    buildCommand: npm ci --include=dev && pip install -r requirements.txt && NITRO_PRESET=node-server npm run build
 
     # ---------------------------------------------------------------------------
     # Start
