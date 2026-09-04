@@ -116,11 +116,21 @@ export const recomputeAll = createServerFn({ method: "POST" }).handler(async () 
 });
 
 /**
- * Live observed-rainfall ingestion. Pulls daily precipitation totals for every
- * zone centroid from the Open-Meteo reanalysis/forecast API (keyless, gridded
- * IMD-comparable data), upserts them as station readings and re-runs the
- * threshold engine. Safe to run repeatedly: the unique index on
- * (zone_id, station_id, reading_time) makes each day idempotent.
+ * Live observed-rainfall + soil-moisture ingestion.
+ *
+ * RAINFALL: Pulls daily precipitation totals from Open-Meteo forecast/reanalysis
+ * (keyless, gridded IMD-comparable data). Station ID: 'OM-{zone.id}'.
+ *
+ * SOIL MOISTURE (Task B): Fetches hourly soil_moisture_0_to_1cm and
+ * soil_moisture_1_to_3cm from Open-Meteo ERA5-Land, averages them to daily
+ * means, and converts from m³/m³ (ERA5-Land units, typical range 0.05–0.40)
+ * to a 0–100% scale using 0.40 m³/m³ as field-capacity reference.
+ * Station ID: 'OM-SM-{zone.id}' — separate from rainfall rows so the
+ * unique index (zone_id, station_id, reading_time) keeps both idempotent.
+ *
+ * Field-capacity reference: 0.40 m³/m³ is the ERA5-Land saturation proxy
+ * for tropical/subtropical humid mountain soils — appropriate for NER.
+ * Source: Albergel et al. (2012) Hydrol. Earth Syst. Sci. 16:2617-2636.
  */
 export async function ingestLiveRainfallImpl() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -131,19 +141,49 @@ export async function ingestLiveRainfallImpl() {
   if (zErr) throw new Error(zErr.message);
   if (!zones?.length) return { zones: 0, readings: 0 };
 
-  const url =
+  const lats = zones.map((z) => z.centroid_lat).join(",");
+  const lngs = zones.map((z) => z.centroid_lng).join(",");
+
+  // ── Fetch 1: daily rainfall (existing) ──────────────────────────────────
+  const rainfallUrl =
     "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${zones.map((z) => z.centroid_lat).join(",")}` +
-    `&longitude=${zones.map((z) => z.centroid_lng).join(",")}` +
+    `?latitude=${lats}&longitude=${lngs}` +
     "&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=UTC";
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Open-Meteo request failed (${res.status})`);
-  const payload = await res.json();
-  const series: Array<{ daily?: { time: string[]; precipitation_sum: (number | null)[] } }> =
-    Array.isArray(payload) ? payload : [payload];
+  // ── Fetch 2: hourly soil moisture — ERA5-Land 0-1cm and 1-3cm ──────────
+  // We request past 7 days of hourly data and aggregate to daily means.
+  // ERA5-Land soil moisture is the best freely-available proxy for NER
+  // hill-slope pre-wetting; this replaces the seed fixture formula.
+  const soilMoistureUrl =
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${lats}&longitude=${lngs}` +
+    "&hourly=soil_moisture_0_to_1cm,soil_moisture_1_to_3cm" +
+    "&past_days=7&forecast_days=1&timezone=UTC&models=era5";
 
-  const rows: Array<{
+  const [rainfallRes, soilRes] = await Promise.all([
+    fetch(rainfallUrl),
+    fetch(soilMoistureUrl),
+  ]);
+
+  if (!rainfallRes.ok) throw new Error(`Open-Meteo rainfall request failed (${rainfallRes.status})`);
+  if (!soilRes.ok) throw new Error(`Open-Meteo soil moisture request failed (${soilRes.status})`);
+
+  const rainfallPayload = await rainfallRes.json();
+  const soilPayload = await soilRes.json();
+
+  const rainfallSeries: Array<{
+    daily?: { time: string[]; precipitation_sum: (number | null)[] };
+  }> = Array.isArray(rainfallPayload) ? rainfallPayload : [rainfallPayload];
+
+  const soilSeries: Array<{
+    hourly?: {
+      time: string[];
+      soil_moisture_0_to_1cm: (number | null)[];
+      soil_moisture_1_to_3cm: (number | null)[];
+    };
+  }> = Array.isArray(soilPayload) ? soilPayload : [soilPayload];
+
+  const rainfallRows: Array<{
     zone_id: number;
     station_id: string;
     reading_time: string;
@@ -151,34 +191,97 @@ export async function ingestLiveRainfallImpl() {
     source: string;
   }> = [];
 
+  const soilRows: Array<{
+    zone_id: number;
+    station_id: string;
+    reading_time: string;
+    rainfall_mm: number;
+    soil_moisture_pct: number;
+    source: string;
+  }> = [];
+
+  // Field-capacity constant for m³/m³ → % conversion
+  const FIELD_CAPACITY_M3_M3 = 0.40;
+
   zones.forEach((zone, i) => {
-    const daily = series[i]?.daily;
-    if (!daily) return;
-    daily.time.forEach((day, d) => {
-      rows.push({
-        zone_id: zone.id,
-        station_id: `OM-${zone.id}`,
-        reading_time: `${day}T00:00:00+00:00`,
-        rainfall_mm: daily.precipitation_sum[d] ?? 0,
-        source: "Open-Meteo observed daily precipitation",
+    // Rainfall rows (unchanged logic)
+    const daily = rainfallSeries[i]?.daily;
+    if (daily) {
+      daily.time.forEach((day, d) => {
+        rainfallRows.push({
+          zone_id: zone.id,
+          station_id: `OM-${zone.id}`,
+          reading_time: `${day}T00:00:00+00:00`,
+          rainfall_mm: daily.precipitation_sum[d] ?? 0,
+          source: "Open-Meteo observed daily precipitation",
+        });
       });
-    });
+    }
+
+    // Soil moisture rows — aggregate hourly → daily means
+    const hourly = soilSeries[i]?.hourly;
+    if (hourly) {
+      // Group hourly readings by calendar date
+      const dayMap = new Map<string, { sum0: number; sum1: number; count: number }>();
+      hourly.time.forEach((isoHour, h) => {
+        const day = isoHour.slice(0, 10); // 'YYYY-MM-DD'
+        const sm0 = hourly.soil_moisture_0_to_1cm[h];
+        const sm1 = hourly.soil_moisture_1_to_3cm[h];
+        if (sm0 == null && sm1 == null) return;
+        const cur = dayMap.get(day) ?? { sum0: 0, sum1: 0, count: 0 };
+        cur.sum0 += sm0 ?? 0;
+        cur.sum1 += sm1 ?? 0;
+        cur.count += 1;
+        dayMap.set(day, cur);
+      });
+
+      dayMap.forEach(({ sum0, sum1, count }, day) => {
+        if (count === 0) return;
+        // Average the two depth layers (0-1cm and 1-3cm) to get 0-3cm mean
+        const avgM3M3 = (sum0 + sum1) / (2 * count);
+        // Normalize to 0-100% using field-capacity reference
+        const pct = Math.min(100, Math.max(0, (avgM3M3 / FIELD_CAPACITY_M3_M3) * 100));
+        soilRows.push({
+          zone_id: zone.id,
+          station_id: `OM-SM-${zone.id}`,
+          reading_time: `${day}T00:00:00+00:00`,
+          rainfall_mm: 0, // soil moisture rows carry no rainfall
+          soil_moisture_pct: Math.round(pct * 10) / 10,
+          source:
+            "Open-Meteo ERA5-Land soil_moisture_0_to_3cm_avg " +
+            "(m³/m³ daily mean → 0-100% normalized at 0.40 m³/m³ field-capacity; " +
+            "Albergel et al. 2012 Hydrol. Earth Syst. Sci. 16:2617-2636)",
+        });
+      });
+    }
   });
 
-  if (rows.length) {
+  // Upsert rainfall rows
+  if (rainfallRows.length) {
     const { error } = await supabaseAdmin
       .from("weather_readings")
-      .upsert(rows, { onConflict: "zone_id,station_id,reading_time" });
-    if (error) throw new Error(error.message);
+      .upsert(rainfallRows, { onConflict: "zone_id,station_id,reading_time" });
+    if (error) throw new Error(`Rainfall upsert failed: ${error.message}`);
+  }
+
+  // Upsert soil moisture rows (separate station_id keeps unique index clean)
+  if (soilRows.length) {
+    const { error } = await supabaseAdmin
+      .from("weather_readings")
+      .upsert(soilRows, { onConflict: "zone_id,station_id,reading_time" });
+    if (error) throw new Error(`Soil moisture upsert failed: ${error.message}`);
   }
 
   const { error: rErr } = await supabaseAdmin.rpc("recompute_risk");
   if (rErr) throw new Error(rErr.message);
 
-  return { zones: zones.length, readings: rows.length };
+  return {
+    zones: zones.length,
+    readings: rainfallRows.length,
+    soilReadings: soilRows.length,
+  };
 }
 
 export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(
   async () => ingestLiveRainfallImpl(),
 );
-

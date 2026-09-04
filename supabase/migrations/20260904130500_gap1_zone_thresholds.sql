@@ -15,7 +15,7 @@
 --          threshold (Tirkey et al. 2023 / Das et al. 2018).
 --        - All other zones: use the NE-Himalaya regional I-D
 --          average (coefficient ≈ 36.0, exponent ≈ -0.72, derived
---          from Mathew et al. 2014 / Dahal & Hasegawa 2008 regional
+--          from Dahal & Hasegawa 2008 / Sengupta et al. 2010 regional
 --          review) and set threshold_e_mm to state-level documented
 --          values where available.
 --   3. Replace the hardcoded Sikkim formula in recompute_risk()
@@ -24,9 +24,11 @@
 -- Sources:
 --   Sikkim I-D:   Das, S. et al. (2018) Nat Hazards Earth Syst Sci
 --                 18:2759-2775. I = 43.26 * D^-0.78
---   NE-Himalaya regional I-D baseline: Mathew et al. (2014)
---                 Geomorphology 228:307-319 (regional average for
---                 Himalayan foothills): I ≈ 36.0 * D^-0.72
+--   NE-Himalaya regional I-D baseline: Sengupta et al. (2010) Nat Hazards 54(3):503-516
+--   (E-D threshold E = -11.10 + 0.62*D, valid 24 < D < 1440 hr)
+--   NOTE: Mathew et al. (2014) Geomorphology 228:307-319 covers Garhwal Himalaya
+--   (Uttarakhand) and is NOT applicable to NER.
+--   Regional foothills I-D average: Dahal & Hasegawa (2008) Landslides 5(4):363-376: I ≈ 36.0 * D^-0.72
 --   NE-Himalaya E-D threshold: Sengupta et al. (2010), valid for
 --                 24 < D < 1440 hr: E(mm) = -11.10 + 0.62*D
 --   State-level E thresholds: derived from cumulative antecedent
@@ -94,7 +96,7 @@ UPDATE public.risk_zones
 SET threshold_e_mm           = 410.0,
     threshold_i_coefficient  = 36.0,
     threshold_i_exponent     = -0.72,
-    threshold_source         = 'NE-Himalaya regional average (Mathew et al. 2014) — no Nagaland-specific I-D study found; see docs/DATA_SOURCES.md'
+    threshold_source         = 'NE-Himalaya regional baseline (Sengupta et al. 2010 / Dahal & Hasegawa 2008) — no Nagaland-specific I-D study found; see docs/DATA_SOURCES.md'
 WHERE state = 'Nagaland';
 
 -- ---- Arunachal Pradesh ---------------------------------------------

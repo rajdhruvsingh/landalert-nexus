@@ -11,9 +11,9 @@
 --   1. Add is_synthetic BOOLEAN NOT NULL DEFAULT true column.
 --   2. Update all existing rows to a clearly synthetic label.
 --
--- If real NE-Himalaya inventory data (GSI Bhukosh export or the
--- ~490-event catalogue from Mathew et al. 2014) becomes available
--- before the deadline, write a SEPARATE migration that:
+-- If real NE-Himalaya inventory data (GSI Bhukosh, COOLR, or NRSC
+-- Landslide Atlas) becomes available before the deadline, write a
+-- SEPARATE migration that:
 --   a) Inserts the real events with is_synthetic = false and
 --      source = 'GSI Bhukosh export <date>' (or the paper citation).
 --   b) Optionally deletes or retains the synthetic rows depending

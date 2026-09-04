@@ -111,11 +111,11 @@ See [`docs/MODEL_EVALUATION.md`](docs/MODEL_EVALUATION.md) for the evaluation me
 
 | Data | Current state | Real source |
 |------|--------------|-------------|
-| Rainfall | Open-Meteo API + IMD fixtures | Live via Supabase edge function (planned) |
-| Soil moisture | Synthetic fixture (cosine function) | NASA SMAP Level-3 |
-| Historical landslides | **Synthetic fixture — NOT from GSI Bhukosh** | GSI Bhukosh / Mathew et al. 2014 catalogue |
-| Slope values | Published district studies + estimates | See `slope_source` column per zone |
-| I-D thresholds | Calibrated for Sikkim; regional average for others | See `threshold_source` column per zone |
+| Rainfall | Live Open-Meteo API (observed daily) | Open-Meteo API / IMD gridded |
+| Soil moisture | Live Open-Meteo ERA5-Land (0-3cm normalized) | Open-Meteo ERA5-Land / NASA SMAP Level-3 |
+| Historical landslides | Documented real NER events (`is_synthetic=false`) + synthetic fixtures labeled | Literature/news records; COOLR (NASA); NRSC Landslide Atlas |
+| Slope values | SRTM30m DEM computation + published studies | SRTM30m DEM via OpenTopoData; Das et al. (2018) |
+| I-D thresholds | Calibrated for Sikkim (Das 2018); regional baseline for others | Das et al. (2018); Sengupta et al. (2010); Dahal & Hasegawa (2008) |
 
 The UI displays an amber "⚠ Synthetic data" badge wherever synthetic landslide records appear. See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for exactly where to obtain real data and how to load it.
 

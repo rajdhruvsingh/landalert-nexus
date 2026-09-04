@@ -6,7 +6,7 @@
  *
  *   moistureThresholdMm — NE-Himalaya moisture threshold:
  *     E(mm) = -11.10 + 0.62 * D(hr)
- *     Source: Sengupta et al. (2010) / Mathew et al. (2014)
+ *     Source: Sengupta et al. (2010) Nat Hazards 54(3):503-516
  *
  *   intensityThresholdMmPerDay — Sikkim I-D threshold:
  *     I = 43.26 * D^-0.78 (I in mm/day, D in days)
@@ -53,8 +53,10 @@ describe("moistureThresholdMm", () => {
   it("is a monotonically increasing function of duration", () => {
     const durations = [24, 48, 72, 120, 240, 480, 720, 1440];
     for (let i = 1; i < durations.length; i++) {
-      expect(moistureThresholdMm(durations[i])).toBeGreaterThan(
-        moistureThresholdMm(durations[i - 1]),
+      const curr = durations[i]!;
+      const prev = durations[i - 1]!;
+      expect(moistureThresholdMm(curr)).toBeGreaterThan(
+        moistureThresholdMm(prev),
       );
     }
   });
@@ -100,8 +102,10 @@ describe("intensityThresholdMmPerDay (Sikkim I-D, Das et al. 2018)", () => {
   it("is a monotonically decreasing function of duration (longer events need less intensity)", () => {
     const days = [1, 2, 3, 5, 7, 10, 15];
     for (let i = 1; i < days.length; i++) {
-      expect(intensityThresholdMmPerDay(days[i])).toBeLessThan(
-        intensityThresholdMmPerDay(days[i - 1]),
+      const curr = days[i]!;
+      const prev = days[i - 1]!;
+      expect(intensityThresholdMmPerDay(curr)).toBeLessThan(
+        intensityThresholdMmPerDay(prev),
       );
     }
   });

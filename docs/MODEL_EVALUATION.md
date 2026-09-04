@@ -1,148 +1,157 @@
 # Model Evaluation — Himalaya Sentinel Risk Engine
 
-> **Status as of this commit**: Hand-tuned baseline (v0.1-hand-tuned).  
-> `pr_auc` and `recall_at_80_precision` are **NULL** in `risk_model_config`.  
-> This document describes the evaluation methodology that must be run to
-> populate those fields before the project is presented to judges.
+> **Status as of this commit**: Training pipeline complete (v2 notebook).  
+> `pr_auc` and `recall_at_80_precision` in `risk_model_config` will be **NULL**  
+> until you run `ml-notebooks/01_risk_calibration.ipynb` with real data.  
+> This document explains the methodology, results (once run), and when to retrain.
+
+---
+
+## Citation correction
+
+> [!WARNING]
+> **Mathew et al. (2014) Geomorphology 228:307-319** is NOT a NER landslide source.  
+> That paper studies **Garhwal Himalaya (Uttarakhand)**. It must not be cited for NER calibration.
+>
+> Correct NER sources: NESAC/NERDRR NER Landslide Information System; NRSC/ISRO Landslide Atlas of India (1998–2022, ~80,000 events, NER districts included); GSI Bhukosh; state-specific studies (Das 2018, Boro 2021, Saikia 2019, Pachuau 2017).
 
 ---
 
 ## Why evaluation matters
 
-The current risk formula uses hand-picked weights (0.35/0.20/0.20/0.15/0.10)
-and cutoffs (42/58/72) that were chosen by engineering judgement, not calibrated
-against real landslide event data.  This is explicitly documented in the
-`notes` column of `risk_model_config`.
-
-A judge who asks "how do you know your alert thresholds are correct?" needs a
-real, checkable number — not a claim.  This document explains how to produce
-that number.
+The current risk formula uses hand-picked weights (0.35/0.20/0.20/0.15/0.10) and cutoffs (42/58/72) chosen by engineering judgement. A judge who asks "how do you know your thresholds are correct?" needs a real, checkable number in `risk_model_config.pr_auc` — not a claim.
 
 ---
 
-## Evaluation plan
+## Evaluation methodology
 
-### Step 1 — Data preparation
+### Data (positive labels)
 
-**Positive labels**: Real landslide events from the GSI Bhukosh database or
-Mathew et al. (2014) NE-Himalaya catalogue (~490 events).  See
-`docs/DATA_SOURCES.md` for access instructions.
+Real landslide events from `historical_landslides WHERE is_synthetic = false`:
+- 9 events encoded from documented literature (migration `20260904140000_task_a_real_landslides.sql`)
+- Additional events from COOLR or GSI Bhukosh CSV (loaded via `scripts/load_coolr_csv.sql` once available)
 
-**Negative labels (pseudo-absence)**: Random sampling of zone-days where no
-landslide was recorded, matched to the zone and temporal distribution of
-positive events to avoid severe class imbalance.  Use a 1:3 positive-to-negative
-ratio as a starting point (adjust based on observed precision/recall).
+**Not used**: Mathew et al. (2014) — wrong region.
 
-**Features per event**:
-- `intensity_ratio`: 72-hr rainfall / zone I-D threshold (normalized 0-1)
-- `antecedent_ratio`: 30-day rainfall / zone E-threshold (normalized 0-1)
-- `soil_moisture_norm`: soil_moisture_pct / 100.0
-- `slope_norm`: mean_slope_deg / 45.0
-- `history_norm`: historical_landslide_count / 4.0
+### Feature matrix (19 features)
 
-### Step 2 — Train/test split
+| Group | Features |
+|-------|---------|
+| Rainfall | rain_1/3/7/15/30d, rain_intensity_max_1d, antecedent_wetness_index, threshold_exceedance_flag, rain_3d_vs_e_thr |
+| Soil moisture | soil_moisture_latest (normalized 0-1), soil_moisture_7d_trend |
+| Terrain | slope_norm, slope_sin, slope_class |
+| Proximity | dist_to_nearest_event_km, historical_event_density |
+| Temporal | day_of_year_sin, day_of_year_cos, is_monsoon |
 
-Use a **spatial grouped split** rather than random split to avoid data leakage:
-- Assign each zone to one of 5 groups by district.
-- Use 4 groups for training, 1 for test (rotate for cross-validation).
-- This ensures the model is evaluated on zones it has never seen — the
-  realistic deployment scenario.
+### Pseudo-absence sampling
 
-### Step 3 — Model training
+- **Buffer**: 1 km around each real positive event (metric distance in EPSG:32646)
+- **Slope restriction**: only zones with `mean_slope_deg > 5°` (all 15 NER zones qualify)
+- **Negative:positive ratio**: 3:1
+- **Temporal exclusion**: absence dates must not be within 14 days of a known event in the same zone
 
-**Start with logistic regression** (the weighted sum in `recompute_risk()` is
-literally logistic regression in the limit — coefficients map directly to
-`weight_*` in `risk_model_config`).
+### Train/test split
 
-```python
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_curve, auc
+**Spatial GroupKFold (n=5) by district** — NOT random split.  
+Random splitting leaks spatial autocorrelation between nearby train/test points and inflates apparent performance. A spatial split is the difference between a number you can defend and one that collapses under a technical judge's first follow-up question.
 
-model = LogisticRegression(class_weight='balanced', max_iter=500)
-model.fit(X_train, y_train)
+### Models evaluated
 
-proba = model.predict_proba(X_test)[:, 1]
-precision, recall, thresholds = precision_recall_curve(y_test, proba)
-pr_auc = auc(recall, precision)
+1. **Threshold-only baseline** (published I-D formula, no ML) — the floor
+2. **Logistic Regression** (interpretable; coefficients → `risk_model_config` weights directly)
+3. **Random Forest** (max_depth=5) — only used if LR PR-AUC < RF PR-AUC by > 0.05
 
-# Recall at 80% precision operating point
-idx = next((i for i, p in enumerate(precision) if p >= 0.80), None)
-recall_at_80p = recall[idx] if idx is not None else 0.0
-```
+### Metrics
 
-**If logistic regression PR-AUC < 0.65**: Try Random Forest with max_depth=5
-(shallow enough to remain interpretable).  Extract feature importances and map
-them to the weight columns.
-
-### Step 4 — Extract coefficients
-
-For logistic regression, the learned coefficients (after normalization to sum
-to 1.0) become the new weights in `risk_model_config`:
-
-```python
-coefs = model.coef_[0]
-coefs_normalized = coefs / coefs.sum()
-# Map in feature order: intensity, antecedent, soil_moisture, slope, history
-```
-
-For a shallow decision tree or Random Forest, translate the split logic to
-CASE/WHEN in the score computation, or use feature importances as surrogate
-weights (less accurate but deployable in the same schema).
-
-### Step 5 — Update risk_model_config
-
-```sql
-INSERT INTO public.risk_model_config (
-  model_version, weight_intensity, weight_antecedent, weight_soil_moisture,
-  weight_slope, weight_history, cutoff_moderate, cutoff_high, cutoff_severe,
-  pr_auc, recall_at_80_precision, notes, is_active
-) VALUES (
-  'v0.2-logistic-regression',
-  <w_intensity>, <w_antecedent>, <w_soil>, <w_slope>, <w_history>,
-  <cutoff_mod>, <cutoff_high>, <cutoff_severe>,
-  <pr_auc>, <recall_at_80p>,
-  'Logistic regression on Mathew et al. 2014 NE-Himalaya catalogue. '
-  'Spatial grouped CV by district. 1:3 positive:negative ratio.',
-  false  -- set to true only after validating against smoke test
-);
--- Then flip active flag:
-UPDATE public.risk_model_config SET is_active = false WHERE is_active = true;
-UPDATE public.risk_model_config SET is_active = true  WHERE model_version = 'v0.2-logistic-regression';
-SELECT public.recompute_risk();
-```
+- **Precision-Recall AUC** — correct metric under severe class imbalance (accuracy is not)
+- **Recall at 80% precision** — headline number: "at 80% precision, we would catch X% of real events"
+- Threshold baseline vs. ML side-by-side (honest "does ML actually help?" test)
 
 ---
 
 ## Evaluation results
 
-| Model version | PR-AUC | Recall @ 80% precision | Trained on | Evaluated on |
-|---------------|--------|------------------------|------------|--------------|
+| Model | PR-AUC | Recall @ 80% precision | Trained on | Split |
+|-------|--------|------------------------|------------|-------|
 | v0.1-hand-tuned | — | — | N/A (hand-tuned) | N/A |
-| *(run notebook)* | | | | |
+| Threshold-only baseline | *run notebook* | *run notebook* | N/A | N/A |
+| v0.2 logistic-regression | *run notebook* | *run notebook* | NER real events | GroupKFold n=5 |
 
-> Fill this table in after running `ml-notebooks/01_risk_calibration.ipynb`
-> and update `risk_model_config` accordingly.
+> Fill this table in after running `ml-notebooks/01_risk_calibration.ipynb`.  
+> The notebook writes real numbers to `risk_model_config` and saves `docs/model_evaluation_results.csv`.
+
+PR curve: see `docs/pr_curve.png` (generated by notebook).
 
 ---
 
-## Notebook
+## Retraining policy (Task H)
 
-See [`ml-notebooks/01_risk_calibration.ipynb`](../ml-notebooks/01_risk_calibration.ipynb)
-for the implementation.
+### When to retrain
+
+| Trigger | Rationale |
+|---------|-----------|
+| **≥ 10 new confirmed events** added to `historical_landslides WHERE is_synthetic = false` | Enough new signal to meaningfully shift coefficients |
+| **Start of each monsoon season (June 1)** | Annual update to capture previous year's events |
+| **A zone's threshold_e_mm is updated** with a new calibrated study | Re-evaluate whether ML adds value over the new threshold |
+
+### Manual retraining steps
+
+1. Ensure new events are in `historical_landslides` with `is_synthetic = false` and a citation
+2. Run `ml-notebooks/01_risk_calibration.ipynb` end-to-end
+3. Review the results table (cell 11) — confirm PR-AUC improved or held
+4. At cell 14, type `yes` when prompted → notebook writes new weights to `risk_model_config` and calls `recompute_risk()`
+5. Run `npm run test` to verify the smoke test still passes
+6. Commit: `git add supabase/migrations/; git commit -m "data: retrain v0.X on YYYY-MM-DD, PR-AUC=X.XX"`
+
+### Optional: staleness reminder via pg_cron
+
+```sql
+-- Fires on June 1 each year — creates an alert reminding operators to retrain
+SELECT cron.schedule(
+  'retrain-reminder',
+  '0 9 1 6 *',
+  $$
+    INSERT INTO alerts (zone_id, risk_level, message, language, channel, explanation)
+    VALUES (
+      NULL, 'Low',
+      'SYSTEM: Monsoon season starting — model retraining recommended. Run ml-notebooks/01_risk_calibration.ipynb.',
+      'en', 'console',
+      'Annual retraining trigger. See docs/MODEL_EVALUATION.md for steps.'
+    );
+  $$
+);
+```
+
+---
+
+## Honest limitations
+
+1. **Small training set**: 9 documented events is very small. The model may not generalise well across all 15 zones. This is explicitly acknowledged — small sample size is preferable to a second layer of synthetic data.
+2. **Pseudo-absence bias**: We have positives; we do not have confirmed "never-slides" negatives. Pseudo-absences are a principled approach but introduce uncertainty.
+3. **Soil moisture proxy**: ERA5-Land 0-3cm values are a ~9km resolution satellite proxy, not in-situ measurements. Stated explicitly in the `source` column of every ingested row.
+4. **Rainfall coverage gaps**: `weather_readings` may have sparse coverage for early dates (pre-2022). Rainfall features will fall back to 0 for missing dates — not ideal for historical events.
 
 ---
 
 ## Judge Q&A framing
 
 **"What's your PR-AUC?"**  
-If the notebook has been run: cite the number from the table above and point to
-`risk_model_config` (it's in the live database, not just a document claim).  
-If not yet run: "Our current weights are hand-tuned from published research;
-the evaluation notebook is ready and the `risk_model_config` table is designed
-to receive the trained values — we can run it now."  Never fabricate a number.
+Point to `risk_model_config.pr_auc` in the live database — if the notebook has been run, it's there as a checkable number, not just a document claim.
 
 **"Why logistic regression instead of deep learning?"**  
-Logistic regression coefficients map directly to the weighted-sum formula in
-`recompute_risk()` — the model IS the formula. This means every alert includes
-an exact attribution of how much each factor contributed, which district
-officers need to decide whether to evacuate a village.
+The coefficients map directly to the 5 weighted-sum terms in `recompute_risk()`. Every alert includes a ranked attribution of which factor drove it — something district officers need before deciding to evacuate a village. A black-box model gives a number; this gives a reason.
+
+**"How do you know your pseudo-absence sampling is correct?"**  
+We applied a 1km exclusion buffer (larger than SRTM pixel resolution), restricted to terrain with slope > 5° (excluding flat areas that trivially never slide), and used temporal exclusion to prevent near-miss false negatives. This is documented in the notebook's markdown cells.
+
+---
+
+## Notebook
+
+[`ml-notebooks/01_risk_calibration.ipynb`](../ml-notebooks/01_risk_calibration.ipynb)
+
+```bash
+pip install pandas numpy scikit-learn matplotlib seaborn psycopg2-binary scipy python-dotenv
+# Set DATABASE_URL in .env
+jupyter notebook ml-notebooks/01_risk_calibration.ipynb
+```
