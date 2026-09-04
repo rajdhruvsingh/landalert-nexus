@@ -325,7 +325,7 @@ export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(asy
 );
 
 export const getRiskPredictionServerFn = createServerFn({ method: "GET" })
-  .inputValidator((data: { zoneId: number; asOfDate?: string }) => ({
+  .validator((data: { zoneId: number; asOfDate?: string }) => ({
     zoneId: Number(data.zoneId),
     asOfDate: data.asOfDate,
   }))
@@ -355,7 +355,7 @@ export const getZonesGeoJsonServerFn = createServerFn({ method: "GET" }).handler
 });
 
 export const dispatchAlertServerFn = createServerFn({ method: "POST" })
-  .inputValidator(
+  .validator(
     (data: {
       zoneId: number;
       language?: "en" | "as" | "bn" | "ne";
@@ -381,7 +381,7 @@ export const dispatchAlertServerFn = createServerFn({ method: "POST" })
   });
 
 export const submitFieldObservationsServerFn = createServerFn({ method: "POST" })
-  .inputValidator((data: { observations: import("./sync.service").FieldObservationInput[] }) => ({
+  .validator((data: { observations: import("./sync.service").FieldObservationInput[] }) => ({
     observations: data.observations,
   }))
   .handler(async ({ data }) => {
