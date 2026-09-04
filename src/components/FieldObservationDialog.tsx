@@ -155,6 +155,15 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           </DialogDescription>
         </DialogHeader>
 
+        <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-[0.7rem] font-mono text-amber-300">
+          <div className="font-semibold uppercase tracking-wider flex items-center gap-1.5">
+            <span>🛡️ Trust Model: Input Signal Only</span>
+          </div>
+          <p className="mt-1 text-muted-foreground leading-normal">
+            Field reports enter the system as <strong>UNVERIFIED</strong> candidate signals. They undergo official human triage and cannot automatically trigger emergency dispatch or alter ML models.
+          </p>
+        </div>
+
         {statusMessage && (
           <div
             className={`rounded border p-3 text-xs font-mono leading-relaxed ${

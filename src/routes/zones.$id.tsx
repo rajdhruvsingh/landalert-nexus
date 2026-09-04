@@ -32,6 +32,8 @@ import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
 import { intensityThresholdMmPerDay, moistureThresholdMm, riskColor } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -101,6 +103,7 @@ function ZonePage() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertLang, setAlertLang] = useState<"en" | "as" | "bn" | "ne">("en");
   const [alertChannel, setAlertChannel] = useState<"sms" | "push" | "both">("both");
+  const [justification, setJustification] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
 
@@ -117,11 +120,14 @@ function ZonePage() {
     setDispatching(true);
     setDispatchStatus(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await dispatchAlertServerFn({
         data: {
           zoneId: zone.id,
           language: alertLang,
           channel: alertChannel,
+          justification: justification.trim(),
+          ...(session?.access_token ? { userToken: session.access_token } : {}),
         },
       });
       setDispatchStatus(
@@ -131,10 +137,13 @@ function ZonePage() {
       );
       await qc.invalidateQueries();
       setTimeout(() => {
-        if (res.dispatched) setAlertOpen(false);
+        if (res.dispatched) {
+          setAlertOpen(false);
+          setJustification("");
+        }
       }, 2000);
     } catch (err) {
-      setDispatchStatus(`Dispatch failed: ${err instanceof Error ? err.message : "Error"}`);
+      setDispatchStatus(`Dispatch rejected: ${err instanceof Error ? err.message : "Unauthorized"}`);
     } finally {
       setDispatching(false);
     }
@@ -177,10 +186,14 @@ function ZonePage() {
                   Emergency Alert Dispatch: {zone.zone_name}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Triggers SMS and push notifications to district disaster control rooms and
-                  registered citizens.
+                  Explicit dispatcher decision required. Triggers SMS and push notifications to district disaster control rooms and logs an immutable audit trail.
                 </DialogDescription>
               </DialogHeader>
+
+              <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[0.7rem] font-mono text-muted-foreground">
+                <span className="font-semibold text-primary uppercase tracking-wide">Authority Notice: </span>
+                Emergency dispatch requires verified <strong>DISPATCHER</strong> or <strong>ADMIN</strong> credentials.
+              </div>
 
               {dispatchStatus && (
                 <div className="rounded border border-primary/40 bg-primary/10 p-3 text-xs font-mono text-primary">
@@ -188,7 +201,7 @@ function ZonePage() {
                 </div>
               )}
 
-              <div className="space-y-4 pt-2">
+              <div className="space-y-4 pt-1">
                 <div className="flex items-center justify-between rounded border border-border bg-secondary/30 p-3">
                   <div>
                     <div className="label-caps text-[0.68rem]">Authoritative Risk Level</div>
@@ -245,6 +258,21 @@ function ZonePage() {
                   </div>
                 </div>
 
+                <div className="grid gap-2">
+                  <label className="text-xs font-mono uppercase text-muted-foreground">
+                    Operational Justification (Required)
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Field verification and radar confirm high debris-flow hazard"
+                    value={justification}
+                    onChange={(e) => setJustification(e.target.value)}
+                    minLength={8}
+                    required
+                    className="bg-secondary/40 border-border font-mono text-xs"
+                  />
+                </div>
+
                 <div className="rounded border border-border/80 bg-secondary/20 p-3 font-mono text-xs space-y-1">
                   <div className="label-caps text-[0.65rem]">Recipient Group</div>
                   <div className="text-foreground">
@@ -270,10 +298,10 @@ function ZonePage() {
                   size="sm"
                   variant="destructive"
                   onClick={handleDispatchAlert}
-                  disabled={dispatching}
+                  disabled={dispatching || justification.trim().length < 8}
                   className="font-mono text-xs uppercase"
                 >
-                  {dispatching ? "Dispatching…" : "Confirm & Send Broadcast"}
+                  {dispatching ? "Authorizing…" : "Authorize & Dispatch"}
                 </Button>
               </DialogFooter>
             </DialogContent>

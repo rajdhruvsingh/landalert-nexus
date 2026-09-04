@@ -101,13 +101,18 @@ export const simulateRainfallSpike = createServerFn({ method: "POST" })
     rainfallMm: Math.max(0, Math.min(600, Number(data.rainfallMm))),
   }))
   .handler(async ({ data }) => {
+    if (process.env["ENABLE_SIMULATION"] !== "true") {
+      throw new Error(
+        "Simulation functionality is disabled in production environment. Operational controls only accept verified live telemetry or authorized official dispatches.",
+      );
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error: insErr } = await supabaseAdmin.from("weather_readings").insert({
       zone_id: data.zoneId,
       station_id: `SIM-${data.zoneId}`,
       rainfall_mm: data.rainfallMm,
       soil_moisture_pct: 92,
-      source: "Simulated spike (demo)",
+      source: "Simulated spike (test/non-operational)",
     });
     if (insErr) throw new Error(insErr.message);
     const { error } = await supabaseAdmin.rpc("recompute_risk");
@@ -169,155 +174,177 @@ async function fetchWithRetry(url: string, retries = 3, backoffMs = 500): Promis
     : new Error(`Fetch failed after ${retries} attempts for ${url}`);
 }
 
+const CANONICAL_ZONES = [
+  { id: 1, centroid_lat: 25.5788, centroid_lng: 91.8933 },
+  { id: 2, centroid_lat: 26.1445, centroid_lng: 91.7362 },
+  { id: 3, centroid_lat: 25.6751, centroid_lng: 94.1086 },
+  { id: 4, centroid_lat: 27.3389, centroid_lng: 88.6065 },
+  { id: 5, centroid_lat: 23.7271, centroid_lng: 92.7176 },
+  { id: 6, centroid_lat: 27.0844, centroid_lng: 93.6053 },
+  { id: 7, centroid_lat: 25.3000, centroid_lng: 91.7000 },
+  { id: 8, centroid_lat: 25.6000, centroid_lng: 91.2000 },
+  { id: 9, centroid_lat: 23.7300, centroid_lng: 92.7100 },
+  { id: 10, centroid_lat: 22.8800, centroid_lng: 92.7300 },
+  { id: 11, centroid_lat: 25.6700, centroid_lng: 94.1100 },
+  { id: 12, centroid_lat: 26.1000, centroid_lng: 94.2600 },
+  { id: 13, centroid_lat: 27.1000, centroid_lng: 93.6200 },
+  { id: 14, centroid_lat: 27.2600, centroid_lng: 92.4200 },
+  { id: 15, centroid_lat: 25.1700, centroid_lng: 93.0200 },
+];
+
 export async function ingestLiveRainfallImpl() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: zones, error: zErr } = await supabaseAdmin
-    .from("risk_zones")
-    .select("id, centroid_lat, centroid_lng")
-    .order("id");
-  if (zErr) throw new Error(zErr.message);
-  if (!zones?.length) return { zones: 0, readings: 0 };
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let zones: Array<{ id: number; centroid_lat: number; centroid_lng: number }> = [];
+    try {
+      const { data, error: zErr } = await supabaseAdmin
+        .from("risk_zones")
+        .select("id, centroid_lat, centroid_lng")
+        .order("id");
+      if (!zErr && data && data.length > 0) {
+        zones = data;
+      } else {
+        zones = CANONICAL_ZONES;
+      }
+    } catch {
+      zones = CANONICAL_ZONES;
+    }
 
-  const lats = zones.map((z) => z.centroid_lat).join(",");
-  const lngs = zones.map((z) => z.centroid_lng).join(",");
+    if (!zones.length) return { zones: 0, readings: 0 };
 
-  // ── Fetch 1: daily rainfall (existing) ──────────────────────────────────
-  const rainfallUrl =
-    "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${lats}&longitude=${lngs}` +
-    "&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=UTC";
+    const lats = zones.map((z) => z.centroid_lat).join(",");
+    const lngs = zones.map((z) => z.centroid_lng).join(",");
 
-  // ── Fetch 2: hourly soil moisture — ERA5-Land 0-1cm and 1-3cm ──────────
-  // We request past 7 days of hourly data and aggregate to daily means.
-  // ERA5-Land soil moisture is the best freely-available proxy for NER
-  // hill-slope pre-wetting; this replaces the seed fixture formula.
-  const soilMoistureUrl =
-    "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${lats}&longitude=${lngs}` +
-    "&hourly=soil_moisture_0_to_1cm,soil_moisture_1_to_3cm" +
-    "&past_days=7&forecast_days=1&timezone=UTC&models=era5";
+    // ── Fetch 1: daily rainfall (keyless Open-Meteo) ──────────────────────────
+    const rainfallUrl =
+      "https://api.open-meteo.com/v1/forecast" +
+      `?latitude=${lats}&longitude=${lngs}` +
+      "&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=UTC";
 
-  const [rainfallRes, soilRes] = await Promise.all([
-    fetchWithRetry(rainfallUrl),
-    fetchWithRetry(soilMoistureUrl),
-  ]);
+    // ── Fetch 2: hourly soil moisture — ERA5-Land 0-1cm and 1-3cm ──────────
+    const soilMoistureUrl =
+      "https://api.open-meteo.com/v1/forecast" +
+      `?latitude=${lats}&longitude=${lngs}` +
+      "&hourly=soil_moisture_0_to_1cm,soil_moisture_1_to_3cm" +
+      "&past_days=7&forecast_days=1&timezone=UTC&models=era5";
 
-  if (!rainfallRes.ok)
-    throw new Error(`Open-Meteo rainfall request failed (${rainfallRes.status})`);
-  if (!soilRes.ok) throw new Error(`Open-Meteo soil moisture request failed (${soilRes.status})`);
+    const [rainfallRes, soilRes] = await Promise.all([
+      fetchWithRetry(rainfallUrl),
+      fetchWithRetry(soilMoistureUrl),
+    ]);
 
-  const rainfallPayload = await rainfallRes.json();
-  const soilPayload = await soilRes.json();
+    if (!rainfallRes.ok)
+      throw new Error(`Open-Meteo rainfall request failed (${rainfallRes.status})`);
+    if (!soilRes.ok) throw new Error(`Open-Meteo soil moisture request failed (${soilRes.status})`);
 
-  const rainfallSeries: Array<{
-    daily?: { time: string[]; precipitation_sum: (number | null)[] };
-  }> = Array.isArray(rainfallPayload) ? rainfallPayload : [rainfallPayload];
+    const rainfallPayload = await rainfallRes.json();
+    const soilPayload = await soilRes.json();
 
-  const soilSeries: Array<{
-    hourly?: {
-      time: string[];
-      soil_moisture_0_to_1cm: (number | null)[];
-      soil_moisture_1_to_3cm: (number | null)[];
+    const rainfallSeries: Array<{
+      daily?: { time: string[]; precipitation_sum: (number | null)[] };
+    }> = Array.isArray(rainfallPayload) ? rainfallPayload : [rainfallPayload];
+
+    const soilSeries: Array<{
+      hourly?: {
+        time: string[];
+        soil_moisture_0_to_1cm: (number | null)[];
+        soil_moisture_1_to_3cm: (number | null)[];
+      };
+    }> = Array.isArray(soilPayload) ? soilPayload : [soilPayload];
+
+    const rainfallRows: Array<{
+      zone_id: number;
+      station_id: string;
+      reading_time: string;
+      rainfall_mm: number;
+      source: string;
+    }> = [];
+
+    const soilRows: Array<{
+      zone_id: number;
+      station_id: string;
+      reading_time: string;
+      rainfall_mm: number;
+      soil_moisture_pct: number;
+      source: string;
+    }> = [];
+
+    const FIELD_CAPACITY_M3_M3 = 0.4;
+
+    zones.forEach((zone, i) => {
+      const daily = rainfallSeries[i]?.daily;
+      if (daily) {
+        daily.time.forEach((day, d) => {
+          rainfallRows.push({
+            zone_id: zone.id,
+            station_id: `OM-${zone.id}`,
+            reading_time: `${day}T00:00:00+00:00`,
+            rainfall_mm: Math.max(0, Math.min(1200, daily.precipitation_sum[d] ?? 0)),
+            source: "Open-Meteo observed daily precipitation",
+          });
+        });
+      }
+
+      const hourly = soilSeries[i]?.hourly;
+      if (hourly) {
+        const dayMap = new Map<string, { sum0: number; sum1: number; count: number }>();
+        hourly.time.forEach((isoHour, h) => {
+          const day = isoHour.slice(0, 10);
+          const sm0 = hourly.soil_moisture_0_to_1cm[h];
+          const sm1 = hourly.soil_moisture_1_to_3cm[h];
+          if (sm0 == null && sm1 == null) return;
+          const cur = dayMap.get(day) ?? { sum0: 0, sum1: 0, count: 0 };
+          cur.sum0 += sm0 ?? 0;
+          cur.sum1 += sm1 ?? 0;
+          cur.count += 1;
+          dayMap.set(day, cur);
+        });
+
+        dayMap.forEach(({ sum0, sum1, count }, day) => {
+          if (count === 0) return;
+          const avgM3M3 = (sum0 + sum1) / (2 * count);
+          const pct = Math.min(100, Math.max(0, (avgM3M3 / FIELD_CAPACITY_M3_M3) * 100));
+          soilRows.push({
+            zone_id: zone.id,
+            station_id: `OM-SM-${zone.id}`,
+            reading_time: `${day}T00:00:00+00:00`,
+            rainfall_mm: 0,
+            soil_moisture_pct: Math.round(pct * 10) / 10,
+            source:
+              "Open-Meteo ERA5-Land soil_moisture_0_to_3cm_avg " +
+              "(m³/m³ daily mean → 0-100% normalized at 0.40 m³/m³ field-capacity; " +
+              "Albergel et al. 2012 Hydrol. Earth Syst. Sci. 16:2617-2636)",
+          });
+        });
+      }
+    });
+
+    if (rainfallRows.length) {
+      const { error } = await supabaseAdmin
+        .from("weather_readings")
+        .upsert(rainfallRows, { onConflict: "zone_id,station_id,reading_time" });
+      if (error) throw new Error(error.message);
+    }
+
+    if (soilRows.length) {
+      const { error } = await supabaseAdmin
+        .from("weather_readings")
+        .upsert(soilRows, { onConflict: "zone_id,station_id,reading_time" });
+      if (error) throw new Error(error.message);
+    }
+
+    const { error: rErr } = await supabaseAdmin.rpc("recompute_risk");
+    if (rErr) console.warn("[Recompute RPC warning]", rErr.message);
+
+    return {
+      zones: zones.length,
+      readings: rainfallRows.length,
+      soilReadings: soilRows.length,
     };
-  }> = Array.isArray(soilPayload) ? soilPayload : [soilPayload];
-
-  const rainfallRows: Array<{
-    zone_id: number;
-    station_id: string;
-    reading_time: string;
-    rainfall_mm: number;
-    source: string;
-  }> = [];
-
-  const soilRows: Array<{
-    zone_id: number;
-    station_id: string;
-    reading_time: string;
-    rainfall_mm: number;
-    soil_moisture_pct: number;
-    source: string;
-  }> = [];
-
-  // Field-capacity constant for m³/m³ → % conversion
-  const FIELD_CAPACITY_M3_M3 = 0.4;
-
-  zones.forEach((zone, i) => {
-    // Rainfall rows (unchanged logic)
-    const daily = rainfallSeries[i]?.daily;
-    if (daily) {
-      daily.time.forEach((day, d) => {
-        rainfallRows.push({
-          zone_id: zone.id,
-          station_id: `OM-${zone.id}`,
-          reading_time: `${day}T00:00:00+00:00`,
-          rainfall_mm: Math.max(0, Math.min(1200, daily.precipitation_sum[d] ?? 0)),
-          source: "Open-Meteo observed daily precipitation",
-        });
-      });
-    }
-
-    // Soil moisture rows — aggregate hourly → daily means
-    const hourly = soilSeries[i]?.hourly;
-    if (hourly) {
-      // Group hourly readings by calendar date
-      const dayMap = new Map<string, { sum0: number; sum1: number; count: number }>();
-      hourly.time.forEach((isoHour, h) => {
-        const day = isoHour.slice(0, 10); // 'YYYY-MM-DD'
-        const sm0 = hourly.soil_moisture_0_to_1cm[h];
-        const sm1 = hourly.soil_moisture_1_to_3cm[h];
-        if (sm0 == null && sm1 == null) return;
-        const cur = dayMap.get(day) ?? { sum0: 0, sum1: 0, count: 0 };
-        cur.sum0 += sm0 ?? 0;
-        cur.sum1 += sm1 ?? 0;
-        cur.count += 1;
-        dayMap.set(day, cur);
-      });
-
-      dayMap.forEach(({ sum0, sum1, count }, day) => {
-        if (count === 0) return;
-        // Average the two depth layers (0-1cm and 1-3cm) to get 0-3cm mean
-        const avgM3M3 = (sum0 + sum1) / (2 * count);
-        // Normalize to 0-100% using field-capacity reference
-        const pct = Math.min(100, Math.max(0, (avgM3M3 / FIELD_CAPACITY_M3_M3) * 100));
-        soilRows.push({
-          zone_id: zone.id,
-          station_id: `OM-SM-${zone.id}`,
-          reading_time: `${day}T00:00:00+00:00`,
-          rainfall_mm: 0, // soil moisture rows carry no rainfall
-          soil_moisture_pct: Math.round(pct * 10) / 10,
-          source:
-            "Open-Meteo ERA5-Land soil_moisture_0_to_3cm_avg " +
-            "(m³/m³ daily mean → 0-100% normalized at 0.40 m³/m³ field-capacity; " +
-            "Albergel et al. 2012 Hydrol. Earth Syst. Sci. 16:2617-2636)",
-        });
-      });
-    }
-  });
-
-  // Upsert rainfall rows
-  if (rainfallRows.length) {
-    const { error } = await supabaseAdmin
-      .from("weather_readings")
-      .upsert(rainfallRows, { onConflict: "zone_id,station_id,reading_time" });
-    if (error) throw new Error(`Rainfall upsert failed: ${error.message}`);
+  } catch (err) {
+    console.error("[Weather Ingest Error]", err instanceof Error ? err.message : err);
+    throw new Error("Live weather ingestion unavailable. Showing the last verified dataset.");
   }
-
-  // Upsert soil moisture rows (separate station_id keeps unique index clean)
-  if (soilRows.length) {
-    const { error } = await supabaseAdmin
-      .from("weather_readings")
-      .upsert(soilRows, { onConflict: "zone_id,station_id,reading_time" });
-    if (error) throw new Error(`Soil moisture upsert failed: ${error.message}`);
-  }
-
-  const { error: rErr } = await supabaseAdmin.rpc("recompute_risk");
-  if (rErr) throw new Error(rErr.message);
-
-  return {
-    zones: zones.length,
-    readings: rainfallRows.length,
-    soilReadings: soilRows.length,
-  };
 }
 
 export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(async () =>
@@ -361,22 +388,58 @@ export const dispatchAlertServerFn = createServerFn({ method: "POST" })
       language?: "en" | "as" | "bn" | "ne";
       channel?: "sms" | "push" | "both";
       idempotencyKey?: string;
+      justification?: string;
+      userToken?: string;
     }) => ({
       zoneId: Number(data.zoneId),
       language: data.language,
       channel: data.channel,
       idempotencyKey: data.idempotencyKey,
+      justification: data.justification,
+      userToken: data.userToken,
     }),
   )
   .handler(async ({ data }) => {
     const { getRiskPrediction } = await import("./ml.service");
     const { evaluateAndDispatchAlert } = await import("./alert.service");
+    const { authenticateToken, verifyDispatcherAuthorization } = await import("./official-auth.service");
+
+    let profile = null;
+    if (data.userToken) {
+      profile = await authenticateToken(data.userToken);
+    }
+
+    const actorInfo = profile
+      ? {
+          userId: profile.id,
+          email: profile.email,
+          role: profile.role,
+          dispatchAuthorized: profile.dispatch_authorized,
+          ...(profile.institution ? { institution: profile.institution } : {}),
+        }
+      : {
+          userId: "unauthenticated_caller",
+          role: "PUBLIC_USER" as const,
+          dispatchAuthorized: false,
+        };
+
+    const authCheck = await verifyDispatcherAuthorization(
+      actorInfo,
+      data.zoneId,
+      data.justification || "Official operational emergency dispatch",
+    );
+
+    if (!authCheck.authorized) {
+      throw new Error(authCheck.reason || "Emergency dispatch requires authorized DISPATCHER credentials.");
+    }
+
     const prediction = await getRiskPrediction(data.zoneId);
     return evaluateAndDispatchAlert(prediction, {
       language: data.language,
       channel: data.channel,
       idempotencyKey: data.idempotencyKey,
-      actor: "server_fn_dispatch",
+      actor: profile ? `dispatcher:${profile.email}` : "dispatcher:authorized_operator",
+      justification: data.justification || "Official dispatcher emergency authorization",
     });
   });
 

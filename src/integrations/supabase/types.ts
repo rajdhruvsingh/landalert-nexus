@@ -24,6 +24,8 @@ export type Database = {
           risk_level: string;
           status: "pending" | "sent" | "delivered" | "failed";
           zone_id: number;
+          justification?: string | null;
+          dispatch_status?: string | null;
         };
         Insert: {
           channel?: string;
@@ -40,6 +42,8 @@ export type Database = {
           risk_level: string;
           status?: "pending" | "sent" | "delivered" | "failed";
           zone_id: number;
+          justification?: string | null;
+          dispatch_status?: string | null;
         };
         Update: {
           channel?: string;
@@ -56,6 +60,8 @@ export type Database = {
           risk_level?: string;
           status?: "pending" | "sent" | "delivered" | "failed";
           zone_id?: number;
+          justification?: string | null;
+          dispatch_status?: string | null;
         };
         Relationships: [
           {
@@ -407,6 +413,12 @@ export type Database = {
           synced_at: string;
           visual_signs: string | null;
           zone_id: number;
+          status?: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          is_training_eligible?: boolean;
+          source?: string;
+          verified_by?: string | null;
+          verified_at?: string | null;
+          verification_notes?: string | null;
         };
         Insert: {
           client_timestamp: string;
@@ -421,6 +433,12 @@ export type Database = {
           synced_at?: string;
           visual_signs?: string | null;
           zone_id: number;
+          status?: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          is_training_eligible?: boolean;
+          source?: string;
+          verified_by?: string | null;
+          verified_at?: string | null;
+          verification_notes?: string | null;
         };
         Update: {
           client_timestamp?: string;
@@ -435,6 +453,12 @@ export type Database = {
           synced_at?: string;
           visual_signs?: string | null;
           zone_id?: number;
+          status?: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          is_training_eligible?: boolean;
+          source?: string;
+          verified_by?: string | null;
+          verified_at?: string | null;
+          verification_notes?: string | null;
         };
         Relationships: [
           {
@@ -445,6 +469,102 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      user_profiles: {
+        Row: {
+          id: string;
+          email: string;
+          full_name: string | null;
+          institution: string | null;
+          department: string | null;
+          designation: string | null;
+          role: "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
+          verification_status: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          dispatch_authorized: boolean;
+          verified_by: string | null;
+          verified_at: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email: string;
+          full_name?: string | null;
+          institution?: string | null;
+          department?: string | null;
+          designation?: string | null;
+          role?: "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
+          verification_status?: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          dispatch_authorized?: boolean;
+          verified_by?: string | null;
+          verified_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          full_name?: string | null;
+          institution?: string | null;
+          department?: string | null;
+          designation?: string | null;
+          role?: "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
+          verification_status?: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          dispatch_authorized?: boolean;
+          verified_by?: string | null;
+          verified_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      audit_logs: {
+        Row: {
+          id: number;
+          actor_user_id: string;
+          actor_email: string | null;
+          actor_role: string;
+          institution: string | null;
+          action: string;
+          target_type: string;
+          target_id: string;
+          timestamp: string;
+          result: string;
+          details: Json;
+          reason: string | null;
+        };
+        Insert: {
+          id?: number;
+          actor_user_id: string;
+          actor_email?: string | null;
+          actor_role: string;
+          institution?: string | null;
+          action: string;
+          target_type: string;
+          target_id: string;
+          timestamp?: string;
+          result: string;
+          details?: Json;
+          reason?: string | null;
+        };
+        Update: {
+          id?: number;
+          actor_user_id?: string;
+          actor_email?: string | null;
+          actor_role?: string;
+          institution?: string | null;
+          action?: string;
+          target_type?: string;
+          target_id?: string;
+          timestamp?: string;
+          result?: string;
+          details?: Json;
+          reason?: string | null;
+        };
+        Relationships: [];
       };
     };
     Views: {

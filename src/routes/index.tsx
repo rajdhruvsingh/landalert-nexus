@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   getOverview,
-  simulateRainfallSpike,
   recomputeAll,
   ingestLiveRainfall,
   getRiskPredictionServerFn,
@@ -61,7 +60,6 @@ function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  const spike = useServerFn(simulateRainfallSpike);
   const recompute = useServerFn(recomputeAll);
   const ingest = useServerFn(ingestLiveRainfall);
 
@@ -94,19 +92,7 @@ function Dashboard() {
     .filter((z) => ["High", "Severe"].includes(z.current_risk_level))
     .reduce((s, z) => s + z.population, 0);
 
-  async function runSpike() {
-    if (!selected) return;
-    setBusy(true);
-    setActionNotice(null);
-    try {
-      await spike({ data: { zoneId: selected.id, rainfallMm: 240 } });
-      await qc.invalidateQueries();
-      setActionNotice(`Injected 240mm spike for Zone ${selected.id} and recomputed risk.`);
-      setTimeout(() => setActionNotice(null), 4000);
-    } finally {
-      setBusy(false);
-    }
-  }
+
 
   async function runRecompute() {
     setBusy(true);
@@ -131,8 +117,9 @@ function Dashboard() {
         `Ingested live weather for ${res.zones} zones (${res.readings} rainfall, ${res.soilReadings} soil rows).`,
       );
       setTimeout(() => setActionNotice(null), 4000);
-    } catch (err) {
-      setActionNotice(`Ingest failed: ${err instanceof Error ? err.message : "Error"}`);
+    } catch {
+      setActionNotice("Live weather ingestion unavailable. Showing the last verified dataset.");
+      setTimeout(() => setActionNotice(null), 5000);
     } finally {
       setBusy(false);
     }
@@ -157,6 +144,9 @@ function Dashboard() {
               </span>
             )}
             <ScientificLimitationBadge />
+            <span className="rounded border border-border bg-secondary/50 px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
+              Observation Trust: Official Review Required
+            </span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -183,14 +173,6 @@ function Dashboard() {
           >
             Recompute risk
           </Button>
-          <Button
-            size="sm"
-            onClick={runSpike}
-            disabled={busy || !selected}
-            className="font-mono text-xs uppercase"
-          >
-            Simulate 240mm spike
-          </Button>
         </div>
       </header>
 
@@ -205,9 +187,9 @@ function Dashboard() {
         />
       </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr]">
-        <div className="panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <section className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] items-stretch">
+        <div className="panel overflow-hidden flex flex-col h-full">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 shrink-0">
             <div className="label-caps">Risk heatmap</div>
             <div className="flex flex-wrap gap-1">
               {states.map((s) => (
@@ -225,10 +207,10 @@ function Dashboard() {
               ))}
             </div>
           </div>
-          <div className="h-[520px]">
+          <div className="w-full flex-1 min-h-[460px] relative">
             <MapCanvas zones={zones} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </div>
-          <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2">
+          <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2 shrink-0 bg-surface/40">
             {RISK_LEVELS.map((l) => (
               <span key={l} className="flex items-center gap-2 text-xs">
                 <span

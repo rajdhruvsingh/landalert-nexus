@@ -5,6 +5,8 @@ import { getOverview, dispatchAlertServerFn } from "@/lib/monitoring.functions";
 import { RiskBadge } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -88,6 +90,7 @@ function AlertsPage() {
   const [targetZoneId, setTargetZoneId] = useState<number>(data.zones[0]?.id ?? 1);
   const [targetLang, setTargetLang] = useState<"en" | "as" | "bn" | "ne">("en");
   const [targetChannel, setTargetChannel] = useState<"sms" | "push" | "both">("both");
+  const [justification, setJustification] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<string | null>(null);
 
@@ -104,11 +107,14 @@ function AlertsPage() {
     setDispatching(true);
     setDispatchResult(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await dispatchAlertServerFn({
         data: {
           zoneId: targetZoneId,
           language: targetLang,
           channel: targetChannel,
+          justification: justification.trim(),
+          ...(session?.access_token ? { userToken: session.access_token } : {}),
         },
       });
 
@@ -118,12 +124,13 @@ function AlertsPage() {
         setTimeout(() => {
           setOpenDispatch(false);
           setDispatchResult(null);
+          setJustification("");
         }, 1800);
       } else {
         setDispatchResult(`Alert suppressed by rules engine: ${res.reason}`);
       }
     } catch (err) {
-      setDispatchResult(`Dispatch failed: ${err instanceof Error ? err.message : "Error"}`);
+      setDispatchResult(`Dispatch rejected: ${err instanceof Error ? err.message : "Unauthorized"}`);
     } finally {
       setDispatching(false);
     }
@@ -157,9 +164,14 @@ function AlertsPage() {
                 Issue Emergency Landslide Alert
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Evaluates threshold conditions for the chosen zone and dispatches official alerts.
+                Explicit dispatcher decision required. Evaluates threshold conditions and logs an immutable audit trail.
               </DialogDescription>
             </DialogHeader>
+
+            <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[0.7rem] font-mono text-muted-foreground">
+              <span className="font-semibold text-primary uppercase tracking-wide">Authority Notice: </span>
+              Requires authorized <strong>DISPATCHER</strong> or <strong>ADMIN</strong> credentials. Unverified users cannot dispatch emergency broadcasts.
+            </div>
 
             {dispatchResult && (
               <div className="rounded border border-primary/40 bg-primary/10 p-3 text-xs font-mono text-primary">
@@ -167,7 +179,7 @@ function AlertsPage() {
               </div>
             )}
 
-            <form onSubmit={handleManualDispatch} className="space-y-4 pt-2">
+            <form onSubmit={handleManualDispatch} className="space-y-4 pt-1">
               <div className="grid gap-2">
                 <label className="text-xs font-mono uppercase text-muted-foreground">
                   Target Zone
@@ -230,6 +242,21 @@ function AlertsPage() {
                 </div>
               </div>
 
+              <div className="grid gap-2">
+                <label className="text-xs font-mono uppercase text-muted-foreground">
+                  Operational Justification (Required)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Field reports and radar confirm slope instability along NH-29"
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  minLength={8}
+                  required
+                  className="bg-secondary/40 border-border font-mono text-xs"
+                />
+              </div>
+
               <DialogFooter className="mt-4">
                 <Button
                   type="button"
@@ -245,10 +272,10 @@ function AlertsPage() {
                   type="submit"
                   size="sm"
                   variant="destructive"
-                  disabled={dispatching}
+                  disabled={dispatching || justification.trim().length < 8}
                   className="font-mono text-xs uppercase"
                 >
-                  {dispatching ? "Evaluating…" : "Dispatch Broadcast"}
+                  {dispatching ? "Authorizing…" : "Authorize & Dispatch"}
                 </Button>
               </DialogFooter>
             </form>

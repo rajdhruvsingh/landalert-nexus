@@ -108,6 +108,9 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     road_status: "open" | "restricted" | "blocked" | "unknown" | null;
     observer_id: string;
     idempotency_key: string;
+    status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+    is_training_eligible: boolean;
+    source: string;
   }> = [];
 
   const acknowledgedKeys: string[] = [];
@@ -141,6 +144,9 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       road_status: r.road_status ?? null,
       observer_id: r.observer_id ?? "field_worker",
       idempotency_key: key,
+      status: "PENDING_VERIFICATION",
+      is_training_eligible: false,
+      source: "PUBLIC_REPORT",
     });
 
     acknowledgedKeys.push(key);
@@ -176,10 +182,10 @@ with conn.cursor() as cur:
     for r in rows:
         cur.execute("""
             INSERT INTO public.field_observations 
-            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced')
+            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced', %s, %s, %s)
             ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key']))
+        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source']))
 conn.commit()
 conn.close()
 `;

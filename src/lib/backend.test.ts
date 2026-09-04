@@ -414,4 +414,181 @@ describe("REST API Router (/api/*)", () => {
     const body = (await res!.json()) as { code: string };
     expect(body.code).toBe("NOT_FOUND");
   });
+
+  it("POST /api/alerts/dispatch rejects unauthenticated requests with 401", async () => {
+    const req = new Request("http://localhost:3000/api/alerts/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ zoneId: 1, justification: "Heavy rain causing debris" }),
+    });
+    const res = await handleApiRequest(req);
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(401);
+  });
+
+  it("POST /api/alerts/dispatch rejects unauthorized users with 403", async () => {
+    const req = new Request("http://localhost:3000/api/alerts/dispatch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer unprivileged_token",
+      },
+      body: JSON.stringify({ zoneId: 1, justification: "Heavy rain causing debris" }),
+    });
+    const res = await handleApiRequest(req);
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(403);
+  });
+
+  it("POST /api/alerts/dispatch succeeds with system cron secret and justification", async () => {
+    const cronSecret = process.env["CRON_SECRET"] || "test-cron-secret";
+    process.env["CRON_SECRET"] = cronSecret;
+
+    const req = new Request("http://localhost:3000/api/alerts/dispatch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cronSecret}`,
+      },
+      body: JSON.stringify({
+        zoneId: 1,
+        language: "en",
+        channel: "both",
+        justification: "Critical slope deformation verified on NH-10 corridor",
+      }),
+    });
+    const res = await handleApiRequest(req);
+    expect(res).not.toBeNull();
+    // Dispatched 201 or Cooldown 200
+    expect([200, 201]).toContain(res!.status);
+  });
+
+  it("POST /api/simulate is disabled by default in production", async () => {
+    delete process.env["ENABLE_SIMULATION"];
+    const req = new Request("http://localhost:3000/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ zoneId: 1, rainfallMm: 240 }),
+    });
+    const res = await handleApiRequest(req);
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(403);
+    const body = (await res!.json()) as { code: string };
+    expect(body.code).toBe("SIMULATION_DISABLED");
+  });
+});
+
+import {
+  evaluateEmailDomain,
+  verifyDispatcherAuthorization,
+  TRUSTED_INSTITUTIONAL_DOMAINS,
+} from "./official-auth.service";
+
+describe("Official Government Authentication & Observation Trust", () => {
+  it("recognizes official institutional domains as PENDING_OFFICIAL_VERIFICATION and PUBLIC_USER", () => {
+    const testCases = [
+      "geologist@gsi.gov.in",
+      "scientist@nesac.gov.in",
+      "director@ndma.gov.in",
+      "officer@nic.in",
+      "responder@assam.gov.in",
+      "control@mizoram.gov.in",
+      "officer@meghalaya.gov.in",
+      "coordinator@nagaland.gov.in",
+      "admin@sikkim.gov.in",
+    ];
+
+    for (const email of testCases) {
+      const evalResult = evaluateEmailDomain(email);
+      expect(evalResult.isInstitutional).toBe(true);
+      expect(evalResult.suggestedStatus).toBe("PENDING_OFFICIAL_VERIFICATION");
+      // Domain alone MUST NOT grant privileges
+      expect(evalResult.suggestedRole).toBe("PUBLIC_USER");
+    }
+  });
+
+  it("classifies commercial webmail and unlisted domains as UNVERIFIED PUBLIC_USER", () => {
+    const publicEmails = [
+      "citizen@gmail.com",
+      "reporter@yahoo.com",
+      "user@outlook.com",
+      "someone@custom-domain.org",
+    ];
+
+    for (const email of publicEmails) {
+      const evalResult = evaluateEmailDomain(email);
+      expect(evalResult.isInstitutional).toBe(false);
+      expect(evalResult.suggestedStatus).toBe("UNVERIFIED");
+      expect(evalResult.suggestedRole).toBe("PUBLIC_USER");
+    }
+  });
+
+  it("enforces that emergency dispatch requires DISPATCHER or ADMIN role", async () => {
+    // 1. Public user without dispatch authority
+    const publicResult = await verifyDispatcherAuthorization(
+      {
+        userId: "pub-123",
+        email: "citizen@gmail.com",
+        role: "PUBLIC_USER",
+        dispatchAuthorized: false,
+      },
+      1,
+      "Valid justification text here",
+    );
+    expect(publicResult.authorized).toBe(false);
+    expect(publicResult.reason).toContain("Emergency dispatch requires");
+
+    // 2. Verified official without explicit dispatch authority
+    const officialResult = await verifyDispatcherAuthorization(
+      {
+        userId: "off-456",
+        email: "geologist@gsi.gov.in",
+        role: "VERIFIED_OFFICIAL",
+        dispatchAuthorized: false,
+      },
+      1,
+      "Valid justification text here",
+    );
+    expect(officialResult.authorized).toBe(false);
+
+    // 3. Authorized dispatcher
+    const dispatcherResult = await verifyDispatcherAuthorization(
+      {
+        userId: "disp-789",
+        email: "controller@ndma.gov.in",
+        role: "DISPATCHER",
+        dispatchAuthorized: true,
+      },
+      1,
+      "Valid justification text exceeding 8 characters",
+    );
+    expect(dispatcherResult.authorized).toBe(true);
+
+    // 4. Admin
+    const adminResult = await verifyDispatcherAuthorization(
+      {
+        userId: "adm-001",
+        email: "admin@nic.in",
+        role: "ADMIN",
+        dispatchAuthorized: true,
+      },
+      1,
+      "Emergency threshold crossed on NH-29",
+    );
+    expect(adminResult.authorized).toBe(true);
+  });
+
+  it("rejects dispatch requests lacking sufficient operational justification", async () => {
+    const noJustification = await verifyDispatcherAuthorization(
+      {
+        userId: "disp-789",
+        role: "DISPATCHER",
+        dispatchAuthorized: true,
+      },
+      1,
+      "short",
+    );
+    expect(noJustification.authorized).toBe(false);
+    expect(noJustification.reason).toContain("operational justification");
+  });
 });

@@ -150,13 +150,53 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       return jsonResponse({ ok: true, timestamp: new Date().toISOString() }, 200, cors);
     }
 
-    // 6. Alert Dispatch Service
+    // 6. Alert Dispatch Service (Explicit Dispatcher Authorization Required)
     if (pathname === "/api/alerts/dispatch" && request.method === "POST") {
+      const authHeader = request.headers.get("Authorization");
+      if (!authHeader) {
+        return errorResponse("Authentication required for emergency dispatch", "UNAUTHORIZED", 401, cors);
+      }
+
+      const { authenticateToken, verifyDispatcherAuthorization } = await import("./official-auth.service");
+      const profile = await authenticateToken(authHeader);
+
+      let isAuthorized = false;
+      let actorId = "api_dispatcher";
+      let actorRole = "PUBLIC_USER";
+      let dispatchAuth = false;
+
+      // System token / cron secret fallback for backend tests / automated services
+      const cronSecret = process.env["CRON_SECRET"];
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const isSystemSecret = cronSecret && token === cronSecret;
+
+      if (isSystemSecret) {
+        isAuthorized = true;
+        actorId = "system:cron_dispatcher";
+        actorRole = "DISPATCHER";
+        dispatchAuth = true;
+      } else if (profile) {
+        actorId = profile.id;
+        actorRole = profile.role;
+        dispatchAuth = profile.dispatch_authorized;
+        isAuthorized = profile.role === "DISPATCHER" || profile.role === "ADMIN" || profile.dispatch_authorized;
+      }
+
+      if (!isAuthorized) {
+        return errorResponse(
+          "Forbidden: Emergency dispatch requires authorized DISPATCHER or ADMIN credentials",
+          "FORBIDDEN",
+          403,
+          cors,
+        );
+      }
+
       let body: {
         zoneId?: unknown;
         language?: unknown;
         channel?: unknown;
         idempotencyKey?: unknown;
+        justification?: unknown;
       } = {};
       try {
         body = await request.json();
@@ -174,6 +214,35 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         );
       }
 
+      const justification = typeof body.justification === "string" ? body.justification.trim() : "";
+      if (!justification || justification.length < 8) {
+        return errorResponse(
+          "An official operational justification (min 8 chars) is required for emergency dispatch",
+          "INVALID_JUSTIFICATION",
+          400,
+          cors,
+        );
+      }
+
+      const authCheck = await verifyDispatcherAuthorization(
+        {
+          userId: actorId,
+          role: actorRole as any,
+          dispatchAuthorized: dispatchAuth,
+        },
+        validation.zoneId,
+        justification,
+      );
+
+      if (!authCheck.authorized) {
+        return errorResponse(
+          authCheck.reason || "Dispatch authorization failed",
+          "FORBIDDEN",
+          403,
+          cors,
+        );
+      }
+
       const prediction = await getRiskPrediction(validation.zoneId);
       const result = await evaluateAndDispatchAlert(prediction, {
         language:
@@ -181,10 +250,37 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         channel:
           typeof body.channel === "string" ? (body.channel as "sms" | "push" | "both") : "both",
         idempotencyKey: typeof body.idempotencyKey === "string" ? body.idempotencyKey : undefined,
-        actor: "api_dispatch",
+        actor: actorId,
+        justification,
       });
 
       return jsonResponse(result, result.dispatched ? 201 : 200, cors);
+    }
+
+    // 6b. Simulation Endpoint (Explicitly Gated Behind ENABLE_SIMULATION=true)
+    if (pathname === "/api/simulate" && request.method === "POST") {
+      if (process.env["ENABLE_SIMULATION"] !== "true") {
+        return errorResponse(
+          "Simulation functionality is disabled in production environment",
+          "SIMULATION_DISABLED",
+          403,
+          cors,
+        );
+      }
+      let body: { zoneId?: unknown; rainfallMm?: unknown } = {};
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse("Malformed JSON body", "INVALID_JSON", 400, cors);
+      }
+      const zoneId = Number(body.zoneId);
+      const rainfallMm = Number(body.rainfallMm);
+      if (!Number.isInteger(zoneId) || zoneId < 1 || zoneId > 15 || Number.isNaN(rainfallMm)) {
+        return errorResponse("Invalid zoneId or rainfallMm", "INVALID_INPUT", 400, cors);
+      }
+      const { simulateRainfallSpike } = await import("./monitoring.functions");
+      const res = await simulateRainfallSpike({ data: { zoneId, rainfallMm } });
+      return jsonResponse(res, 200, cors);
     }
 
     // 7. Offline Field Observation Synchronization

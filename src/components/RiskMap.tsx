@@ -1,7 +1,23 @@
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip, useMap } from "react-leaflet";
+import { useEffect } from "react";
 import type { ZoneRow, SlideRow } from "@/lib/monitoring.functions";
 import { riskColor, zonePolygon } from "@/lib/risk";
+
+function MapResizeHandler() {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    const timer = setTimeout(() => map.invalidateSize(), 200);
+    const onResize = () => map.invalidateSize();
+    window.addEventListener("resize", onResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [map]);
+  return null;
+}
 
 type Props = {
   zones: ZoneRow[];
@@ -25,8 +41,9 @@ export default function RiskMap({
       center={center}
       zoom={zoom}
       scrollWheelZoom
-      style={{ height: "100%", width: "100%" }}
+      style={{ height: "100%", width: "100%", minHeight: "460px" }}
     >
+      <MapResizeHandler />
       <TileLayer
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

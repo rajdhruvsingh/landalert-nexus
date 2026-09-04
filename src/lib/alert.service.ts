@@ -57,6 +57,7 @@ export interface AlertDispatchOptions {
   language?: ("en" | "as" | "bn" | "ne") | undefined;
   idempotencyKey?: string | undefined;
   cooldownHours?: number | undefined;
+  justification?: string | undefined;
 }
 
 export interface AlertDispatchResult {
@@ -167,6 +168,8 @@ export async function evaluateAndDispatchAlert(
       recipient_group: "district_disaster_management_authorities",
       idempotency_key: finalIdempotencyKey,
       delivery_attempts: 1,
+      justification: options.justification ?? "Official threshold exceedance verified by authorized dispatcher",
+      dispatch_status: "DISPATCH_AUTHORIZED",
     })
     .select("id, dispatched_at")
     .maybeSingle();
