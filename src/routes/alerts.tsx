@@ -3,6 +3,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { getOverview } from "@/lib/monitoring.functions";
 import { RiskBadge } from "@/components/RiskBits";
+import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 
 const overviewQuery = queryOptions({
   queryKey: ["overview"],
@@ -51,6 +52,8 @@ export const Route = createFileRoute("/alerts")({
     ],
   }),
   component: AlertsPage,
+  pendingComponent: () => <PanelSkeleton label="Loading alert log…" />,
+  errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
 });
 
 function AlertsPage() {

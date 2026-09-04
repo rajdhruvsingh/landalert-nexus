@@ -10,6 +10,7 @@ import {
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
 import { RiskBadge, RoadBadge, Stat, ExplanationCard } from "@/components/RiskBits";
+import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { riskColor, RISK_LEVELS } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
 
@@ -37,6 +38,8 @@ export const Route = createFileRoute("/")({
     ],
   }),
   component: Dashboard,
+  pendingComponent: () => <PanelSkeleton label="Loading risk console…" />,
+  errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
 });
 
 function Dashboard() {
@@ -235,6 +238,11 @@ function Dashboard() {
                   <RiskBadge level={z.current_risk_level} score={z.risk_score} />
                 </button>
               ))}
+              {zones.length === 0 && (
+                <p className="p-4 text-sm text-muted-foreground">
+                  No monitored zones in {stateFilter}.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -269,6 +277,11 @@ function Dashboard() {
                   </div>
                 );
               })}
+            {data.roads.length === 0 && (
+              <p className="p-4 text-sm text-muted-foreground">
+                No road segments mapped yet.
+              </p>
+            )}
           </div>
         </div>
 
