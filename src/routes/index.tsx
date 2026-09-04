@@ -238,6 +238,11 @@ function Dashboard() {
                   <RiskBadge level={z.current_risk_level} score={z.risk_score} />
                 </button>
               ))}
+              {zones.length === 0 && (
+                <p className="p-4 text-sm text-muted-foreground">
+                  No monitored zones in {stateFilter}.
+                </p>
+              )}
             </div>
           </div>
         </div>
