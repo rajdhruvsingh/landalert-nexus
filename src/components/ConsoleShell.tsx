@@ -1,10 +1,15 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { FieldObservationDialog } from "./FieldObservationDialog";
 import { SystemHealthDialog } from "./SystemHealthDialog";
 import { AuthDialog } from "./AuthDialog";
 import { OfflineBanner } from "./OfflineBanner";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import "@/lib/i18n"; // initialize i18n
 
 export function ConsoleNav() {
+  const { t } = useTranslation();
+
   return (
     <>
       <nav className="sticky top-0 z-[1000] border-b border-border bg-background/90 backdrop-blur">
@@ -12,16 +17,17 @@ export function ConsoleNav() {
           <Link to="/" className="flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-sm bg-risk-severe" />
             <span className="font-display text-sm uppercase tracking-[0.2em]">
-              NER Landslide Console
+              {t("nav.title", "NER Landslide Console")}
             </span>
           </Link>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 border-r border-border pr-2 mr-1">
-              <NavLink to="/" label="Risk console" />
-              <NavLink to="/alerts" label="Alert log" />
+              <NavLink to="/" label={t("nav.risk_console", "Risk console")} />
+              <NavLink to="/alerts" label={t("nav.alert_log", "Alert log")} />
             </div>
 
+            <LanguageSwitcher />
             <FieldObservationDialog />
             <SystemHealthDialog />
             <AuthDialog />

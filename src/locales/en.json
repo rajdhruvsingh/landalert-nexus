@@ -1,0 +1,74 @@
+{
+  "nav": {
+    "title": "NER Landslide Console",
+    "risk_console": "Risk console",
+    "alert_log": "Alert log",
+    "report_field_reading": "Report Field Reading",
+    "system_health": "System Health",
+    "sign_in": "Sign In",
+    "account": "Account",
+    "language": "Language"
+  },
+  "dashboard": {
+    "monitored_zones": "Monitored Zones",
+    "severe_alert": "Severe Alert",
+    "high_alert": "High Alert",
+    "moderate_watch": "Moderate Watch",
+    "low_normal": "Low / Normal",
+    "all_states": "All States",
+    "recompute": "Recompute",
+    "ingest_weather": "Ingest Weather",
+    "risk_heatmap": "Regional Landslide Hazard Heatmap",
+    "zone_overview": "Zone Overview",
+    "factor_attribution": "ML Risk Factor Attribution",
+    "road_status": "Road Connectivity & Cutoffs",
+    "recent_alerts": "Recent Emergency Dispatches",
+    "view_zone_brief": "View Detailed Zone Brief →",
+    "last_updated": "Last updated",
+    "model_active": "Active Model"
+  },
+  "risk_levels": {
+    "Low": "Low",
+    "Moderate": "Moderate",
+    "High": "High",
+    "Severe": "Severe"
+  },
+  "road_status": {
+    "open": "Passable / Open",
+    "restricted": "Restricted / Caution",
+    "blocked": "Blocked / Impassable",
+    "unknown": "Status Unknown"
+  },
+  "alerts": {
+    "dispatch_alert": "Dispatch Alert",
+    "authority_notice": "Emergency dispatch requires verified DISPATCHER or ADMIN credentials.",
+    "select_language": "Language",
+    "select_channel": "Channel",
+    "justification": "Operational Justification",
+    "dispatching": "Dispatching…",
+    "dispatched_success": "Alert dispatched successfully.",
+    "cancel": "Cancel",
+    "confirm_dispatch": "Confirm Dispatch"
+  },
+  "field_observation": {
+    "title": "Report Field Ground Observation",
+    "select_zone": "Risk Zone",
+    "rainfall_rate": "Estimated Rainfall Rate (mm/h)",
+    "soil_condition": "Observed Soil State",
+    "visual_signs": "Visual Signs of Movement",
+    "road_status_label": "Local Road Condition",
+    "gps_coordinates": "GPS Geolocation",
+    "acquire_gps": "Acquire Current GPS",
+    "attach_media": "Attach Photo or Video (Max 3 files, 10MB photo / 50MB video)",
+    "consent_notice": "I confirm this observation is accurate. Photos, videos, and GPS coordinates will be shared with disaster management authorities and, upon official verification, displayed publicly for community safety.",
+    "submit": "Submit Observation",
+    "submitting": "Submitting…"
+  },
+  "offline": {
+    "banner_title": "Offline Mode — Cached Risk Data",
+    "banner_desc": "Displaying risk data from local cache, may be outdated — live network recompute needed.",
+    "sync_queue": "Sync Queue",
+    "download_bundle": "Download 24h Bundle",
+    "cached_bundle": "Offline bundle cached."
+  }
+}

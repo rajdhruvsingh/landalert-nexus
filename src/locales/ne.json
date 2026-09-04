@@ -1,0 +1,74 @@
+{
+  "nav": {
+    "title": "उत्तर-पूर्व पहिरो कन्सोल",
+    "risk_console": "जोखिम कन्सोल",
+    "alert_log": "सूचना लग",
+    "report_field_reading": "स्थलगत विवरण पठाउनुहोस्",
+    "system_health": "प्रणाली स्वास्थ्य",
+    "sign_in": "लगइन गर्नुहोस्",
+    "account": "खाता",
+    "language": "भाषा"
+  },
+  "dashboard": {
+    "monitored_zones": "निगरानी गरिएका क्षेत्रहरू",
+    "severe_alert": "गम्भीर चेतावनी",
+    "high_alert": "उच्च चेतावनी",
+    "moderate_watch": "मध्यम सतर्कता",
+    "low_normal": "न्यून / सामान्य",
+    "all_states": "सबै राज्यहरू",
+    "recompute": "पुनर्गणना",
+    "ingest_weather": "मौसम डाटा सङ्कलन",
+    "risk_heatmap": "क्षेत्रीय पहिरो जोखिम नक्सा",
+    "zone_overview": "क्षेत्रको स्थिति",
+    "factor_attribution": "जोखिम कारक विश्लेषण (ML)",
+    "road_status": "सडक सम्पर्क तथा स्थिति",
+    "recent_alerts": "हालै जारी गरिएका आपतकालीन चेतावनीहरू",
+    "view_zone_brief": "विस्तृत विवरण हेर्नुहोस् →",
+    "last_updated": "पछिल्लो अपडेट",
+    "model_active": "सक्रिय मोडेल"
+  },
+  "risk_levels": {
+    "Low": "न्यून",
+    "Moderate": "मध्यम",
+    "High": "उच्च",
+    "Severe": "गम्भीर"
+  },
+  "road_status": {
+    "open": "खुला / आवतजावत योग्य",
+    "restricted": "सीमित / सतर्कता",
+    "blocked": "अवरुद्ध / बन्द",
+    "unknown": "अज्ञात स्थिति"
+  },
+  "alerts": {
+    "dispatch_alert": "चेतावनी जारी गर्नुहोस्",
+    "authority_notice": "आपतकालीन चेतावनी जारी गर्न प्रमाणित DISPATCHER वा ADMIN अनुमति आवश्यक छ।",
+    "select_language": "भाषा",
+    "select_channel": "माध्यम",
+    "justification": "कार्यान्वयन औचित्य",
+    "dispatching": "पठाउँदैछ…",
+    "dispatched_success": "चेतावनी सफलतापूर्वक पठाइयो।",
+    "cancel": "रद्द गर्नुहोस्",
+    "confirm_dispatch": "जारी पुष्टि गर्नुहोस्"
+  },
+  "field_observation": {
+    "title": "स्थलगत पहिरो तथा जमिन विवरण",
+    "select_zone": "जोखिम क्षेत्र",
+    "rainfall_rate": "अनुमानित वर्षा (मिमी/घण्टा)",
+    "soil_condition": "माटोको अवस्था",
+    "visual_signs": "पहिरो वा चिराको प्रत्यक्ष संकेत",
+    "road_status_label": "स्थानीय सडक अवस्था",
+    "gps_coordinates": "GPS स्थान",
+    "acquire_gps": "हालको GPS स्थान लिनुहोस्",
+    "attach_media": "तस्विर वा भिडियो संलग्न गर्नुहोस् (अधिकतम ३ फाइल, १०MB तस्विर / ५०MB भिडियो)",
+    "consent_notice": "म यो विवरण सत्य भएको प्रमाणित गर्दछु। तस्विर, भिडियो र GPS स्थान विपद् व्यवस्थापन निकायहरूलाई उपलब्ध गराइनेछ र प्रमाणिकरणपछि सार्वजनिक सुरक्षाका लागि देखाइनेछ।",
+    "submit": "विवरण बुझाउनुहोस्",
+    "submitting": "बुझाउँदैछ…"
+  },
+  "offline": {
+    "banner_title": "⚠ अफलाइन मोड — भण्डारण गरिएको डाटा",
+    "banner_desc": "स्थानीय क्यासबाट डाटा देखाइँदैछ, पुरानो हुनसक्छ — ताजा पुनर्गणनाका लागि इन्टरनेट आवश्यक छ।",
+    "sync_queue": "सिङ्क लाम",
+    "download_bundle": "२४ घण्टे डाटा डाउनलोड गर्नुहोस्",
+    "cached_bundle": "अफलाइन बन्डल भण्डारण गरियो।"
+  }
+}

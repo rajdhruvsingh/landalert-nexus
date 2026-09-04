@@ -1,0 +1,74 @@
+{
+  "nav": {
+    "title": "উত্তৰ-পূব ভূমিস্খলন কনচোল",
+    "risk_console": "আশংকা কনচোল",
+    "alert_log": "সতৰ্কতা তালিকা",
+    "report_field_reading": "ক্ষেত্ৰ প্ৰতিবেদন জনাওক",
+    "system_health": "পদ্ধতি স্বাস্থ্য",
+    "sign_in": "লগ ইন কৰক",
+    "account": "একাউণ্ট",
+    "language": "ভাষা"
+  },
+  "dashboard": {
+    "monitored_zones": "নজৰ ৰখা অঞ্চলসমূহ",
+    "severe_alert": "গুৰুতৰ সতৰ্কতা",
+    "high_alert": "উচ্চ সতৰ্কতা",
+    "moderate_watch": "মধ্যম দৃষ্টি",
+    "low_normal": "নিম্ন / স্বাভাৱিক",
+    "all_states": "সকলো ৰাজ্য",
+    "recompute": "পুনৰ গণনা",
+    "ingest_weather": "বতৰ তথ্য সংগ্ৰহ",
+    "risk_heatmap": "আঞ্চলিক ভূমিস্খলন বিপদ মানচিত্ৰ",
+    "zone_overview": "অঞ্চলৰ আভাস",
+    "factor_attribution": "কাৰক বিশ্লেষণ (ML)",
+    "road_status": "পথ যোগাযোগ আৰু সংযোগ",
+    "recent_alerts": "শেহতীয়া জৰুৰীকালীন সতৰ্কবাৰ্তা",
+    "view_zone_brief": "বিস্তাৰিত বিৱৰণ চাওক →",
+    "last_updated": "শেহতীয়া আপডেট",
+    "model_active": "সক্ৰিয় মডেল"
+  },
+  "risk_levels": {
+    "Low": "নিম্ন",
+    "Moderate": "মধ্যম",
+    "High": "উচ্চ",
+    "Severe": "গুৰুতৰ"
+  },
+  "road_status": {
+    "open": "খোলা / চলাচলযোগ্য",
+    "restricted": "নিয়ন্ত্ৰিত / সতৰ্কতা",
+    "blocked": "বন্ধ / অচল",
+    "unknown": "অজ্ঞাত স্থিতি"
+  },
+  "alerts": {
+    "dispatch_alert": "সতৰ্কবাৰ্তা প্ৰেৰণ কৰক",
+    "authority_notice": "জৰুৰীকালীন সতৰ্কবাৰ্তা প্ৰেৰণৰ বাবে প্ৰমাণিত DISPATCHER বা ADMIN প্ৰমাণপত্ৰৰ প্ৰয়োজন।",
+    "select_language": "ভাষা",
+    "select_channel": "মাধ্যম",
+    "justification": "কাৰ্য্যকৰী যুক্তি",
+    "dispatching": "প্ৰেৰণ কৰা হৈছে…",
+    "dispatched_success": "সতৰ্কবাৰ্তা সফলভাৱে প্ৰেৰণ কৰা হ'ল।",
+    "cancel": "বাতিল",
+    "confirm_dispatch": "প্ৰেৰণ নিশ্চিত কৰক"
+  },
+  "field_observation": {
+    "title": "ক্ষেত্ৰ পৰ্য্যবেক্ষণ প্ৰতিবেদন",
+    "select_zone": "আশংকা অঞ্চল",
+    "rainfall_rate": "বৰষুণৰ পৰিমাণ (মিমি/ঘণ্টা)",
+    "soil_condition": "মাটিৰ অৱস্থা",
+    "visual_signs": "মাটি বা ফাটৰ লক্ষণ",
+    "road_status_label": "স্থানীয় পথৰ অৱস্থা",
+    "gps_coordinates": "GPS স্থানাংক",
+    "acquire_gps": "বৰ্তমান GPS সংগ্ৰহ কৰক",
+    "attach_media": "ফটো বা ভিডিঅ' সংলগ্ন কৰক (সৰ্বোচ্চ ৩টা ফাইল, ১০এমবি ফটো / ৫০এমবি ভিডিঅ')",
+    "consent_notice": "মই নিশ্চিত কৰিছো যে এই তথ্য সঠিক। এই ছবি, ভিডিঅ' আৰু GPS দুৰ্যোগ ব্যৱস্থাপনা কৰ্তৃপক্ষ আৰু পৰীক্ষাৰ পিছত ৰাইজৰ সুৰক্ষাৰ বাবে প্ৰদৰ্শিত হ'ব।",
+    "submit": "প্ৰতিবেদন জমা দিয়ক",
+    "submitting": "জমা দিয়া হৈছে…"
+  },
+  "offline": {
+    "banner_title": "⚠ অফলাইন ম'ড — সংৰক্ষিত তথ্য",
+    "banner_desc": "স্থানীয় কেচৰ পৰা তথ্য প্ৰদৰ্শন কৰা হৈছে, পুৰণি হ'ব পাৰে — লাইভ পুনৰ গণনাৰ প্ৰয়োজন।",
+    "sync_queue": "কিউ ছিংক কৰক",
+    "download_bundle": "২৪ ঘণ্টাৰ বাণ্ডল ডাউনলোড কৰক",
+    "cached_bundle": "অফলাইন বাণ্ডল সংৰক্ষিত।"
+  }
+}

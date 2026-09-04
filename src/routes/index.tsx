@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import {
   getOverview,
@@ -53,6 +54,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
+  const { t } = useTranslation();
   const { data } = useSuspenseQuery(overviewQuery);
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -92,8 +94,6 @@ function Dashboard() {
     .filter((z) => ["High", "Severe"].includes(z.current_risk_level))
     .reduce((s, z) => s + z.population, 0);
 
-
-
   async function runRecompute() {
     setBusy(true);
     setActionNotice(null);
@@ -131,7 +131,7 @@ function Dashboard() {
         <div>
           <div className="label-caps">SIH26001 · North Eastern Region</div>
           <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">
-            Landslide Early Warning Console
+            {t("dashboard.risk_heatmap", "Landslide Early Warning Console")}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Rainfall, soil-moisture and terrain fused with published NE-Himalaya threshold
@@ -140,7 +140,7 @@ function Dashboard() {
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             {data.activeModel && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary">
-                Active Model: {data.activeModel.model_version}
+                {t("dashboard.model_active", "Active Model")}: {data.activeModel.model_version}
               </span>
             )}
             <ScientificLimitationBadge />
@@ -162,7 +162,7 @@ function Dashboard() {
             disabled={busy}
             className="font-mono text-xs uppercase"
           >
-            Ingest Open-Meteo
+            {t("dashboard.ingest_weather", "Ingest Open-Meteo")}
           </Button>
           <Button
             variant="outline"
@@ -171,14 +171,19 @@ function Dashboard() {
             disabled={busy}
             className="font-mono text-xs uppercase"
           >
-            Recompute risk
+            {t("dashboard.recompute", "Recompute risk")}
           </Button>
         </div>
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {counts.map((c) => (
-          <Stat key={c.lvl} label={`${c.lvl} zones`} value={c.n} tone={riskColor(c.lvl)} />
+          <Stat
+            key={c.lvl}
+            label={`${t(`risk_levels.${c.lvl}`, c.lvl)} ${t("dashboard.monitored_zones", "zones")}`}
+            value={c.n}
+            tone={riskColor(c.lvl)}
+          />
         ))}
         <Stat
           label="Population exposed"
@@ -190,7 +195,7 @@ function Dashboard() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] items-stretch">
         <div className="panel overflow-hidden flex flex-col h-full">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 shrink-0">
-            <div className="label-caps">Risk heatmap</div>
+            <div className="label-caps">{t("dashboard.risk_heatmap", "Risk heatmap")}</div>
             <div className="flex flex-wrap gap-1">
               {states.map((s) => (
                 <button
@@ -228,7 +233,7 @@ function Dashboard() {
             <div className="panel p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="label-caps">Selected zone</div>
+                  <div className="label-caps">{t("dashboard.zone_overview", "Selected zone")}</div>
                   <h2 className="mt-1 text-xl font-semibold">{selected.zone_name}</h2>
                   <p className="text-xs text-muted-foreground">
                     {selected.district} district · {selected.state} ·{" "}
@@ -283,7 +288,7 @@ function Dashboard() {
                   params={{ id: String(selected.id) }}
                   className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
                 >
-                  Open zone brief →
+                  {t("dashboard.view_zone_brief", "Open zone brief →")}
                 </Link>
               </div>
             </div>
@@ -321,7 +326,7 @@ function Dashboard() {
         <div className="xl:col-span-2 grid gap-4 lg:grid-cols-2">
           <div className="panel">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="label-caps">Road connectivity</span>
+              <span className="label-caps">{t("dashboard.road_status", "Road connectivity")}</span>
               <span className="font-mono text-xs text-muted-foreground">
                 {blocked.length} blocked · {restricted.length} restricted
               </span>
@@ -355,7 +360,7 @@ function Dashboard() {
 
           <div className="panel">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="label-caps">Alert console</span>
+              <span className="label-caps">{t("dashboard.recent_alerts", "Alert console")}</span>
               <Link
                 to="/alerts"
                 className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
