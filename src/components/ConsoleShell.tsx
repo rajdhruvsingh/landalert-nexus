@@ -38,7 +38,7 @@ function NavLink({ to, label }: { to: "/" | "/alerts"; label: string }) {
     <Link
       to={to}
       activeOptions={{ exact: to === "/" }}
-      className="rounded px-3 py-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&.active]:bg-primary/15 [&.active]:text-primary"
+      className="rounded px-3 py-1.5 font-display text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&.active]:bg-primary/15 [&.active]:text-primary"
     >
       {label}
     </Link>
