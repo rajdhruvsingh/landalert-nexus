@@ -379,3 +379,12 @@ export const dispatchAlertServerFn = createServerFn({ method: "POST" })
       actor: "server_fn_dispatch",
     });
   });
+
+export const submitFieldObservationsServerFn = createServerFn({ method: "POST" })
+  .inputValidator((data: { observations: import("./sync.service").FieldObservationInput[] }) => ({
+    observations: data.observations,
+  }))
+  .handler(async ({ data }) => {
+    const { syncFieldObservations } = await import("./sync.service");
+    return syncFieldObservations(data.observations);
+  });

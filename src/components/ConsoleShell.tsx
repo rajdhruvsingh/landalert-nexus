@@ -1,21 +1,35 @@
 import { Link } from "@tanstack/react-router";
+import { FieldObservationDialog } from "./FieldObservationDialog";
+import { SystemHealthDialog } from "./SystemHealthDialog";
+import { AuthDialog } from "./AuthDialog";
+import { OfflineBanner } from "./OfflineBanner";
 
 export function ConsoleNav() {
   return (
-    <nav className="sticky top-0 z-[1000] border-b border-border bg-background/90 backdrop-blur">
-      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 lg:px-8">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-risk-severe" />
-          <span className="font-display text-sm uppercase tracking-[0.2em]">
-            NER Landslide Console
-          </span>
-        </Link>
-        <div className="flex items-center gap-1">
-          <NavLink to="/" label="Risk console" />
-          <NavLink to="/alerts" label="Alert log" />
+    <>
+      <nav className="sticky top-0 z-[1000] border-b border-border bg-background/90 backdrop-blur">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 lg:px-8">
+          <Link to="/" className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-risk-severe" />
+            <span className="font-display text-sm uppercase tracking-[0.2em]">
+              NER Landslide Console
+            </span>
+          </Link>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 border-r border-border pr-2 mr-1">
+              <NavLink to="/" label="Risk console" />
+              <NavLink to="/alerts" label="Alert log" />
+            </div>
+
+            <FieldObservationDialog />
+            <SystemHealthDialog />
+            <AuthDialog />
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+      <OfflineBanner />
+    </>
   );
 }
 

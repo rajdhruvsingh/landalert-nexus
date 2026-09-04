@@ -1,16 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   getOverview,
   simulateRainfallSpike,
   recomputeAll,
+  ingestLiveRainfall,
+  getRiskPredictionServerFn,
   type ZoneRow,
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
-import { RiskBadge, RoadBadge, Stat, ExplanationCard } from "@/components/RiskBits";
+import {
+  RiskBadge,
+  RoadBadge,
+  Stat,
+  ExplanationCard,
+  FreshnessBadge,
+  MLAttributionCard,
+  ScientificLimitationBadge,
+} from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
+import { FieldObservationDialog } from "@/components/FieldObservationDialog";
 import { riskColor, RISK_LEVELS } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
 
@@ -48,9 +59,11 @@ function Dashboard() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("All");
   const [busy, setBusy] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const spike = useServerFn(simulateRainfallSpike);
   const recompute = useServerFn(recomputeAll);
+  const ingest = useServerFn(ingestLiveRainfall);
 
   const states = useMemo(
     () => ["All", ...Array.from(new Set(data.zones.map((z) => z.state))).sort()],
@@ -63,6 +76,12 @@ function Dashboard() {
   );
 
   const selected: ZoneRow | null = data.zones.find((z) => z.id === selectedId) ?? zones[0] ?? null;
+
+  const { data: selectedMl } = useQuery({
+    queryKey: ["risk-prediction", selected?.id],
+    queryFn: () => (selected ? getRiskPredictionServerFn({ data: { zoneId: selected.id } }) : null),
+    enabled: !!selected,
+  });
 
   const counts = RISK_LEVELS.map((lvl) => ({
     lvl,
@@ -78,9 +97,12 @@ function Dashboard() {
   async function runSpike() {
     if (!selected) return;
     setBusy(true);
+    setActionNotice(null);
     try {
       await spike({ data: { zoneId: selected.id, rainfallMm: 240 } });
       await qc.invalidateQueries();
+      setActionNotice(`Injected 240mm spike for Zone ${selected.id} and recomputed risk.`);
+      setTimeout(() => setActionNotice(null), 4000);
     } finally {
       setBusy(false);
     }
@@ -88,9 +110,29 @@ function Dashboard() {
 
   async function runRecompute() {
     setBusy(true);
+    setActionNotice(null);
     try {
       await recompute();
       await qc.invalidateQueries();
+      setActionNotice("Authoritative risk scores recomputed across all 15 zones.");
+      setTimeout(() => setActionNotice(null), 4000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runIngest() {
+    setBusy(true);
+    setActionNotice(null);
+    try {
+      const res = await ingest();
+      await qc.invalidateQueries();
+      setActionNotice(
+        `Ingested live weather for ${res.zones} zones (${res.readings} rainfall, ${res.soilReadings} soil rows).`,
+      );
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err) {
+      setActionNotice(`Ingest failed: ${err instanceof Error ? err.message : "Error"}`);
     } finally {
       setBusy(false);
     }
@@ -108,26 +150,45 @@ function Dashboard() {
             Rainfall, soil-moisture and terrain fused with published NE-Himalaya threshold
             equations. Every risk level carries the reasoning that produced it.
           </p>
-          {data.activeModel && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            {data.activeModel && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary">
                 Active Model: {data.activeModel.model_version}
               </span>
-              <span className="rounded border border-border px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
-                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%:{" "}
-                {data.activeModel.recall_at_80_precision ?? "N/A"}
-              </span>
-              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400">
-                Data-Limited Validation (N=8 real landslides)
-              </span>
-            </div>
-          )}
+            )}
+            <ScientificLimitationBadge />
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={runRecompute} disabled={busy}>
+        <div className="flex flex-wrap items-center gap-2">
+          {actionNotice && (
+            <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-400">
+              {actionNotice}
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={runIngest}
+            disabled={busy}
+            className="font-mono text-xs uppercase"
+          >
+            Ingest Open-Meteo
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={runRecompute}
+            disabled={busy}
+            className="font-mono text-xs uppercase"
+          >
             Recompute risk
           </Button>
-          <Button onClick={runSpike} disabled={busy || !selected}>
+          <Button
+            size="sm"
+            onClick={runSpike}
+            disabled={busy || !selected}
+            className="font-mono text-xs uppercase"
+          >
             Simulate 240mm spike
           </Button>
         </div>
@@ -182,7 +243,7 @@ function Dashboard() {
 
         <div className="flex flex-col gap-4">
           {selected && (
-            <div className="panel p-4">
+            <div className="panel p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="label-caps">Selected zone</div>
@@ -192,16 +253,49 @@ function Dashboard() {
                     {selected.population.toLocaleString("en-IN")} residents ·{" "}
                     {selected.mean_slope_deg}° mean slope
                   </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <FreshnessBadge
+                      ageHours={selectedMl?.data_freshness?.weather_age_hours}
+                      status={
+                        selected.soil_moisture_status as
+                          "measured" | "stale" | "fallback" | "missing"
+                      }
+                    />
+                    {selectedMl && (
+                      <span className="font-mono text-[0.68rem] text-primary">
+                        ML Risk: {(selectedMl.probability * 100).toFixed(1)}% (
+                        {selectedMl.risk_level})
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <RiskBadge level={selected.current_risk_level} score={selected.risk_score} />
               </div>
-              <div className="mt-3">
+
+              <div>
                 <ExplanationCard explanation={selected.explanation} />
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="font-mono text-[0.7rem] text-muted-foreground">
-                  Recomputed {new Date(selected.last_computed_at).toLocaleString()}
-                </span>
+
+              {selectedMl?.factor_attribution && (
+                <MLAttributionCard
+                  topCategories={selectedMl.factor_attribution.top_categories}
+                  topFeatures={selectedMl.factor_attribution.top_features}
+                />
+              )}
+
+              <div className="flex items-center justify-between border-t border-border/60 pt-2">
+                <FieldObservationDialog
+                  initialZoneId={selected.id}
+                  trigger={
+                    <button
+                      type="button"
+                      className="font-mono text-[0.7rem] uppercase tracking-wider text-muted-foreground hover:text-foreground underline"
+                    >
+                      + Report ground observation
+                    </button>
+                  }
+                  onSuccess={() => qc.invalidateQueries()}
+                />
                 <Link
                   to="/zones/$id"
                   params={{ id: String(selected.id) }}

@@ -1,5 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -12,11 +13,41 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { getZoneDetail } from "@/lib/monitoring.functions";
+import {
+  getZoneDetail,
+  getRiskPredictionServerFn,
+  dispatchAlertServerFn,
+} from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
-import { RiskBadge, RoadBadge, Stat, ExplanationCard } from "@/components/RiskBits";
+import {
+  RiskBadge,
+  RoadBadge,
+  Stat,
+  ExplanationCard,
+  FreshnessBadge,
+  MLAttributionCard,
+  ScientificLimitationBadge,
+} from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
+import { FieldObservationDialog } from "@/components/FieldObservationDialog";
 import { intensityThresholdMmPerDay, moistureThresholdMm, riskColor } from "@/lib/risk";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const zoneQuery = (id: number) =>
   queryOptions({
@@ -59,7 +90,19 @@ export const Route = createFileRoute("/zones/$id")({
 function ZonePage() {
   const { id } = Route.useParams();
   const { data } = useSuspenseQuery(zoneQuery(Number(id)));
+  const qc = useQueryClient();
   const zone = data.zone!;
+
+  const { data: mlPrediction, isLoading: mlLoading } = useQuery({
+    queryKey: ["risk-prediction", Number(id)],
+    queryFn: () => getRiskPredictionServerFn({ data: { zoneId: Number(id) } }),
+  });
+
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertLang, setAlertLang] = useState<"en" | "as" | "bn" | "ne">("en");
+  const [alertChannel, setAlertChannel] = useState<"sms" | "push" | "both">("both");
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
 
   const daily = aggregateDaily(data.readings);
   const iThr = intensityThresholdMmPerDay(3);
@@ -70,16 +113,175 @@ function ZonePage() {
     .reduce((s, r) => s + r.rainfall_mm, 0);
   const r30 = data.readings.reduce((s, r) => s + r.rainfall_mm, 0);
 
+  async function handleDispatchAlert() {
+    setDispatching(true);
+    setDispatchStatus(null);
+    try {
+      const res = await dispatchAlertServerFn({
+        data: {
+          zoneId: zone.id,
+          language: alertLang,
+          channel: alertChannel,
+        },
+      });
+      setDispatchStatus(
+        res.dispatched
+          ? `Alert dispatched successfully via ${alertChannel.toUpperCase()} (Record ID: ${res.alertId ?? "Logged"}).`
+          : `Alert suppressed: ${res.reason}`,
+      );
+      await qc.invalidateQueries();
+      setTimeout(() => {
+        if (res.dispatched) setAlertOpen(false);
+      }, 2000);
+    } catch (err) {
+      setDispatchStatus(`Dispatch failed: ${err instanceof Error ? err.message : "Error"}`);
+    } finally {
+      setDispatching(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-8">
-      <Link
-        to="/"
-        className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
-      >
-        ← Back to console
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <Link
+          to="/"
+          className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
+        >
+          ← Back to console
+        </Link>
+        <div className="flex items-center gap-2">
+          <FieldObservationDialog
+            initialZoneId={zone.id}
+            trigger={
+              <Button variant="outline" size="sm" className="font-mono text-xs uppercase">
+                Report Field Reading
+              </Button>
+            }
+            onSuccess={() => qc.invalidateQueries()}
+          />
+          <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant={
+                  ["High", "Severe"].includes(zone.current_risk_level) ? "destructive" : "secondary"
+                }
+                size="sm"
+                className="font-mono text-xs uppercase tracking-wider"
+              >
+                Dispatch Alert
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[480px] bg-surface text-foreground border-border">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-display uppercase tracking-wide">
+                  Emergency Alert Dispatch: {zone.zone_name}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Triggers SMS and push notifications to district disaster control rooms and
+                  registered citizens.
+                </DialogDescription>
+              </DialogHeader>
 
-      <header className="mt-3 flex flex-wrap items-start justify-between gap-4">
+              {dispatchStatus && (
+                <div className="rounded border border-primary/40 bg-primary/10 p-3 text-xs font-mono text-primary">
+                  {dispatchStatus}
+                </div>
+              )}
+
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between rounded border border-border bg-secondary/30 p-3">
+                  <div>
+                    <div className="label-caps text-[0.68rem]">Authoritative Risk Level</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <RiskBadge level={zone.current_risk_level} score={zone.risk_score} />
+                      <span className="font-mono text-xs text-muted-foreground">
+                        ML Probability:{" "}
+                        {mlPrediction
+                          ? `${(mlPrediction.probability * 100).toFixed(1)}%`
+                          : "Loading…"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <label className="text-xs font-mono uppercase text-muted-foreground">
+                      Language
+                    </label>
+                    <Select
+                      value={alertLang}
+                      onValueChange={(v) => setAlertLang(v as "en" | "as" | "bn" | "ne")}
+                    >
+                      <SelectTrigger className="bg-secondary/40 border-border font-mono text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-surface border-border">
+                        <SelectItem value="en">English</SelectItem>
+                        <SelectItem value="as">অসমীয়া (Assamese)</SelectItem>
+                        <SelectItem value="bn">বাংলা (Bengali)</SelectItem>
+                        <SelectItem value="ne">नेपाली (Nepali)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-xs font-mono uppercase text-muted-foreground">
+                      Channel
+                    </label>
+                    <Select
+                      value={alertChannel}
+                      onValueChange={(v) => setAlertChannel(v as "sms" | "push" | "both")}
+                    >
+                      <SelectTrigger className="bg-secondary/40 border-border font-mono text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-surface border-border">
+                        <SelectItem value="both">Both (SMS + Push)</SelectItem>
+                        <SelectItem value="sms">SMS Gateway only</SelectItem>
+                        <SelectItem value="push">Mobile Push only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="rounded border border-border/80 bg-secondary/20 p-3 font-mono text-xs space-y-1">
+                  <div className="label-caps text-[0.65rem]">Recipient Group</div>
+                  <div className="text-foreground">
+                    District Authorities, Village Councils & Emergency Responders
+                  </div>
+                  <div className="text-[0.68rem] text-muted-foreground">
+                    Estimated population in coverage: {zone.population.toLocaleString("en-IN")}
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAlertOpen(false)}
+                  disabled={dispatching}
+                  className="font-mono text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleDispatchAlert}
+                  disabled={dispatching}
+                  className="font-mono text-xs uppercase"
+                >
+                  {dispatching ? "Dispatching…" : "Confirm & Send Broadcast"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="label-caps">Zone brief</div>
           <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">{zone.zone_name}</h1>
@@ -87,29 +289,34 @@ function ZonePage() {
             {zone.district} district · {zone.state} · {zone.population.toLocaleString("en-IN")}{" "}
             residents
           </p>
-          {data.activeModel && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            {data.activeModel && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary">
                 Model: {data.activeModel.model_version}
               </span>
-              <span className="rounded border border-border px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
-                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%:{" "}
-                {data.activeModel.recall_at_80_precision ?? "N/A"}
-              </span>
-              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400">
-                Data-Limited (N=8 positives)
-              </span>
-            </div>
+            )}
+            <ScientificLimitationBadge />
+            <FreshnessBadge
+              ageHours={mlPrediction?.data_freshness?.weather_age_hours}
+              status={zone.soil_moisture_status as "measured" | "stale" | "fallback" | "missing"}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <RiskBadge
+            level={zone.current_risk_level}
+            score={zone.risk_score}
+            className="px-3 py-1.5 text-sm"
+          />
+          {mlPrediction && (
+            <span className="font-mono text-[0.7rem] text-muted-foreground">
+              ML Probability: {(mlPrediction.probability * 100).toFixed(1)}%
+            </span>
           )}
         </div>
-        <RiskBadge
-          level={zone.current_risk_level}
-          score={zone.risk_score}
-          className="px-3 py-1.5 text-sm"
-        />
       </header>
 
-      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat
           label="72-hr rainfall"
           value={`${r72.toFixed(0)} mm`}
@@ -121,6 +328,12 @@ function ZonePage() {
           value={`${r30.toFixed(0)} mm`}
           hint={`Moisture threshold ${eThr.toFixed(0)} mm`}
           tone={r30 > eThr ? riskColor("High") : undefined}
+        />
+        <Stat
+          label="ML Inferred Probability"
+          value={mlPrediction ? `${(mlPrediction.probability * 100).toFixed(1)}%` : "…"}
+          hint="Logistic Regression v2 (19 features)"
+          tone={mlPrediction && mlPrediction.probability >= 0.65 ? riskColor("Severe") : undefined}
         />
         <Stat
           label="Mean slope"
@@ -226,6 +439,11 @@ function ZonePage() {
           </div>
 
           <ExplanationCard explanation={zone.explanation} />
+
+          <MLAttributionCard
+            topCategories={mlPrediction?.factor_attribution?.top_categories}
+            topFeatures={mlPrediction?.factor_attribution?.top_features}
+          />
 
           <div className="panel">
             <div className="border-b border-border px-4 py-3 label-caps">Road segments</div>
