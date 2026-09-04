@@ -69,31 +69,63 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        ...(typeof window !== "undefined" ? { options: { redirectTo: window.location.origin } } : {}),
+        options: {
+          skipBrowserRedirect: true,
+          ...(typeof window !== "undefined" ? { redirectTo: window.location.origin } : {}),
+        },
       });
+
       if (oauthError) {
-        console.error("[AuthDialog] Supabase Google OAuth error:", oauthError);
-        const msg = (oauthError.message || "").toLowerCase();
-        if (
-          msg.includes("provider") ||
-          msg.includes("validation_failed") ||
-          msg.includes("unsupported") ||
-          msg.includes("not enabled")
-        ) {
+        console.error("[AuthDialog] Supabase Google OAuth initialization error:", oauthError);
+        setError(
+          "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
+        );
+        return;
+      }
+
+      if (!data?.url) {
+        setError(
+          "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
+        );
+        return;
+      }
+
+      // Pre-flight validation: check if the OAuth provider is active in Supabase before navigating
+      try {
+        const probeRes = await fetch(data.url, { method: "GET", redirect: "manual" });
+        if (!probeRes.ok && probeRes.status >= 400) {
+          const errData = (await probeRes.json().catch(() => null)) as {
+            code?: number;
+            error_code?: string;
+            msg?: string;
+          } | null;
+
+          console.error("[AuthDialog] Supabase Google OAuth provider is not configured/enabled:", {
+            status: probeRes.status,
+            error: errData,
+          });
+
           setError(
             "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
           );
-        } else {
-          setError(
-            oauthError.message ||
-              "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
-          );
+          return;
+        }
+
+        // Provider is enabled and ready to redirect
+        if (typeof window !== "undefined") {
+          window.location.assign(data.url);
+        }
+      } catch (probeErr) {
+        // Cross-origin redirect to accounts.google.com during manual fetch indicates provider is active
+        console.info("[AuthDialog] Pre-flight redirect observed, proceeding to provider:", probeErr);
+        if (typeof window !== "undefined") {
+          window.location.assign(data.url);
         }
       }
     } catch (err) {
-      console.error("[AuthDialog] Google OAuth exception:", err);
+      console.error("[AuthDialog] Unexpected Google OAuth exception:", err);
       setError(
         "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
       );
