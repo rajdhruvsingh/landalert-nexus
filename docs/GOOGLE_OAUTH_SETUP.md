@@ -28,8 +28,7 @@ Production Deployment URL:
      - `http://localhost:5173` (for local Vite dev)
    - **Authorized redirect URIs**:
      - Enter your Supabase Auth callback URL:
-       `https://<YOUR-SUPABASE-PROJECT-ID>.supabase.co/auth/v1/callback`
-       *(Retrieve `<YOUR-SUPABASE-PROJECT-ID>` from your Supabase project dashboard)*
+       `https://shkpwbqcbeqlybdrhczq.supabase.co/auth/v1/callback`
 5. Click **Create** and safely copy:
    - **Client ID**
    - **Client Secret**
@@ -41,12 +40,12 @@ Production Deployment URL:
 
 ## 2. Supabase Auth Provider Configuration
 
-1. Open your project on the [Supabase Dashboard](https://supabase.com/dashboard).
+1. Open your project on the [Supabase Dashboard](https://supabase.com/dashboard) (Project: `shkpwbqcbeqlybdrhczq`).
 2. Go to **Authentication** > **Providers** > **Google**:
    - Toggle **Enable Sign in with Google** to **ON**.
    - **Client ID**: Paste your Google OAuth Client ID.
    - **Client Secret**: Paste your Google OAuth Client Secret.
-   - Callback URL (for reference): Confirm it matches `https://<YOUR-SUPABASE-PROJECT-ID>.supabase.co/auth/v1/callback`.
+   - Callback URL (for reference): Confirm it matches `https://shkpwbqcbeqlybdrhczq.supabase.co/auth/v1/callback`.
    - Click **Save**.
 3. Go to **Authentication** > **URL Configuration**:
    - **Site URL**: `https://landalert-nexus.onrender.com`

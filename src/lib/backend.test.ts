@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 // Ensure environment variables for CI/test execution
 process.env["CRON_SECRET"] = "test-cron-secret-12345";
 
-process.env["SUPABASE_URL"] = "https://dfgapfiwdwdvdcxtxqmm.supabase.co";
+process.env["SUPABASE_URL"] = "https://shkpwbqcbeqlybdrhczq.supabase.co";
 process.env["SUPABASE_SERVICE_ROLE_KEY"] = "sb_secret_test_key_for_testing";
 
 // Realistic deterministic mock data for 15 NER zones
