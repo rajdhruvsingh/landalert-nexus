@@ -9,10 +9,20 @@ function MapResizeHandler() {
   useEffect(() => {
     map.invalidateSize();
     const timer = setTimeout(() => map.invalidateSize(), 200);
+    const container = map.getContainer();
+    const observer = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+          map.invalidateSize();
+        })
+      : null;
+    if (observer && container) {
+      observer.observe(container);
+    }
     const onResize = () => map.invalidateSize();
     window.addEventListener("resize", onResize);
     return () => {
       clearTimeout(timer);
+      if (observer) observer.disconnect();
       window.removeEventListener("resize", onResize);
     };
   }, [map]);
