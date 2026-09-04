@@ -1,0 +1,104 @@
+# =============================================================================
+# render.yaml — LandAlert-Nexus Render Blueprint
+# =============================================================================
+# Topology:
+#   - web: One SSR web service (TanStack Start + Nitro node-server).
+#          Serves both the frontend SSR pages AND the /api/* REST layer.
+#          Python 3 is installed on the build image; ML inference uses execFile.
+#
+# Why one service (not two)?
+#   TanStack Start with the Nitro node-server preset bundles the SSR server and
+#   all API route handlers into a single Node.js process (.output/server/index.mjs).
+#   There is no separate static build artefact to host on a CDN — everything is
+#   rendered server-side. A separate static site service is therefore not needed.
+#
+# Free-tier constraints honoured:
+#   - No Render Postgres (Supabase is the datastore).
+#   - No Redis (application does not require it).
+#   - No paid instance types.
+# =============================================================================
+
+services:
+  - type: web
+    name: landalert-nexus
+    runtime: node
+    region: oregon          # pick your preferred region
+    plan: free
+
+    # ---------------------------------------------------------------------------
+    # Root of the repository (monorepo with single build target)
+    # ---------------------------------------------------------------------------
+    rootDir: .
+
+    # ---------------------------------------------------------------------------
+    # Build
+    # Install Node deps → install Python deps → run Nitro node-server build.
+    # pip install is required because ML inference spawns python3 at request time.
+    # ---------------------------------------------------------------------------
+    buildCommand: npm ci && pip install -r requirements.txt && NITRO_PRESET=node-server npm run build
+
+    # ---------------------------------------------------------------------------
+    # Start
+    # Render injects $PORT automatically. Nitro reads PORT env var.
+    # HOST is explicitly set to 0.0.0.0 so Render's proxy can reach the process.
+    # ---------------------------------------------------------------------------
+    startCommand: HOST=0.0.0.0 node .output/server/index.mjs
+
+    # ---------------------------------------------------------------------------
+    # Health check — must return 2xx for Render to mark deployment healthy.
+    # The endpoint returns 503 when Supabase creds are missing but the HTTP
+    # layer itself is alive. Use /api/ml/health which always returns 200.
+    # ---------------------------------------------------------------------------
+    healthCheckPath: /api/ml/health
+
+    # ---------------------------------------------------------------------------
+    # Environment variables
+    # Set real values in the Render dashboard → "Environment" tab.
+    # Values here are placeholders only.
+    # ---------------------------------------------------------------------------
+    envVars:
+      # NODE_ENV — Render sets this automatically for web services
+      - key: NODE_ENV
+        value: production
+
+      # Nitro preset (also set in buildCommand but repeated for runtime clarity)
+      - key: NITRO_PRESET
+        value: node-server
+
+      # ── Supabase ─────────────────────────────────────────────────────────────
+      # Set these in the Render dashboard with real values from your Supabase project.
+
+      - key: SUPABASE_URL
+        sync: false     # populated manually in Render dashboard
+
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false     # populated manually in Render dashboard — NEVER commit this
+
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false     # populated manually in Render dashboard
+
+      # Vite build-time frontend env vars (injected into SSR bundle at build time)
+      - key: VITE_SUPABASE_URL
+        sync: false
+
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+
+      # ── Database (Python ML inference) ────────────────────────────────────────
+      # Supabase Postgres connection string for psycopg2 (use the pooler URL).
+      # Format: postgresql://postgres.[project-id]:[password]@aws-0-*.pooler.supabase.com:6543/postgres
+      - key: DATABASE_URL
+        sync: false
+
+      # ── CORS ─────────────────────────────────────────────────────────────────
+      # Set to the public URL of this Render service once deployed.
+      # Example: https://landalert-nexus.onrender.com
+      # If you add a custom domain, include it here (comma-separated).
+      - key: ALLOWED_ORIGIN
+        sync: false
+
+      # ── Cron / Ingest auth ───────────────────────────────────────────────────
+      # Required to call /api/ingest-weather and /api/recompute.
+      # Generate: openssl rand -hex 32
+      - key: LOVABLE_CRON_SECRET
+        sync: false

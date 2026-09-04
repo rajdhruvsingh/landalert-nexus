@@ -20,6 +20,38 @@ import { ingestLiveRainfallImpl } from "./monitoring.functions";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
+
+function getAllowedOrigin(requestOrigin: string | null): string | null {
+  // Production: explicit allowlist via env var (e.g. https://landalert-nexus.onrender.com)
+  const envOrigin = process.env["ALLOWED_ORIGIN"];
+  if (envOrigin) {
+    const allowed = envOrigin
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (requestOrigin && allowed.includes(requestOrigin)) return requestOrigin;
+    // If env is set, only allow listed origins + dev
+    if (requestOrigin && DEV_ORIGINS.includes(requestOrigin)) return requestOrigin;
+    return null;
+  }
+  // Development fallback: permit known local origins
+  if (requestOrigin && DEV_ORIGINS.includes(requestOrigin)) return requestOrigin;
+  return null;
+}
+
+function corsHeaders(requestOrigin: string | null): Record<string, string> {
+  const origin = getAllowedOrigin(requestOrigin);
+  if (!origin) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+}
+
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body, null, 2), {
     status,
@@ -32,7 +64,7 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
   });
 }
 
-function errorResponse(message: string, code: string, status = 400): Response {
+function errorResponse(message: string, code: string, status = 400, extraHeaders: Record<string, string> = {}): Response {
   return jsonResponse(
     {
       error: message,
@@ -41,6 +73,7 @@ function errorResponse(message: string, code: string, status = 400): Response {
       timestamp: new Date().toISOString(),
     },
     status,
+    extraHeaders,
   );
 }
 
@@ -55,18 +88,26 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
     return null;
   }
 
+  const origin = request.headers.get("origin");
+  const cors = corsHeaders(origin);
+
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: { ...cors } });
+  }
+
   try {
     // 1. System Health
     if (pathname === "/api/health" && request.method === "GET") {
       const health = await getSystemHealth();
       const status = health.status === "unavailable" ? 503 : 200;
-      return jsonResponse(health, status);
+      return jsonResponse(health, status, cors);
     }
 
     // 2. ML Subsystem Health
     if (pathname === "/api/ml/health" && request.method === "GET") {
       const mlHealth = await getMLHealth();
-      return jsonResponse(mlHealth, 200);
+      return jsonResponse(mlHealth, 200, cors);
     }
 
     // 3. Authoritative ML Risk Prediction
@@ -80,11 +121,12 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           validation.error ?? "Invalid parameters",
           validation.code ?? "INVALID_INPUT",
           400,
+          cors,
         );
       }
 
       const prediction = await getRiskPrediction(validation.zoneId, validation.asOfDate);
-      return jsonResponse(prediction, 200);
+      return jsonResponse(prediction, 200, cors);
     }
 
     // 4. Live Weather Ingestion (Cron Protected)
@@ -93,7 +135,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       if (authError) return authError;
 
       const result = await ingestLiveRainfallImpl();
-      return jsonResponse({ ok: true, ...result }, 200);
+      return jsonResponse({ ok: true, ...result }, 200, cors);
     }
 
     // 5. Risk Recompute Trigger (Cron or Service Role Protected)
@@ -103,9 +145,9 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
       const { error } = await supabaseAdmin.rpc("recompute_risk");
       if (error) {
-        return errorResponse(`Recomputation failed: ${error.message}`, "DATABASE_ERROR", 500);
+        return errorResponse(`Recomputation failed: ${error.message}`, "DATABASE_ERROR", 500, cors);
       }
-      return jsonResponse({ ok: true, timestamp: new Date().toISOString() }, 200);
+      return jsonResponse({ ok: true, timestamp: new Date().toISOString() }, 200, cors);
     }
 
     // 6. Alert Dispatch Service
@@ -119,7 +161,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       try {
         body = await request.json();
       } catch {
-        return errorResponse("Malformed JSON request body", "INVALID_JSON", 400);
+        return errorResponse("Malformed JSON request body", "INVALID_JSON", 400, cors);
       }
 
       const validation = validatePredictionInput(body.zoneId);
@@ -128,6 +170,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           validation.error ?? "Invalid zoneId",
           validation.code ?? "INVALID_ZONE_ID",
           400,
+          cors,
         );
       }
 
@@ -141,7 +184,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         actor: "api_dispatch",
       });
 
-      return jsonResponse(result, result.dispatched ? 201 : 200);
+      return jsonResponse(result, result.dispatched ? 201 : 200, cors);
     }
 
     // 7. Offline Field Observation Synchronization
@@ -150,21 +193,21 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       try {
         body = await request.json();
       } catch {
-        return errorResponse("Malformed JSON body", "INVALID_JSON", 400);
+        return errorResponse("Malformed JSON body", "INVALID_JSON", 400, cors);
       }
 
       if (!Array.isArray(body.observations)) {
-        return errorResponse("observations must be an array of records", "INVALID_INPUT", 400);
+        return errorResponse("observations must be an array of records", "INVALID_INPUT", 400, cors);
       }
 
       const syncResult = await syncFieldObservations(body.observations);
-      return jsonResponse(syncResult, syncResult.success ? 200 : 422);
+      return jsonResponse(syncResult, syncResult.success ? 200 : 422, cors);
     }
 
     // 8. Offline Package Download
     if (pathname === "/api/sync/package" && request.method === "GET") {
       const pkg = await getOfflinePackage();
-      return jsonResponse(pkg, 200);
+      return jsonResponse(pkg, 200, cors);
     }
 
     // 9. GIS GeoJSON - Risk Zones Layer
@@ -176,6 +219,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           "Content-Type": "application/geo+json; charset=utf-8",
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "public, max-age=60",
+          ...cors,
         },
       });
     }
@@ -189,13 +233,14 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           "Content-Type": "application/geo+json; charset=utf-8",
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "public, max-age=300",
+          ...cors,
         },
       });
     }
 
-    return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404);
+    return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404, cors);
   } catch (error) {
     console.error(`[API Router] Unhandled error on ${pathname}:`, error);
-    return errorResponse("An unexpected server error occurred", "INTERNAL_SERVER_ERROR", 500);
+    return errorResponse("An unexpected server error occurred", "INTERNAL_SERVER_ERROR", 500, cors);
   }
 }
