@@ -41,15 +41,29 @@ The training dataset contains exactly **8 verified real rainfall-triggered lands
 
 ### Reality
 
-While live inference now captures operational ERA5-Land soil moisture, the historical reanalysis archive for the 2018–2024 training coordinates lacked historical soil moisture fields. Consequently:
+While live inference captures operational ERA5-Land surface soil moisture (`soil_moisture_0_to_1cm` and `soil_moisture_1_to_3cm`), querying the Open-Meteo Historical Reanalysis Archive API (`archive-api.open-meteo.com/v1/archive`) for historical antecedent windows (2016–2024) across:
+(a) All verified positive events, and
+(b) All 24 pseudo-absences
+returns zero non-null readings (100% `null` values) for `soil_moisture_0_to_1cm` and `soil_moisture_1_to_3cm`. In ECMWF ERA5-Land historical archives, standard soil levels are discretized as Layer 1 (0–7cm) and Layer 2 (7–28cm); the fractional 0–1cm and 1–3cm levels are non-existent in the reanalysis archive.
 
-- All 8 positive training rows and all 24 pseudo-absence rows fell back to the neutral constant value:
+Consequently, per the strict scientific protocol forbidding fabricated or interpolated values:
+- All historical training rows and pseudo-absence rows genuinely lacking `soil_moisture_0_to_1cm` / `soil_moisture_1_to_3cm` data remain on the documented neutral fallback:
   $$\text{soil\_moisture\_latest} = 0.50, \quad \text{soil\_moisture\_7d\_trend} = 0.00$$
-- Feature variance in the training matrix is **0.0000**.
+- Specific coordinates/dates lacking archive coverage:
+  1. Zone 3 (Aizawl East, 23.74°N, 92.74°E, 2018-06-07)
+  2. Zone 5 (Shillong-Sohra, 25.29°N, 91.73°E, 2019-08-01)
+  3. Zone 7 (Kohima Ridge, 25.66°N, 94.12°E, 2020-07-13)
+  4. Zone 13 (Haflong Hills, 25.16°N, 93.03°E, 2021-05-25)
+  5. Zone 2 (Noney, 24.82°N, 93.68°E, 2022-06-30)
+  6. Zone 2 (Noney, 24.80°N, 93.71°E, 2022-07-04)
+  7. Zone 12 (Mangan North, 27.50°N, 88.54°E, 2023-06-15)
+  8. Zone 1 (Tamenglong, 24.97°N, 93.51°E, 2024-07-30)
+  9. All 24 deterministic pseudo-absence coordinates/dates across 2016–2024.
+- Feature variance in the training matrix remains **0.0000**.
 
 ### Scientific Consequence
 
-- The trained Logistic Regression model assigned a coefficient of exactly **0.0000** to soil moisture.
+- The trained Logistic Regression model assigns a coefficient of exactly **0.0000** to soil moisture.
 - **The model has learned zero empirical relationship between soil moisture and slope failure**.
 - In the live application, the UI clearly tags soil moisture as `Fallback proxy (50%)` or `Observed ERA5-Land` so operators are never misled into believing that fallback values reflect field sensor observations.
 
