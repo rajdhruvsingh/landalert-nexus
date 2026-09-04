@@ -20,6 +20,9 @@ import { ingestLiveRainfallImpl } from "./monitoring.functions";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getSatelliteLayerStatus, fetchSatelliteTile } from "./satellite.service";
+import { processIMDTelemetry } from "./integrations/imd.adapter";
+import { processSensorTelemetry } from "./integrations/sensors.adapter";
+import { processRoadStatusUpdate } from "./integrations/road-status.adapter";
 
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
 
@@ -486,6 +489,51 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           502,
           cors,
         );
+      }
+    }
+
+    // 13. Physical Geotechnical In-Situ Sensor Ingestion (Inclinometers, Piezometers, Soil Probes)
+    if (pathname === "/api/sensors/ingest" && request.method === "POST") {
+      const authHeader = request.headers.get("authorization");
+      try {
+        const body = await request.json();
+        const payloads = Array.isArray(body) ? body : body.readings || [body];
+        const result = await processSensorTelemetry(payloads, authHeader);
+        return jsonResponse(result, result.success ? 200 : 207, cors);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Sensor ingestion failed";
+        const status = msg.includes("AUTH_FAILED") ? 401 : msg.includes("UNCONFIGURED") ? 503 : 400;
+        return errorResponse(msg, "SENSOR_INGESTION_ERROR", status, cors);
+      }
+    }
+
+    // 14. India Meteorological Department (IMD) Real-Time Weather Station Ingestion
+    if (pathname === "/api/integrations/imd/ingest" && request.method === "POST") {
+      const apiKey = request.headers.get("x-imd-key") || url.searchParams.get("key") || undefined;
+      try {
+        const body = await request.json();
+        const records = Array.isArray(body) ? body : body.records || [body];
+        const result = await processIMDTelemetry(records, apiKey);
+        return jsonResponse(result, 200, cors);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "IMD ingestion failed";
+        const status = msg.includes("AUTH_FAILED") ? 401 : msg.includes("UNCONFIGURED") ? 503 : 400;
+        return errorResponse(msg, "IMD_INGESTION_ERROR", status, cors);
+      }
+    }
+
+    // 15. Live Road Status Feed Ingestion (BRO / State PWD)
+    if (pathname === "/api/integrations/roads/ingest" && request.method === "POST") {
+      const apiKey = request.headers.get("authorization") || request.headers.get("x-road-key") || undefined;
+      try {
+        const body = await request.json();
+        const updates = Array.isArray(body) ? body : body.updates || [body];
+        const result = await processRoadStatusUpdate(updates, apiKey);
+        return jsonResponse(result, 200, cors);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Road status ingestion failed";
+        const status = msg.includes("AUTH_FAILED") ? 401 : msg.includes("UNCONFIGURED") ? 503 : 400;
+        return errorResponse(msg, "ROAD_STATUS_INGESTION_ERROR", status, cors);
       }
     }
 

@@ -289,6 +289,35 @@ To deliver real, live SMS alerts to citizens and emergency authorities in India:
 
 ---
 
+### 2.8 Physical Geotechnical In-Situ Sensor Ingestion
+
+- **Method**: `POST`
+- **Path**: `/api/sensors/ingest`
+- **Authentication**: `Authorization: Bearer <SENSOR_INGESTION_SECRET>`
+- **Description**: Ingestion endpoint for geotechnical instrumentation (inclinometers, piezometers, crackmeters, and soil moisture probes). Enforces physical limits (e.g. angle -90° to 90°, non-negative pore pressure) and triggers critical warnings on rapid creep (>2 mm/h) or excessive slope tilt (>5°).
+
+### 2.9 India Meteorological Department (IMD) Weather Station Telemetry
+
+- **Method**: `POST`
+- **Path**: `/api/integrations/imd/ingest`
+- **Authentication**: Header `x-imd-key: <IMD_API_KEY>` or query parameter `?key=`
+- **Description**: Ingests automated telemetry from IMD AWS (Automatic Weather Station) and ARG (Automatic Rain Gauge) units. Correlates station coordinates to monitored hill zones via Haversine distance and updates rainfall readings.
+
+### 2.10 Live Arterial Road Status Ingestion (BRO & State PWD)
+
+- **Method**: `POST`
+- **Path**: `/api/integrations/roads/ingest`
+- **Authentication**: `Authorization: Bearer <ROAD_STATUS_API_KEY>`
+- **Description**: Ingests highway clearance and blockage notices from Border Roads Organisation (Project SEWAK / PUSHPAT) and State PWD units, updating arterial road connectivity in real time.
+
+### 2.11 Satellite Imagery Status & Tile Proxy (Copernicus Sentinel-2)
+
+- **Method**: `GET`
+- **Path**: `/api/satellite/status` and `/api/satellite/tiles?layer=[TRUE-COLOR|NDVI]&z={z}&x={x}&y={y}`
+- **Description**: Status endpoint returns credential configuration state. Tile proxy retrieves Sentinel-2 tiles with 24-hour server-side TTL caching. Gracefully disabled when `SENTINEL_HUB_INSTANCE_ID` is unconfigured.
+
+---
+
 ## 3. Standard Error Envelopes
 
 All errors return JSON with HTTP status code and machine-readable code:
