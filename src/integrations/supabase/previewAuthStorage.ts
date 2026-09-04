@@ -6,7 +6,7 @@
  * On production (Render / any standard deployment), returns `localStorage`
  * so Supabase Auth sessions persist normally across page refreshes.
  *
- * On Lovable preview surfaces (detected by hostname), brokers the auth
+ * On preview surfaces (detected by hostname), brokers the auth
  * session to the parent editor frame over postMessage so multiple
  * preview tabs share one login. This is a progressive enhancement —
  * the application works identically with plain localStorage on all
