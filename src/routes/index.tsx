@@ -10,6 +10,7 @@ import {
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
 import { RiskBadge, RoadBadge, Stat, ExplanationCard } from "@/components/RiskBits";
+import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { riskColor, RISK_LEVELS } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
 
@@ -37,6 +38,8 @@ export const Route = createFileRoute("/")({
     ],
   }),
   component: Dashboard,
+  pendingComponent: () => <PanelSkeleton label="Loading risk console…" />,
+  errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
 });
 
 function Dashboard() {

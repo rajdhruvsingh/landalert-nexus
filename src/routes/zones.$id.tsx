@@ -15,6 +15,7 @@ import {
 import { getZoneDetail } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
 import { RiskBadge, RoadBadge, Stat, ExplanationCard } from "@/components/RiskBits";
+import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import {
   intensityThresholdMmPerDay,
   moistureThresholdMm,
@@ -55,6 +56,8 @@ export const Route = createFileRoute("/zones/$id")({
     };
   },
   component: ZonePage,
+  pendingComponent: () => <PanelSkeleton label="Loading zone brief…" />,
+  errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
 });
 
 function ZonePage() {
