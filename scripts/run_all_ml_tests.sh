@@ -13,11 +13,11 @@ echo "  LANDALERT-NEXUS: RUNNING ALL ML & PRODUCTION TESTS"
 echo "================================================================="
 
 echo ""
-echo ">>> [1/6] Running TypeScript / Vitest Unit Tests..."
+echo ">>> [1/7] Running TypeScript / Vitest Unit & Integration Tests..."
 npm test
 
 echo ""
-echo ">>> [2/6] Running ML Leakage & Hygiene Regression Suite..."
+echo ">>> [2/7] Running ML Leakage & Hygiene Regression Suite..."
 python3 scripts/test_ml_leakage.py
 
 echo ""

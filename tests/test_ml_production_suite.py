@@ -294,3 +294,42 @@ def test_model_registry_safety_gating():
     ok_fake, reasons_fake = verify_model_candidate("non-existent-v999")
     assert ok_fake is False
     assert any("not found" in r.lower() for r in reasons_fake)
+
+# =====================================================================
+# 8. Prediction Persistence & Idempotency Invariants
+# =====================================================================
+
+def test_risk_prediction_persistence_and_idempotency():
+    """Verify that predictions can be persisted with idempotency into public.risk_predictions."""
+    import psycopg2
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+    engine = LandslideRiskInferenceEngine(artifact_path=str(ARTIFACT_FILE))
+    pred = engine.predict_zone(zone_id=1)
+    assert pred["status"] in ("VALID", "FALLBACK", "STALE")
+
+    # Persist prediction
+    ok = engine.persist_prediction(pred)
+    assert ok is True
+
+    # Verify record in DB
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT zone_id, model_version, probability, risk_score, risk_category, features
+        FROM public.risk_predictions
+        WHERE zone_id = 1 AND model_version = %s
+        ORDER BY prediction_time DESC LIMIT 1;
+    """, (pred["model_version"],))
+    row = cur.fetchone()
+    assert row is not None
+    assert row[0] == 1
+    assert row[1] == pred["model_version"]
+    assert abs(row[2] - pred["probability"]) < 1e-4
+    assert abs(row[3] - pred["risk_score"]) < 1e-1
+    assert row[4] == pred["risk_level"]
+
+    # Re-persisting the same prediction must be idempotent
+    ok2 = engine.persist_prediction(pred)
+    assert ok2 is True
+    conn.close()
+

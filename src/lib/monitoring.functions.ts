@@ -323,3 +323,59 @@ export async function ingestLiveRainfallImpl() {
 export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(async () =>
   ingestLiveRainfallImpl(),
 );
+
+export const getRiskPredictionServerFn = createServerFn({ method: "GET" })
+  .inputValidator((data: { zoneId: number; asOfDate?: string }) => ({
+    zoneId: Number(data.zoneId),
+    asOfDate: data.asOfDate,
+  }))
+  .handler(async ({ data }) => {
+    const { getRiskPrediction } = await import("./ml.service");
+    return getRiskPrediction(data.zoneId, data.asOfDate);
+  });
+
+export const getSystemHealthServerFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getSystemHealth } = await import("./health.service");
+  return getSystemHealth();
+});
+
+export const getMLHealthServerFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getMLHealth } = await import("./health.service");
+  return getMLHealth();
+});
+
+export const getOfflinePackageServerFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getOfflinePackage } = await import("./sync.service");
+  return getOfflinePackage();
+});
+
+export const getZonesGeoJsonServerFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getZonesGeoJson } = await import("./gis.service");
+  return getZonesGeoJson();
+});
+
+export const dispatchAlertServerFn = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      zoneId: number;
+      language?: "en" | "as" | "bn" | "ne";
+      channel?: "sms" | "push" | "both";
+      idempotencyKey?: string;
+    }) => ({
+      zoneId: Number(data.zoneId),
+      language: data.language,
+      channel: data.channel,
+      idempotencyKey: data.idempotencyKey,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { getRiskPrediction } = await import("./ml.service");
+    const { evaluateAndDispatchAlert } = await import("./alert.service");
+    const prediction = await getRiskPrediction(data.zoneId);
+    return evaluateAndDispatchAlert(prediction, {
+      language: data.language,
+      channel: data.channel,
+      idempotencyKey: data.idempotencyKey,
+      actor: "server_fn_dispatch",
+    });
+  });

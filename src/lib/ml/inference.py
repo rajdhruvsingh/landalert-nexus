@@ -167,3 +167,73 @@ class LandslideRiskInferenceEngine:
         finally:
             if close_conn:
                 conn.close()
+
+    def persist_prediction(self, pred: dict, conn=None) -> bool:
+        """
+        Persists an authoritative prediction into public.risk_predictions table with idempotency.
+        """
+        if pred.get("status") not in ("VALID", "FALLBACK", "STALE"):
+            return False
+        close_conn = False
+        if conn is None:
+            try:
+                conn = psycopg2.connect(DATABASE_URL)
+                close_conn = True
+            except Exception:
+                return False
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO public.risk_predictions (
+                    zone_id, prediction_time, model_version, feature_schema_version,
+                    probability, risk_score, risk_category, explanation,
+                    data_quality, features
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (zone_id, prediction_time, model_version) DO UPDATE
+                SET probability = EXCLUDED.probability,
+                    risk_score = EXCLUDED.risk_score,
+                    risk_category = EXCLUDED.risk_category,
+                    explanation = EXCLUDED.explanation,
+                    data_quality = EXCLUDED.data_quality,
+                    features = EXCLUDED.features;
+            """, (
+                pred["zone_id"],
+                pred["inference_timestamp"],
+                pred["model_version"],
+                pred["feature_schema_version"],
+                pred["probability"],
+                pred["risk_score"],
+                pred["risk_level"],
+                pred["explanation_narrative"],
+                json.dumps(pred.get("data_freshness", {})),
+                json.dumps(pred.get("canonical_features", {})),
+            ))
+            conn.commit()
+            return True
+        except Exception:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return False
+        finally:
+            if close_conn:
+                conn.close()
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="LandAlert-Nexus Canonical ML Inference CLI")
+    parser.add_argument("--zone", type=int, required=True, help="Zone ID (1-15)")
+    parser.add_argument("--as-of", type=str, default=None, help="As-of ISO date (e.g. 2024-06-15)")
+    parser.add_argument("--artifact", type=str, default="models/v0.2-lr-trained.json", help="Path to model artifact")
+    parser.add_argument("--persist", action="store_true", help="Persist prediction record to database")
+    args = parser.parse_args()
+
+    engine = LandslideRiskInferenceEngine(artifact_path=args.artifact)
+    res = engine.predict_zone(zone_id=args.zone, as_of_date=args.as_of)
+
+    if args.persist and res.get("status") in ("VALID", "FALLBACK", "STALE"):
+        engine.persist_prediction(res)
+
+    print(json.dumps(res, indent=2, default=str))

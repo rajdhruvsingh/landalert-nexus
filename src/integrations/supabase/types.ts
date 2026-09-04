@@ -11,35 +11,50 @@ export type Database = {
       alerts: {
         Row: {
           channel: string;
+          delivery_attempts: number;
           dispatched_at: string;
           dispatched_by: string;
           explanation: string;
           id: number;
+          idempotency_key: string | null;
           language: string;
+          last_error: string | null;
           message: string;
+          recipient_group: string;
           risk_level: string;
+          status: "pending" | "sent" | "delivered" | "failed";
           zone_id: number;
         };
         Insert: {
           channel?: string;
+          delivery_attempts?: number;
           dispatched_at?: string;
           dispatched_by?: string;
           explanation: string;
           id?: number;
+          idempotency_key?: string | null;
           language?: string;
+          last_error?: string | null;
           message: string;
+          recipient_group?: string;
           risk_level: string;
+          status?: "pending" | "sent" | "delivered" | "failed";
           zone_id: number;
         };
         Update: {
           channel?: string;
+          delivery_attempts?: number;
           dispatched_at?: string;
           dispatched_by?: string;
           explanation?: string;
           id?: number;
+          idempotency_key?: string | null;
           language?: string;
+          last_error?: string | null;
           message?: string;
+          recipient_group?: string;
           risk_level?: string;
+          status?: "pending" | "sent" | "delivered" | "failed";
           zone_id?: number;
         };
         Relationships: [
@@ -324,6 +339,112 @@ export type Database = {
           timestamp?: string;
         };
         Relationships: [];
+      };
+      risk_predictions: {
+        Row: {
+          created_at: string;
+          data_quality: Json;
+          explanation: string;
+          feature_schema_version: string;
+          features: Json;
+          id: number;
+          model_version: string;
+          prediction_time: string;
+          probability: number;
+          risk_category: "Low" | "Moderate" | "High" | "Severe";
+          risk_score: number;
+          zone_id: number;
+        };
+        Insert: {
+          created_at?: string;
+          data_quality?: Json;
+          explanation: string;
+          feature_schema_version?: string;
+          features?: Json;
+          id?: number;
+          model_version: string;
+          prediction_time?: string;
+          probability: number;
+          risk_category: "Low" | "Moderate" | "High" | "Severe";
+          risk_score: number;
+          zone_id: number;
+        };
+        Update: {
+          created_at?: string;
+          data_quality?: Json;
+          explanation?: string;
+          feature_schema_version?: string;
+          features?: Json;
+          id?: number;
+          model_version?: string;
+          prediction_time?: string;
+          probability?: number;
+          risk_category?: "Low" | "Moderate" | "High" | "Severe";
+          risk_score?: number;
+          zone_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "risk_predictions_zone_id_fkey";
+            columns: ["zone_id"];
+            isOneToOne: false;
+            referencedRelation: "risk_zones";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      field_observations: {
+        Row: {
+          client_timestamp: string;
+          id: string;
+          idempotency_key: string | null;
+          observed_at: string;
+          observer_id: string;
+          rainfall_mm: number | null;
+          road_status: "open" | "restricted" | "blocked" | "unknown" | null;
+          soil_condition: string | null;
+          sync_status: "pending" | "synced" | "conflict";
+          synced_at: string;
+          visual_signs: string | null;
+          zone_id: number;
+        };
+        Insert: {
+          client_timestamp: string;
+          id?: string;
+          idempotency_key?: string | null;
+          observed_at: string;
+          observer_id?: string;
+          rainfall_mm?: number | null;
+          road_status?: "open" | "restricted" | "blocked" | "unknown" | null;
+          soil_condition?: string | null;
+          sync_status?: "pending" | "synced" | "conflict";
+          synced_at?: string;
+          visual_signs?: string | null;
+          zone_id: number;
+        };
+        Update: {
+          client_timestamp?: string;
+          id?: string;
+          idempotency_key?: string | null;
+          observed_at?: string;
+          observer_id?: string;
+          rainfall_mm?: number | null;
+          road_status?: "open" | "restricted" | "blocked" | "unknown" | null;
+          soil_condition?: string | null;
+          sync_status?: "pending" | "synced" | "conflict";
+          synced_at?: string;
+          visual_signs?: string | null;
+          zone_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "field_observations_zone_id_fkey";
+            columns: ["zone_id"];
+            isOneToOne: false;
+            referencedRelation: "risk_zones";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: {
