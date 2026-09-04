@@ -10,7 +10,7 @@ A landslide early-warning system for the North Eastern Region of India, built on
 
 ## Why this exists
 
-GSI's LANDSLIP early-warning system is a real, working government system — but NER is listed as a *planned future expansion state*, not yet an active pilot. Published peer-reviewed research on NE-Himalaya-specific rainfall thresholds already exists. This project closes the regional coverage gap now, using those published equations, and adds a citizen-reporting layer that GSI's system does not have.
+GSI's LANDSLIP early-warning system is a real, working government system — but NER is listed as a _planned future expansion state_, not yet an active pilot. Published peer-reviewed research on NE-Himalaya-specific rainfall thresholds already exists. This project closes the regional coverage gap now, using those published equations, and adds a citizen-reporting layer that GSI's system does not have.
 
 ---
 
@@ -50,17 +50,17 @@ flowchart TB
 
 **Stack — everything that actually exists in this repo:**
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19 + TanStack Start + TanStack Router + TanStack Query |
-| Mapping | Leaflet + react-leaflet |
-| Styling | Tailwind CSS v4 + Radix UI |
-| Backend | Supabase (Postgres + Auth + Row-Level Security) |
-| Risk engine | PL/pgSQL function `recompute_risk()` |
-| Scheduling | `pg_cron` (hourly recompute) |
-| Model config | `risk_model_config` table (weights, cutoffs, PR-AUC) |
-| Build tool | Vite 8 |
-| Tests | Vitest |
+| Layer        | Technology                                                   |
+| ------------ | ------------------------------------------------------------ |
+| Frontend     | React 19 + TanStack Start + TanStack Router + TanStack Query |
+| Mapping      | Leaflet + react-leaflet                                      |
+| Styling      | Tailwind CSS v4 + Radix UI                                   |
+| Backend      | Supabase (Postgres + Auth + Row-Level Security)              |
+| Risk engine  | PL/pgSQL function `recompute_risk()`                         |
+| Scheduling   | `pg_cron` (hourly recompute)                                 |
+| Model config | `risk_model_config` table (weights, cutoffs, PR-AUC)         |
+| Build tool   | Vite 8                                                       |
+| Tests        | Vitest                                                       |
 
 > **Not in this repo**: FastAPI, Python services, Celery, Redis, Docker Compose.
 > The risk engine runs entirely inside Postgres.
@@ -81,13 +81,13 @@ score = w_intensity  × clamp(72hr_rainfall / zone_I-D_threshold, 0, 1)
 
 **Current baseline weights** (v0.1-hand-tuned, stored in `risk_model_config`):
 
-| Factor | Weight | Source |
-|--------|--------|--------|
-| 72-hr rainfall intensity | 0.35 | Primary trigger signal |
-| 30-day antecedent rainfall | 0.20 | Pre-wetting precondition |
-| Soil moisture | 0.20 | Hillslope saturation state |
-| Terrain slope | 0.15 | Static susceptibility |
-| Historical landslide density | 0.10 | Proxy for lithology |
+| Factor                       | Weight | Source                     |
+| ---------------------------- | ------ | -------------------------- |
+| 72-hr rainfall intensity     | 0.35   | Primary trigger signal     |
+| 30-day antecedent rainfall   | 0.20   | Pre-wetting precondition   |
+| Soil moisture                | 0.20   | Hillslope saturation state |
+| Terrain slope                | 0.15   | Static susceptibility      |
+| Historical landslide density | 0.10   | Proxy for lithology        |
 
 **Threshold equations** (published, not invented):
 
@@ -99,6 +99,7 @@ score = w_intensity  × clamp(72hr_rainfall / zone_I-D_threshold, 0, 1)
 ### Retraining
 
 Weights are stored in `risk_model_config`, not hardcoded. To recalibrate:
+
 1. Run `ml-notebooks/01_risk_calibration.ipynb` with real landslide inventory data.
 2. INSERT the new weights + PR-AUC into `risk_model_config`.
 3. Flip `is_active = true`. Run `SELECT recompute_risk();`. Done — no redeploy.
@@ -109,13 +110,13 @@ See [`docs/MODEL_EVALUATION.md`](docs/MODEL_EVALUATION.md) for the evaluation me
 
 ## Data sources and honesty
 
-| Data | Current state | Real source |
-|------|--------------|-------------|
-| Rainfall | Live Open-Meteo API (observed daily) | Open-Meteo API / IMD gridded |
-| Soil moisture | Live Open-Meteo ERA5-Land (0-3cm normalized) | Open-Meteo ERA5-Land / NASA SMAP Level-3 |
-| Historical landslides | Documented real NER events (`is_synthetic=false`) + synthetic fixtures labeled | Literature/news records; COOLR (NASA); NRSC Landslide Atlas |
-| Slope values | SRTM30m DEM computation + published studies | SRTM30m DEM via OpenTopoData; Das et al. (2018) |
-| I-D thresholds | Calibrated for Sikkim (Das 2018); regional baseline for others | Das et al. (2018); Dahal & Hasegawa (2008); Monga & Ganguli (2024; 2026) |
+| Data                  | Current state                                                                  | Real source                                                              |
+| --------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Rainfall              | Live Open-Meteo API (observed daily)                                           | Open-Meteo API / IMD gridded                                             |
+| Soil moisture         | Live Open-Meteo ERA5-Land (0-3cm normalized)                                   | Open-Meteo ERA5-Land / NASA SMAP Level-3                                 |
+| Historical landslides | Documented real NER events (`is_synthetic=false`) + synthetic fixtures labeled | Literature/news records; COOLR (NASA); NRSC Landslide Atlas              |
+| Slope values          | SRTM30m DEM computation + published studies                                    | SRTM30m DEM via OpenTopoData; Das et al. (2018)                          |
+| I-D thresholds        | Calibrated for Sikkim (Das 2018); regional baseline for others                 | Das et al. (2018); Dahal & Hasegawa (2008); Monga & Ganguli (2024; 2026) |
 
 The UI displays an amber "⚠ Synthetic data" badge wherever synthetic landslide records appear. See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for exactly where to obtain real data and how to load it.
 
@@ -145,6 +146,7 @@ npm run test          # Vitest unit tests for risk.ts threshold formulas
 ```
 
 SQL regression test (requires a running local Supabase instance):
+
 ```sh
 psql $DATABASE_URL -f supabase/smoke_test.sql
 ```

@@ -32,16 +32,8 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
   const [zones, roads, alerts, modelConfig] = await Promise.all([
     sb.from("risk_zones").select("*").order("risk_score", { ascending: false }),
     sb.from("road_segments").select("*"),
-    sb
-      .from("alerts")
-      .select("*")
-      .order("dispatched_at", { ascending: false })
-      .limit(30),
-    sb
-      .from("risk_model_config")
-      .select("*")
-      .eq("is_active", true)
-      .maybeSingle(),
+    sb.from("alerts").select("*").order("dispatched_at", { ascending: false }).limit(30),
+    sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
   ]);
   if (zones.error) throw new Error(zones.error.message);
   return {
@@ -75,11 +67,7 @@ export const getZoneDetail = createServerFn({ method: "GET" })
         .eq("zone_id", data.id)
         .order("dispatched_at", { ascending: false })
         .limit(10),
-      sb
-        .from("risk_model_config")
-        .select("*")
-        .eq("is_active", true)
-        .maybeSingle(),
+      sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
     ]);
     return {
       zone: zone.data ?? null,
@@ -156,6 +144,31 @@ export const recomputeAll = createServerFn({ method: "POST" }).handler(async () 
  * for tropical/subtropical humid mountain soils — appropriate for NER.
  * Source: Albergel et al. (2012) Hydrol. Earth Syst. Sci. 16:2617-2636.
  */
+async function fetchWithRetry(url: string, retries = 3, backoffMs = 500): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, backoffMs * attempt));
+          continue;
+        }
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, backoffMs * attempt));
+      }
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`Fetch failed after ${retries} attempts for ${url}`);
+}
+
 export async function ingestLiveRainfallImpl() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: zones, error: zErr } = await supabaseAdmin
@@ -185,11 +198,12 @@ export async function ingestLiveRainfallImpl() {
     "&past_days=7&forecast_days=1&timezone=UTC&models=era5";
 
   const [rainfallRes, soilRes] = await Promise.all([
-    fetch(rainfallUrl),
-    fetch(soilMoistureUrl),
+    fetchWithRetry(rainfallUrl),
+    fetchWithRetry(soilMoistureUrl),
   ]);
 
-  if (!rainfallRes.ok) throw new Error(`Open-Meteo rainfall request failed (${rainfallRes.status})`);
+  if (!rainfallRes.ok)
+    throw new Error(`Open-Meteo rainfall request failed (${rainfallRes.status})`);
   if (!soilRes.ok) throw new Error(`Open-Meteo soil moisture request failed (${soilRes.status})`);
 
   const rainfallPayload = await rainfallRes.json();
@@ -225,7 +239,7 @@ export async function ingestLiveRainfallImpl() {
   }> = [];
 
   // Field-capacity constant for m³/m³ → % conversion
-  const FIELD_CAPACITY_M3_M3 = 0.40;
+  const FIELD_CAPACITY_M3_M3 = 0.4;
 
   zones.forEach((zone, i) => {
     // Rainfall rows (unchanged logic)
@@ -236,7 +250,7 @@ export async function ingestLiveRainfallImpl() {
           zone_id: zone.id,
           station_id: `OM-${zone.id}`,
           reading_time: `${day}T00:00:00+00:00`,
-          rainfall_mm: daily.precipitation_sum[d] ?? 0,
+          rainfall_mm: Math.max(0, Math.min(1200, daily.precipitation_sum[d] ?? 0)),
           source: "Open-Meteo observed daily precipitation",
         });
       });
@@ -306,6 +320,6 @@ export async function ingestLiveRainfallImpl() {
   };
 }
 
-export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(
-  async () => ingestLiveRainfallImpl(),
+export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(async () =>
+  ingestLiveRainfallImpl(),
 );

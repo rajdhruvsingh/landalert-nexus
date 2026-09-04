@@ -88,7 +88,7 @@ def cmd_register(args):
                 %s, 'candidate', false, %s, %s,
                 %s, %s, %s,
                 0.32, 0.22, 0.18, 0.16, 0.12,
-                42.0, 58.0, 72.0, %s, now()
+                38.0, 56.0, 74.0, %s, now()
             );
         """, (ver, artifact_path, schema_ver, prauc, r80, fp, notes))
 
@@ -96,20 +96,30 @@ def cmd_register(args):
     conn.close()
     print(f"Successfully registered '{ver}' with artifact {artifact_path}.")
 
-def cmd_gate(args):
-    ver = args.model_version
-    conn = get_db()
+def verify_model_candidate(ver: str, conn=None) -> tuple[bool, list[str]]:
+    """
+    Evaluates safety gates for a model version.
+    Returns (passed: bool, failure_reasons: list[str]).
+    """
+    close_conn = False
+    if conn is None:
+        conn = get_db()
+        close_conn = True
+
     cur = conn.cursor()
-    cur.execute("SELECT id, artifact_path, pr_auc, status FROM public.risk_model_config WHERE model_version = %s;", (ver,))
+    cur.execute(
+        "SELECT id, artifact_path, pr_auc, status FROM public.risk_model_config WHERE model_version = %s;",
+        (ver,),
+    )
     row = cur.fetchone()
     if not row:
-        print(f"ERROR: Model '{ver}' not found in registry.")
-        sys.exit(1)
+        if close_conn:
+            conn.close()
+        return False, [f"Model '{ver}' not found in registry"]
 
     rid, art_path, prauc, status = row
-    print(f"Evaluating candidate gate for model '{ver}' (id={rid}, status={status})...")
-
     failures = []
+
     # 1. Artifact must exist
     if not art_path or not os.path.isfile(art_path):
         failures.append(f"Artifact path '{art_path}' is missing or invalid on disk")
@@ -117,7 +127,9 @@ def cmd_gate(args):
         try:
             art = load_model_artifact(art_path)
             if len(art.weights) != 19:
-                failures.append(f"Artifact weights length ({len(art.weights)}) != 19 canonical features")
+                failures.append(
+                    f"Artifact weights length ({len(art.weights)}) != 19 canonical features"
+                )
         except Exception as e:
             failures.append(f"Artifact failed to load: {e}")
 
@@ -127,17 +139,30 @@ def cmd_gate(args):
     elif prauc < 0.25:
         failures.append(f"PR-AUC ({prauc:.4f}) is below chance baseline (0.25)")
 
-    if failures:
+    if not failures:
+        cur.execute(
+            "UPDATE public.risk_model_config SET status = 'validated' WHERE id = %s;",
+            (rid,),
+        )
+        conn.commit()
+
+    if close_conn:
+        conn.close()
+
+    return len(failures) == 0, failures
+
+def cmd_gate(args):
+    ver = args.model_version
+    print(f"Evaluating candidate gate for model '{ver}'...")
+    passed, failures = verify_model_candidate(ver)
+
+    if not passed:
         print(f"VALIDATION GATE FAILED for '{ver}':")
         for f in failures:
             print(f"  [REJECT] {f}")
-        conn.close()
         sys.exit(1)
     else:
         print(f"All validation criteria passed for '{ver}'. Marking status='validated'...")
-        cur.execute("UPDATE public.risk_model_config SET status = 'validated' WHERE id = %s;", (rid,))
-        conn.commit()
-        conn.close()
         print(f"Model '{ver}' is now VALIDATED and eligible for activation.")
 
 def cmd_activate(args):

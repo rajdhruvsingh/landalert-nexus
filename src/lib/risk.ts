@@ -67,11 +67,7 @@ export function intensityThresholdMmPerDay(durationDays: number): number {
  * Deterministic zone footprint derived from the zone centroid, so the GIS layer
  * renders stable village-scale polygons without shipping heavy boundary files.
  */
-export function zonePolygon(
-  id: number,
-  lat: number,
-  lng: number,
-): [number, number][] {
+export function zonePolygon(id: number, lat: number, lng: number): [number, number][] {
   const points: [number, number][] = [];
   const sides = 7;
   for (let i = 0; i < sides; i++) {

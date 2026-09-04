@@ -56,9 +56,7 @@ describe("moistureThresholdMm", () => {
     for (let i = 1; i < durations.length; i++) {
       const curr = durations[i]!;
       const prev = durations[i - 1]!;
-      expect(moistureThresholdMm(curr)).toBeGreaterThan(
-        moistureThresholdMm(prev),
-      );
+      expect(moistureThresholdMm(curr)).toBeGreaterThan(moistureThresholdMm(prev));
     }
   });
 });
@@ -105,9 +103,7 @@ describe("intensityThresholdMmPerDay (Sikkim I-D, Das et al. 2018)", () => {
     for (let i = 1; i < days.length; i++) {
       const curr = days[i]!;
       const prev = days[i - 1]!;
-      expect(intensityThresholdMmPerDay(curr)).toBeLessThan(
-        intensityThresholdMmPerDay(prev),
-      );
+      expect(intensityThresholdMmPerDay(curr)).toBeLessThan(intensityThresholdMmPerDay(prev));
     }
   });
 

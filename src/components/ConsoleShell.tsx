@@ -37,7 +37,10 @@ export function PanelSkeleton({ label = "Loading zone data…" }: { label?: stri
       <div className="label-caps animate-pulse">{label}</div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-secondary/40" />
+          <div
+            key={i}
+            className="h-24 animate-pulse rounded-lg border border-border bg-secondary/40"
+          />
         ))}
       </div>
       <div className="mt-4 h-[420px] animate-pulse rounded-lg border border-border bg-secondary/30" />

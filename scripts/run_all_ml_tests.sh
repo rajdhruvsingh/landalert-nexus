@@ -21,19 +21,23 @@ echo ">>> [2/6] Running ML Leakage & Hygiene Regression Suite..."
 python3 scripts/test_ml_leakage.py
 
 echo ""
-echo ">>> [3/6] Running Comprehensive Python ML Production Suite..."
+echo ">>> [3/7] Running Comprehensive Python ML Production Suite..."
 pytest tests/test_ml_production_suite.py -q
 
 echo ""
-echo ">>> [4/6] Running Data Pipeline Validation (Positives, GLOF, Weather)..."
+echo ">>> [4/7] Running Scenarios A-H End-to-End Production Tests..."
+pytest tests/test_ml_scenarios.py -q
+
+echo ""
+echo ">>> [5/7] Running Data Pipeline Validation (Positives, GLOF, Weather)..."
 python3 scripts/validate_data_pipeline.py
 
 echo ""
-echo ">>> [5/6] Auditing Model Registry..."
+echo ">>> [6/7] Auditing Model Registry..."
 python3 scripts/ml_registry.py list
 
 echo ""
-echo ">>> [6/6] Running Production ML & Data Quality Monitoring..."
+echo ">>> [7/7] Running Production ML & Data Quality Monitoring..."
 python3 scripts/ml_monitor.py
 
 echo ""

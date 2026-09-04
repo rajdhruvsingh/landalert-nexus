@@ -19,9 +19,7 @@ export function RiskBadge({
       )}
     >
       {level}
-      {score !== undefined && (
-        <span className="font-mono text-[0.65rem] opacity-80">{score}</span>
-      )}
+      {score !== undefined && <span className="font-mono text-[0.65rem] opacity-80">{score}</span>}
     </span>
   );
 }

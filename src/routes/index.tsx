@@ -58,15 +58,11 @@ function Dashboard() {
   );
 
   const zones = useMemo(
-    () =>
-      stateFilter === "All"
-        ? data.zones
-        : data.zones.filter((z) => z.state === stateFilter),
+    () => (stateFilter === "All" ? data.zones : data.zones.filter((z) => z.state === stateFilter)),
     [data.zones, stateFilter],
   );
 
-  const selected: ZoneRow | null =
-    data.zones.find((z) => z.id === selectedId) ?? zones[0] ?? null;
+  const selected: ZoneRow | null = data.zones.find((z) => z.id === selectedId) ?? zones[0] ?? null;
 
   const counts = RISK_LEVELS.map((lvl) => ({
     lvl,
@@ -109,9 +105,8 @@ function Dashboard() {
             Landslide Early Warning Console
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Rainfall, soil-moisture and terrain fused with published NE-Himalaya
-            threshold equations. Every risk level carries the reasoning that produced
-            it.
+            Rainfall, soil-moisture and terrain fused with published NE-Himalaya threshold
+            equations. Every risk level carries the reasoning that produced it.
           </p>
           {data.activeModel && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -119,7 +114,8 @@ function Dashboard() {
                 Active Model: {data.activeModel.model_version}
               </span>
               <span className="rounded border border-border px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
-                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%: {data.activeModel.recall_at_80_precision ?? "N/A"}
+                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%:{" "}
+                {data.activeModel.recall_at_80_precision ?? "N/A"}
               </span>
               <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400">
                 Data-Limited Validation (N=8 real landslides)
@@ -139,12 +135,7 @@ function Dashboard() {
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {counts.map((c) => (
-          <Stat
-            key={c.lvl}
-            label={`${c.lvl} zones`}
-            value={c.n}
-            tone={riskColor(c.lvl)}
-          />
+          <Stat key={c.lvl} label={`${c.lvl} zones`} value={c.n} tone={riskColor(c.lvl)} />
         ))}
         <Stat
           label="Population exposed"
@@ -174,11 +165,7 @@ function Dashboard() {
             </div>
           </div>
           <div className="h-[520px]">
-            <MapCanvas
-              zones={zones}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelectedId}
-            />
+            <MapCanvas zones={zones} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </div>
           <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2">
             {RISK_LEVELS.map((l) => (
@@ -206,10 +193,7 @@ function Dashboard() {
                     {selected.mean_slope_deg}° mean slope
                   </p>
                 </div>
-                <RiskBadge
-                  level={selected.current_risk_level}
-                  score={selected.risk_score}
-                />
+                <RiskBadge level={selected.current_risk_level} score={selected.risk_score} />
               </div>
               <div className="mt-3">
                 <ExplanationCard explanation={selected.explanation} />
@@ -230,9 +214,7 @@ function Dashboard() {
           )}
 
           <div className="panel">
-            <div className="border-b border-border px-4 py-3 label-caps">
-              Response priority
-            </div>
+            <div className="border-b border-border px-4 py-3 label-caps">Response priority</div>
             <div className="max-h-[300px] overflow-y-auto">
               {zones.map((z) => (
                 <button
@@ -291,9 +273,7 @@ function Dashboard() {
                 );
               })}
             {data.roads.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">
-                No road segments mapped yet.
-              </p>
+              <p className="p-4 text-sm text-muted-foreground">No road segments mapped yet.</p>
             )}
           </div>
         </div>

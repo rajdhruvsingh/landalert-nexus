@@ -10,7 +10,10 @@ const overviewQuery = queryOptions({
   queryFn: () => getOverview(),
 });
 
-const TEMPLATES: Record<string, { label: string; render: (zone: string, level: string) => string }> = {
+const TEMPLATES: Record<
+  string,
+  { label: string; render: (zone: string, level: string) => string }
+> = {
   en: {
     label: "English",
     render: (zone, level) =>
@@ -69,13 +72,11 @@ function AlertsPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-8">
       <div className="label-caps">Dispatch log</div>
-      <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">
-        Alert Console
-      </h1>
+      <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">Alert Console</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Alerts are raised automatically when a zone crosses into High or Severe. Each
-        one carries the threshold arithmetic that triggered it, and ships over SMS and
-        push in the recipient's preferred language.
+        Alerts are raised automatically when a zone crosses into High or Severe. Each one carries
+        the threshold arithmetic that triggered it, and ships over SMS and push in the recipient's
+        preferred language.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -126,8 +127,7 @@ function AlertsPage() {
                   </Link>
                 </div>
                 <span className="font-mono text-[0.7rem] text-muted-foreground">
-                  {new Date(a.dispatched_at).toLocaleString()} · {a.channel} ·{" "}
-                  {a.dispatched_by}
+                  {new Date(a.dispatched_at).toLocaleString()} · {a.channel} · {a.dispatched_by}
                 </span>
               </div>
 
@@ -140,9 +140,7 @@ function AlertsPage() {
                 </div>
                 <div className="rounded border border-primary/35 bg-primary/5 p-3">
                   <div className="label-caps text-primary">Why this fired</div>
-                  <p className="mt-2 font-mono text-[0.75rem] leading-relaxed">
-                    {a.explanation}
-                  </p>
+                  <p className="mt-2 font-mono text-[0.75rem] leading-relaxed">{a.explanation}</p>
                 </div>
               </div>
             </article>

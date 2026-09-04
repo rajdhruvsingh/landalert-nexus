@@ -16,11 +16,7 @@ import { getZoneDetail } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
 import { RiskBadge, RoadBadge, Stat, ExplanationCard } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
-import {
-  intensityThresholdMmPerDay,
-  moistureThresholdMm,
-  riskColor,
-} from "@/lib/risk";
+import { intensityThresholdMmPerDay, moistureThresholdMm, riskColor } from "@/lib/risk";
 
 const zoneQuery = (id: number) =>
   queryOptions({
@@ -86,12 +82,10 @@ function ZonePage() {
       <header className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="label-caps">Zone brief</div>
-          <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">
-            {zone.zone_name}
-          </h1>
+          <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">{zone.zone_name}</h1>
           <p className="text-sm text-muted-foreground">
-            {zone.district} district · {zone.state} ·{" "}
-            {zone.population.toLocaleString("en-IN")} residents
+            {zone.district} district · {zone.state} · {zone.population.toLocaleString("en-IN")}{" "}
+            residents
           </p>
           {data.activeModel && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -99,7 +93,8 @@ function ZonePage() {
                 Model: {data.activeModel.model_version}
               </span>
               <span className="rounded border border-border px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
-                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%: {data.activeModel.recall_at_80_precision ?? "N/A"}
+                PR-AUC: {data.activeModel.pr_auc ?? "N/A"} · Recall@80%:{" "}
+                {data.activeModel.recall_at_80_precision ?? "N/A"}
               </span>
               <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400">
                 Data-Limited (N=8 positives)
@@ -127,7 +122,11 @@ function ZonePage() {
           hint={`Moisture threshold ${eThr.toFixed(0)} mm`}
           tone={r30 > eThr ? riskColor("High") : undefined}
         />
-        <Stat label="Mean slope" value={`${zone.mean_slope_deg}°`} hint="Slope source in zone data; see docs/DATA_SOURCES.md" />
+        <Stat
+          label="Mean slope"
+          value={`${zone.mean_slope_deg}°`}
+          hint="Slope source in zone data; see docs/DATA_SOURCES.md"
+        />
         <Stat
           label="Historical slides"
           value={data.slides.length}
@@ -229,17 +228,14 @@ function ZonePage() {
           <ExplanationCard explanation={zone.explanation} />
 
           <div className="panel">
-            <div className="border-b border-border px-4 py-3 label-caps">
-              Road segments
-            </div>
+            <div className="border-b border-border px-4 py-3 label-caps">Road segments</div>
             {data.roads.map((r) => (
               <div
                 key={r.id}
                 className="flex items-center justify-between border-b border-border/60 px-4 py-2 text-sm last:border-0"
               >
                 <span>
-                  <span className="font-mono text-primary">{r.road_name}</span>{" "}
-                  {r.segment_label}
+                  <span className="font-mono text-primary">{r.road_name}</span> {r.segment_label}
                   <span className="block text-[0.68rem] text-muted-foreground">
                     {r.length_km} km
                   </span>
@@ -275,16 +271,17 @@ function ZonePage() {
                 className="flex items-center justify-between border-b border-border/60 px-4 py-2 text-sm"
               >
                 <span className="font-mono text-xs">{s.event_date}</span>
-                <span className="max-w-[180px] truncate text-[0.68rem] text-amber-400/80" title={s.source}>
+                <span
+                  className="max-w-[180px] truncate text-[0.68rem] text-amber-400/80"
+                  title={s.source}
+                >
                   ⚠ synthetic
                 </span>
                 <RiskBadge level={s.severity} />
               </div>
             ))}
             {data.slides.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">
-                No recorded events for this zone.
-              </p>
+              <p className="p-4 text-sm text-muted-foreground">No recorded events for this zone.</p>
             )}
           </div>
         </div>
@@ -306,9 +303,7 @@ function ZonePage() {
               </div>
             ))}
             {data.alerts.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No alerts dispatched for this zone.
-              </p>
+              <p className="text-sm text-muted-foreground">No alerts dispatched for this zone.</p>
             )}
           </div>
         </div>
@@ -317,7 +312,9 @@ function ZonePage() {
   );
 }
 
-function aggregateDaily(readings: { reading_time: string; rainfall_mm: number; soil_moisture_pct: number | null }[]) {
+function aggregateDaily(
+  readings: { reading_time: string; rainfall_mm: number; soil_moisture_pct: number | null }[],
+) {
   const map = new Map<string, { rain: number; moisture: number; n: number }>();
   for (const r of readings) {
     const day = new Date(r.reading_time).toISOString().slice(5, 10);

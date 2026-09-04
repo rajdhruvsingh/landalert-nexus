@@ -75,7 +75,7 @@ async function fetchElevations(points: { lat: number; lng: number }[]): Promise<
       console.error(`OpenTopoData error ${res.status} for request: ${url}`);
       return points.map(() => null);
     }
-    const json = await res.json() as { results: { elevation: number | null }[] };
+    const json = (await res.json()) as { results: { elevation: number | null }[] };
     return json.results.map((r) => r.elevation);
   }
   return points.map(() => null);
@@ -95,29 +95,137 @@ function computeSlope(
   const dzdx = (zEast - zWest) / (2 * SRTM_PIXEL_M);
   const dzdy = (zNorth - zSouth) / (2 * SRTM_PIXEL_M);
   const slopeRad = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy));
-  return Math.round((slopeRad * 180) / Math.PI * 10) / 10;
+  return Math.round(((slopeRad * 180) / Math.PI) * 10) / 10;
 }
 
 async function main() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   const FALLBACK_ZONES: ZoneRow[] = [
-    { id: 1, zone_name: "Tamenglong", centroid_lat: 24.98, centroid_lng: 93.5, mean_slope_deg: 31.4, slope_source: "NDMA NER Composite Risk Atlas 2021" },
-    { id: 2, zone_name: "Noney", centroid_lat: 24.83, centroid_lng: 93.66, mean_slope_deg: 38.2, slope_source: "GSI District Hazard Zonation Report, Noney (2017)" },
-    { id: 3, zone_name: "Aizawl East", centroid_lat: 23.73, centroid_lng: 92.72, mean_slope_deg: 42.6, slope_source: "Pachuau & Lallianthanga (2017)" },
-    { id: 4, zone_name: "Lunglei Slopes", centroid_lat: 22.89, centroid_lng: 92.79, mean_slope_deg: 36.1, slope_source: "NDMA NER Composite Risk Atlas 2021" },
-    { id: 5, zone_name: "Shillong-Sohra Escarpment", centroid_lat: 25.3, centroid_lng: 91.72, mean_slope_deg: 45.8, slope_source: "GSI Meghalaya Hazard Zonation Report (2015)" },
-    { id: 6, zone_name: "Jaintia Hills Ridge", centroid_lat: 25.45, centroid_lng: 92.36, mean_slope_deg: 33.7, slope_source: "Estimated from regional terrain class" },
-    { id: 7, zone_name: "Kohima Ridge", centroid_lat: 25.67, centroid_lng: 94.11, mean_slope_deg: 40.3, slope_source: "GSI Nagaland Hazard Zonation Report (2014)" },
-    { id: 8, zone_name: "Dimapur Foothills", centroid_lat: 25.9, centroid_lng: 93.73, mean_slope_deg: 21.5, slope_source: "Estimated from regional terrain class" },
-    { id: 9, zone_name: "Papum Pare", centroid_lat: 27.1, centroid_lng: 93.62, mean_slope_deg: 29.9, slope_source: "Estimated from regional terrain class" },
-    { id: 10, zone_name: "Dibang Valley", centroid_lat: 28.25, centroid_lng: 95.9, mean_slope_deg: 47.2, slope_source: "GSI Arunachal Pradesh Zonation Report (2018)" },
-    { id: 11, zone_name: "Gangtok-Singtam Corridor", centroid_lat: 27.33, centroid_lng: 88.61, mean_slope_deg: 44.1, slope_source: "Das et al. (2018) Nat Hazards Earth Syst Sci 18:2759-2775" },
-    { id: 12, zone_name: "Mangan North", centroid_lat: 27.51, centroid_lng: 88.53, mean_slope_deg: 48.6, slope_source: "Das et al. (2018) Nat Hazards Earth Syst Sci 18:2759-2775" },
-    { id: 13, zone_name: "Haflong Hills", centroid_lat: 25.17, centroid_lng: 93.02, mean_slope_deg: 34.8, slope_source: "Boro et al. (2021) Landslides 18(4):1533-1547" },
-    { id: 14, zone_name: "Karbi Anglong West", centroid_lat: 26.05, centroid_lng: 93.1, mean_slope_deg: 24.6, slope_source: "Estimated from regional terrain class" },
-    { id: 15, zone_name: "Ambassa Hills", centroid_lat: 23.93, centroid_lng: 91.85, mean_slope_deg: 19.8, slope_source: "Estimated from regional terrain class" },
+    {
+      id: 1,
+      zone_name: "Tamenglong",
+      centroid_lat: 24.98,
+      centroid_lng: 93.5,
+      mean_slope_deg: 31.4,
+      slope_source: "NDMA NER Composite Risk Atlas 2021",
+    },
+    {
+      id: 2,
+      zone_name: "Noney",
+      centroid_lat: 24.83,
+      centroid_lng: 93.66,
+      mean_slope_deg: 38.2,
+      slope_source: "GSI District Hazard Zonation Report, Noney (2017)",
+    },
+    {
+      id: 3,
+      zone_name: "Aizawl East",
+      centroid_lat: 23.73,
+      centroid_lng: 92.72,
+      mean_slope_deg: 42.6,
+      slope_source: "Pachuau & Lallianthanga (2017)",
+    },
+    {
+      id: 4,
+      zone_name: "Lunglei Slopes",
+      centroid_lat: 22.89,
+      centroid_lng: 92.79,
+      mean_slope_deg: 36.1,
+      slope_source: "NDMA NER Composite Risk Atlas 2021",
+    },
+    {
+      id: 5,
+      zone_name: "Shillong-Sohra Escarpment",
+      centroid_lat: 25.3,
+      centroid_lng: 91.72,
+      mean_slope_deg: 45.8,
+      slope_source: "GSI Meghalaya Hazard Zonation Report (2015)",
+    },
+    {
+      id: 6,
+      zone_name: "Jaintia Hills Ridge",
+      centroid_lat: 25.45,
+      centroid_lng: 92.36,
+      mean_slope_deg: 33.7,
+      slope_source: "Estimated from regional terrain class",
+    },
+    {
+      id: 7,
+      zone_name: "Kohima Ridge",
+      centroid_lat: 25.67,
+      centroid_lng: 94.11,
+      mean_slope_deg: 40.3,
+      slope_source: "GSI Nagaland Hazard Zonation Report (2014)",
+    },
+    {
+      id: 8,
+      zone_name: "Dimapur Foothills",
+      centroid_lat: 25.9,
+      centroid_lng: 93.73,
+      mean_slope_deg: 21.5,
+      slope_source: "Estimated from regional terrain class",
+    },
+    {
+      id: 9,
+      zone_name: "Papum Pare",
+      centroid_lat: 27.1,
+      centroid_lng: 93.62,
+      mean_slope_deg: 29.9,
+      slope_source: "Estimated from regional terrain class",
+    },
+    {
+      id: 10,
+      zone_name: "Dibang Valley",
+      centroid_lat: 28.25,
+      centroid_lng: 95.9,
+      mean_slope_deg: 47.2,
+      slope_source: "GSI Arunachal Pradesh Zonation Report (2018)",
+    },
+    {
+      id: 11,
+      zone_name: "Gangtok-Singtam Corridor",
+      centroid_lat: 27.33,
+      centroid_lng: 88.61,
+      mean_slope_deg: 44.1,
+      slope_source: "Das et al. (2018) Nat Hazards Earth Syst Sci 18:2759-2775",
+    },
+    {
+      id: 12,
+      zone_name: "Mangan North",
+      centroid_lat: 27.51,
+      centroid_lng: 88.53,
+      mean_slope_deg: 48.6,
+      slope_source: "Das et al. (2018) Nat Hazards Earth Syst Sci 18:2759-2775",
+    },
+    {
+      id: 13,
+      zone_name: "Haflong Hills",
+      centroid_lat: 25.17,
+      centroid_lng: 93.02,
+      mean_slope_deg: 34.8,
+      slope_source: "Boro et al. (2021) Landslides 18(4):1533-1547",
+    },
+    {
+      id: 14,
+      zone_name: "Karbi Anglong West",
+      centroid_lat: 26.05,
+      centroid_lng: 93.1,
+      mean_slope_deg: 24.6,
+      slope_source: "Estimated from regional terrain class",
+    },
+    {
+      id: 15,
+      zone_name: "Ambassa Hills",
+      centroid_lat: 23.93,
+      centroid_lng: 91.85,
+      mean_slope_deg: 19.8,
+      slope_source: "Estimated from regional terrain class",
+    },
   ];
 
   let zones: ZoneRow[] = [];
@@ -172,7 +280,9 @@ async function main() {
     const computedSlope = computeSlope(zC, zN, zS, zE, zW);
 
     if (computedSlope == null) {
-      console.warn(`Zone ${zone.id} (${zone.zone_name}): Could not compute slope (null elevation). Skipping.`);
+      console.warn(
+        `Zone ${zone.id} (${zone.zone_name}): Could not compute slope (null elevation). Skipping.`,
+      );
       continue;
     }
 
@@ -182,7 +292,7 @@ async function main() {
     if (PEER_REVIEWED_ZONES.has(zone.id) && diff < 5) {
       console.log(
         `Zone ${zone.id} (${zone.zone_name}): peer-reviewed slope ${existing}°, ` +
-        `computed ${computedSlope}° (diff ${diff.toFixed(1)}° < 5° threshold) — SKIPPING.`
+          `computed ${computedSlope}° (diff ${diff.toFixed(1)}° < 5° threshold) — SKIPPING.`,
       );
       continue;
     }
@@ -195,8 +305,8 @@ async function main() {
 
     console.log(
       `Zone ${zone.id} (${zone.zone_name}): ` +
-      `prev=${existing}°, computed=${computedSlope}° (diff ${diff.toFixed(1)}°) ` +
-      `— ${DRY_RUN ? "would update" : "updating"}`
+        `prev=${existing}°, computed=${computedSlope}° (diff ${diff.toFixed(1)}°) ` +
+        `— ${DRY_RUN ? "would update" : "updating"}`,
     );
 
     sqlLines.push(
@@ -204,7 +314,7 @@ async function main() {
       `  SET mean_slope_deg = ${computedSlope},`,
       `      slope_source = '${source.replace(/'/g, "''")}'`,
       `WHERE id = ${zone.id};`,
-      ``
+      ``,
     );
 
     if (!DRY_RUN) {
@@ -233,7 +343,9 @@ async function main() {
     console.log("\nRun with --apply to write to Supabase.");
   } else {
     console.log("\n✓ All applicable zones updated in Supabase.");
-    console.log("Run: SELECT id, zone_name, mean_slope_deg, slope_source FROM risk_zones ORDER BY id;");
+    console.log(
+      "Run: SELECT id, zone_name, mean_slope_deg, slope_source FROM risk_zones ORDER BY id;",
+    );
   }
 }
 

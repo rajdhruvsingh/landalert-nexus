@@ -297,12 +297,12 @@ def run_retraining(version: str = None, force: bool = False, dry_run: bool = Fal
         # Step 8: Register Candidate into Database
         cur.execute("""
             INSERT INTO public.risk_model_config (
-                model_version, w_intensity, w_antecedent, w_soil_moisture,
-                w_slope, w_historical, cutoff_high, cutoff_severe,
+                model_version, weight_intensity, weight_antecedent, weight_soil_moisture,
+                weight_slope, weight_history, cutoff_moderate, cutoff_high, cutoff_severe,
                 pr_auc, recall_at_80_precision, notes, is_active,
-                artifact_path, status, dataset_fingerprint, feature_schema_version
+                artifact_path, status, dataset_fingerprint, feature_schema_version, trained_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false, %s, 'candidate', %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false, %s, 'candidate', %s, %s, now()
             )
             ON CONFLICT (model_version) DO UPDATE SET
                 pr_auc = EXCLUDED.pr_auc,
@@ -312,8 +312,8 @@ def run_retraining(version: str = None, force: bool = False, dry_run: bool = Fal
                 status = 'candidate';
         """, (
             cand_version,
-            0.30, 0.25, 0.15, 0.20, 0.10, # operational engineering weights
-            40.0, 70.0,
+            0.32, 0.22, 0.18, 0.16, 0.12, # operational engineering weights
+            38.0, 56.0, 74.0,             # standard operational cutoffs
             selected_prauc, selected_rec80,
             f"Retrained candidate evaluated via Spatial GroupKFold. Dataset: {fingerprint[:16]}",
             str(artifact_path.relative_to(PROJECT_ROOT)),
