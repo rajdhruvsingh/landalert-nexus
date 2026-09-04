@@ -11,7 +11,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run --config vitest.config.ts",
-    "test:watch": "vitest --config vitest.config.ts"
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:ml-leakage": "python3 scripts/test_ml_leakage.py",
+    "test:ml-audit": "python3 scripts/ml_audit_pipeline.py",
+    "test:all": "vitest run --config vitest.config.ts && python3 scripts/test_ml_leakage.py"
   },
   "overrides": {
     "rolldown": "1.2.1"
