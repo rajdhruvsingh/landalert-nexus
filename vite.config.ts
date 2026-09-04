@@ -4,6 +4,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
+import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig(({ command, mode }) => {
@@ -55,6 +56,63 @@ export default defineConfig(({ command, mode }) => {
             }),
           ]
         : []),
+      VitePWA({
+        registerType: "autoUpdate",
+        injectRegister: false,
+        strategies: "generateSW",
+        srcDir: "public",
+        filename: "sw.js",
+        manifest: false,
+        workbox: {
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,json,woff2}"],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/.*tile\.openstreetmap\.org\/.*$/,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "osm-map-tiles",
+                expiration: {
+                  maxEntries: 500,
+                  maxAgeSeconds: 60 * 60 * 24 * 7,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /\/api\/gis\/zones\.geojson/,
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "zone-geojson-cache",
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 3,
+                },
+                networkTimeoutSeconds: 3,
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /\/api\/sync\/package/,
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "offline-package-cache",
+                expiration: {
+                  maxEntries: 5,
+                  maxAgeSeconds: 60 * 60 * 24,
+                },
+                networkTimeoutSeconds: 3,
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+          ],
+        },
+      }),
       react(),
     ],
   };

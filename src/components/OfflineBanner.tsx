@@ -51,16 +51,14 @@ export function OfflineBanner() {
               !isOnline ? "bg-amber-400 animate-pulse" : "bg-blue-400"
             }`}
           />
-          <span className="font-semibold uppercase tracking-wider">
-            {!isOnline ? "Offline Mode Active" : "Offline Sync Worker"}
+          <span className={`font-semibold uppercase tracking-wider ${!isOnline ? "text-amber-400" : ""}`}>
+            {!isOnline ? "⚠ Offline Mode — Cached Risk Data" : "Offline Sync Worker"}
           </span>
-          <span className="text-muted-foreground">
+          <span className={!isOnline ? "text-amber-300 font-medium" : "text-muted-foreground"}>
             {!isOnline
-              ? cachedStatus?.package
-                ? `Using local cache (${cachedStatus.ageHours}h old)${
-                    cachedStatus.isExpired ? " · ⚠ EXPIRED (reconnect for fresh predictions)" : ""
-                  }`
-                : "No offline bundle cached. Please connect to internet."
+              ? cachedStatus?.cachedAt
+                ? `Last updated at ${new Date(cachedStatus.cachedAt).toLocaleTimeString()} (${cachedStatus.ageHours}h ago), may be outdated — live network recompute needed.`
+                : "Last updated at unknown timestamp, may be outdated — live network recompute needed."
               : bannerNotice || `${queueCount} pending observation(s) in local queue.`}
           </span>
         </div>
