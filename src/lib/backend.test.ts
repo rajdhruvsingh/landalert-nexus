@@ -592,3 +592,130 @@ describe("Official Government Authentication & Observation Trust", () => {
     expect(noJustification.reason).toContain("operational justification");
   });
 });
+
+describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
+  it("derives user authorization states correctly across all roles and domain levels", async () => {
+    const { getUserAuthorizationState } = await import("./auth-domains");
+
+    // 1. Anonymous
+    expect(getUserAuthorizationState(null).badge).toBe("Anonymous Observer");
+
+    // 2. Standard Google/public user
+    const publicUser = getUserAuthorizationState({
+      email: "citizen@gmail.com",
+      user_metadata: { role: "PUBLIC_USER" },
+    });
+    expect(publicUser.badge).toBe("Authenticated — Standard User");
+    expect(publicUser.role).toBe("PUBLIC_USER");
+    expect(publicUser.tone).toBe("neutral");
+
+    // 3. Government-domain account awaiting verification
+    const pendingOfficial = getUserAuthorizationState({
+      email: "officer@gsi.gov.in",
+      user_metadata: { role: "PUBLIC_USER" },
+    });
+    expect(pendingOfficial.badge).toBe("Official account — Verification pending");
+    expect(pendingOfficial.role).toBe("PUBLIC_USER");
+    expect(pendingOfficial.status).toBe("PENDING_OFFICIAL_VERIFICATION");
+    expect(pendingOfficial.tone).toBe("warning");
+
+    // 4. Approved official
+    const verifiedOfficial = getUserAuthorizationState({
+      email: "director@assam.gov.in",
+      user_metadata: { role: "VERIFIED_OFFICIAL", verification_status: "OFFICIAL_VERIFIED" },
+    });
+    expect(verifiedOfficial.badge).toBe("Verified Official");
+    expect(verifiedOfficial.role).toBe("VERIFIED_OFFICIAL");
+    expect(verifiedOfficial.tone).toBe("success");
+
+    // 5. Emergency Dispatcher
+    const dispatcher = getUserAuthorizationState({
+      email: "control@ndma.gov.in",
+      user_metadata: { role: "DISPATCHER", dispatch_authorized: true },
+    });
+    expect(dispatcher.badge).toBe("Emergency Dispatcher");
+    expect(dispatcher.role).toBe("DISPATCHER");
+    expect(dispatcher.tone).toBe("primary");
+
+    // 6. System Administrator
+    const admin = getUserAuthorizationState({
+      email: "sysadmin@nic.in",
+      user_metadata: { role: "ADMIN" },
+    });
+    expect(admin.badge).toBe("System Administrator");
+    expect(admin.role).toBe("ADMIN");
+  });
+
+  it("verifies Leaflet map container has CSS isolation to prevent modal overlap", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const cssPath = path.resolve(process.cwd(), "src/styles.css");
+    const css = fs.readFileSync(cssPath, "utf-8");
+
+    expect(css).toContain(".leaflet-container");
+    expect(css).toContain("isolation: isolate");
+    expect(css).toContain("z-index: 1");
+  });
+
+  it("verifies Dialog components use higher z-index (z-[100]) than map", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dialogPath = path.resolve(process.cwd(), "src/components/ui/dialog.tsx");
+    const dialog = fs.readFileSync(dialogPath, "utf-8");
+
+    expect(dialog).toContain("z-[100]");
+  });
+
+  it("verifies SelectContent uses z-[150] so dropdowns render above dialogs", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const selectPath = path.resolve(process.cwd(), "src/components/ui/select.tsx");
+    const select = fs.readFileSync(selectPath, "utf-8");
+
+    expect(select).toContain("z-[150]");
+  });
+
+  it("verifies production dashboard contains no simulation button or fake trigger", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const indexPath = path.resolve(process.cwd(), "src/routes/index.tsx");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    expect(indexContent).not.toContain("SIMULATE 240MM SPIKE");
+    expect(indexContent).not.toContain("simulateRainfallSpike");
+    expect(indexContent).not.toContain("runSpike");
+  });
+
+  it("verifies zero Lovable branding or references exist across source and public files", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+
+    function checkDir(dir: string) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== "node_modules" && entry.name !== ".git" && entry.name !== ".output" && entry.name !== "dist") {
+            checkDir(fullPath);
+          }
+        } else if (
+          entry.isFile() &&
+          entry.name !== "backend.test.ts" &&
+          (fullPath.endsWith(".ts") ||
+            fullPath.endsWith(".tsx") ||
+            fullPath.endsWith(".html") ||
+            fullPath.endsWith(".css") ||
+            fullPath.endsWith(".json") ||
+            fullPath.endsWith(".md"))
+        ) {
+          const content = fs.readFileSync(fullPath, "utf-8");
+          expect(content.toLowerCase()).not.toContain("lovable");
+        }
+      }
+    }
+
+    checkDir(path.resolve(process.cwd(), "src"));
+    checkDir(path.resolve(process.cwd(), "public"));
+  });
+});
+

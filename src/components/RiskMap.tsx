@@ -41,7 +41,8 @@ export default function RiskMap({
       center={center}
       zoom={zoom}
       scrollWheelZoom
-      style={{ height: "100%", width: "100%", minHeight: "460px" }}
+      className="isolate w-full h-full"
+      style={{ height: "100%", width: "100%", zIndex: 1 }}
     >
       <MapResizeHandler />
       <TileLayer

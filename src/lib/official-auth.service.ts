@@ -19,95 +19,19 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 // ── 1. Centralized Institutional Domain Allowlist ───────────────────────────
 
-export interface InstitutionalDomain {
-  domain: string;
-  institutionName: string;
-  category: "central_geological" | "central_space" | "central_disaster" | "state_disaster" | "state_gov";
-  region: string;
-}
-
-export const TRUSTED_INSTITUTIONAL_DOMAINS: Record<string, InstitutionalDomain> = {
-  "gsi.gov.in": {
-    domain: "gsi.gov.in",
-    institutionName: "Geological Survey of India (GSI)",
-    category: "central_geological",
-    region: "National / NER",
-  },
-  "nesac.gov.in": {
-    domain: "nesac.gov.in",
-    institutionName: "North Eastern Space Applications Centre (NESAC / ISRO)",
-    category: "central_space",
-    region: "North Eastern Region",
-  },
-  "ndma.gov.in": {
-    domain: "ndma.gov.in",
-    institutionName: "National Disaster Management Authority (NDMA)",
-    category: "central_disaster",
-    region: "National",
-  },
-  "nic.in": {
-    domain: "nic.in",
-    institutionName: "National Informatics Centre (Govt. of India)",
-    category: "central_disaster",
-    region: "National",
-  },
-  // North-Eastern State Government Disaster Authorities & Portals
-  "assam.gov.in": {
-    domain: "assam.gov.in",
-    institutionName: "Assam State Disaster Management Authority (ASDMA)",
-    category: "state_disaster",
-    region: "Assam",
-  },
-  "mizoram.gov.in": {
-    domain: "mizoram.gov.in",
-    institutionName: "Disaster Management & Rehabilitation, Govt. of Mizoram",
-    category: "state_disaster",
-    region: "Mizoram",
-  },
-  "meghalaya.gov.in": {
-    domain: "meghalaya.gov.in",
-    institutionName: "Meghalaya State Disaster Management Authority (MSDMA)",
-    category: "state_disaster",
-    region: "Meghalaya",
-  },
-  "nagaland.gov.in": {
-    domain: "nagaland.gov.in",
-    institutionName: "Nagaland State Disaster Management Authority (NSDMA)",
-    category: "state_disaster",
-    region: "Nagaland",
-  },
-  "manipur.gov.in": {
-    domain: "manipur.gov.in",
-    institutionName: "Relief & Disaster Management, Govt. of Manipur",
-    category: "state_disaster",
-    region: "Manipur",
-  },
-  "tripura.gov.in": {
-    domain: "tripura.gov.in",
-    institutionName: "Tripura State Disaster Management Authority (TDMA)",
-    category: "state_disaster",
-    region: "Tripura",
-  },
-  "arunachal.gov.in": {
-    domain: "arunachal.gov.in",
-    institutionName: "Disaster Management Dept., Govt. of Arunachal Pradesh",
-    category: "state_disaster",
-    region: "Arunachal Pradesh",
-  },
-  "sikkim.gov.in": {
-    domain: "sikkim.gov.in",
-    institutionName: "Sikkim State Disaster Management Authority (SSDMA)",
-    category: "state_disaster",
-    region: "Sikkim",
-  },
-};
-
-export type AppUserRole = "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
-export type OfficialVerificationStatus =
-  | "UNVERIFIED"
-  | "PENDING_OFFICIAL_VERIFICATION"
-  | "OFFICIAL_VERIFIED"
-  | "REJECTED";
+export {
+  type InstitutionalDomain,
+  type AppUserRole,
+  type OfficialVerificationStatus,
+  TRUSTED_INSTITUTIONAL_DOMAINS,
+  evaluateEmailDomain,
+  getUserAuthorizationState,
+} from "./auth-domains";
+import {
+  type AppUserRole,
+  type OfficialVerificationStatus,
+  evaluateEmailDomain,
+} from "./auth-domains";
 
 export interface UserProfileRecord {
   id: string;
@@ -124,44 +48,6 @@ export interface UserProfileRecord {
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
-}
-
-/**
- * Validates whether an email belongs to an institutional government/scientific domain.
- */
-export function evaluateEmailDomain(email: string): {
-  isInstitutional: boolean;
-  institutionInfo?: InstitutionalDomain | undefined;
-  suggestedStatus: OfficialVerificationStatus;
-  suggestedRole: AppUserRole;
-} {
-  const parts = email.toLowerCase().trim().split("@");
-  if (parts.length !== 2) {
-    return {
-      isInstitutional: false,
-      suggestedStatus: "UNVERIFIED",
-      suggestedRole: "PUBLIC_USER",
-    };
-  }
-
-  const domain = parts[1]!;
-  // Check exact domain or subdomains (e.g. dm.assam.gov.in)
-  for (const [key, info] of Object.entries(TRUSTED_INSTITUTIONAL_DOMAINS)) {
-    if (domain === key || domain.endsWith(`.${key}`)) {
-      return {
-        isInstitutional: true,
-        institutionInfo: info,
-        suggestedStatus: "PENDING_OFFICIAL_VERIFICATION",
-        suggestedRole: "PUBLIC_USER", // Remains public until explicitly approved
-      };
-    }
-  }
-
-  return {
-    isInstitutional: false,
-    suggestedStatus: "UNVERIFIED",
-    suggestedRole: "PUBLIC_USER",
-  };
 }
 
 // In-memory profiles and audit store fallback for environments where Supabase table is hydrating

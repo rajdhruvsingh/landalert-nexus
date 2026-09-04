@@ -149,6 +149,9 @@
 .leaflet-container {
   background: oklch(0.16 0.02 250);
   font-family: var(--font-sans);
+  isolation: isolate;
+  position: relative;
+  z-index: 1;
 }
 
 .leaflet-tile-pane {

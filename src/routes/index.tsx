@@ -187,8 +187,8 @@ function Dashboard() {
         />
       </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] items-stretch">
-        <div className="panel overflow-hidden flex flex-col h-full">
+      <section className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] items-start">
+        <div className="panel overflow-hidden flex flex-col">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 shrink-0">
             <div className="label-caps">Risk heatmap</div>
             <div className="flex flex-wrap gap-1">
@@ -207,7 +207,7 @@ function Dashboard() {
               ))}
             </div>
           </div>
-          <div className="w-full flex-1 min-h-[460px] relative">
+          <div className="w-full h-[520px] md:h-[580px] relative isolate z-0">
             <MapCanvas zones={zones} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </div>
           <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2 shrink-0 bg-surface/40">
