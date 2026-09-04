@@ -114,3 +114,71 @@ export const recomputeAll = createServerFn({ method: "POST" }).handler(async () 
   if (error) throw new Error(error.message);
   return { ok: true };
 });
+
+/**
+ * Live observed-rainfall ingestion. Pulls daily precipitation totals for every
+ * zone centroid from the Open-Meteo reanalysis/forecast API (keyless, gridded
+ * IMD-comparable data), upserts them as station readings and re-runs the
+ * threshold engine. Safe to run repeatedly: the unique index on
+ * (zone_id, station_id, reading_time) makes each day idempotent.
+ */
+export async function ingestLiveRainfallImpl() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: zones, error: zErr } = await supabaseAdmin
+    .from("risk_zones")
+    .select("id, centroid_lat, centroid_lng")
+    .order("id");
+  if (zErr) throw new Error(zErr.message);
+  if (!zones?.length) return { zones: 0, readings: 0 };
+
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${zones.map((z) => z.centroid_lat).join(",")}` +
+    `&longitude=${zones.map((z) => z.centroid_lng).join(",")}` +
+    "&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=UTC";
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Open-Meteo request failed (${res.status})`);
+  const payload = await res.json();
+  const series: Array<{ daily?: { time: string[]; precipitation_sum: (number | null)[] } }> =
+    Array.isArray(payload) ? payload : [payload];
+
+  const rows: Array<{
+    zone_id: number;
+    station_id: string;
+    reading_time: string;
+    rainfall_mm: number;
+    source: string;
+  }> = [];
+
+  zones.forEach((zone, i) => {
+    const daily = series[i]?.daily;
+    if (!daily) return;
+    daily.time.forEach((day, d) => {
+      rows.push({
+        zone_id: zone.id,
+        station_id: `OM-${zone.id}`,
+        reading_time: `${day}T00:00:00+00:00`,
+        rainfall_mm: daily.precipitation_sum[d] ?? 0,
+        source: "Open-Meteo observed daily precipitation",
+      });
+    });
+  });
+
+  if (rows.length) {
+    const { error } = await supabaseAdmin
+      .from("weather_readings")
+      .upsert(rows, { onConflict: "zone_id,station_id,reading_time" });
+    if (error) throw new Error(error.message);
+  }
+
+  const { error: rErr } = await supabaseAdmin.rpc("recompute_risk");
+  if (rErr) throw new Error(rErr.message);
+
+  return { zones: zones.length, readings: rows.length };
+}
+
+export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(
+  async () => ingestLiveRainfallImpl(),
+);
+
