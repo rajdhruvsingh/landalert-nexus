@@ -300,6 +300,103 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       return jsonResponse(syncResult, syncResult.success ? 200 : 422, cors);
     }
 
+    // 7b. Field Observation Media Upload (Task 2)
+    if (pathname === "/api/field-observations/upload" && request.method === "POST") {
+      let formData: FormData;
+      try {
+        formData = await request.formData();
+      } catch {
+        return errorResponse("Invalid multipart form data", "INVALID_MULTIPART", 400, cors);
+      }
+
+      const file = formData.get("file");
+      if (!file || !(file instanceof Blob)) {
+        return errorResponse("Missing 'file' in upload request", "MISSING_FILE", 400, cors);
+      }
+
+      const mimeType = file.type || "application/octet-stream";
+      const size = file.size;
+
+      const allowedImageMimes = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+      const allowedVideoMimes = ["video/mp4", "video/webm", "video/quicktime"];
+
+      const isImage = allowedImageMimes.includes(mimeType);
+      const isVideo = allowedVideoMimes.includes(mimeType);
+
+      if (!isImage && !isVideo) {
+        return errorResponse(
+          `Unsupported media type: ${mimeType}. Allowed: JPEG, PNG, WebP, HEIC, MP4, WebM, QuickTime`,
+          "UNSUPPORTED_MEDIA_TYPE",
+          400,
+          cors,
+        );
+      }
+
+      // Hard caps: 10MB image, 50MB video
+      const maxImageBytes = 10 * 1024 * 1024;
+      const maxVideoBytes = 50 * 1024 * 1024;
+
+      if (isImage && size > maxImageBytes) {
+        return errorResponse("Image size exceeds 10MB hard cap", "FILE_TOO_LARGE", 400, cors);
+      }
+      if (isVideo && size > maxVideoBytes) {
+        return errorResponse("Video size exceeds 50MB hard cap", "FILE_TOO_LARGE", 400, cors);
+      }
+
+      const rawFileName = (file as any).name || `upload-${Date.now()}`;
+      const ext = rawFileName.split(".").pop() || (isImage ? "jpg" : "mp4");
+      const storagePath = `observations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+
+      let fileUrl = "";
+      try {
+        const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+          .from("field-observation-media")
+          .upload(storagePath, buffer, {
+            contentType: mimeType,
+            upsert: true,
+          });
+
+        if (!uploadErr && uploadData) {
+          const { data: signedData } = await supabaseAdmin.storage
+            .from("field-observation-media")
+            .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+          fileUrl = signedData?.signedUrl || `/api/field-observations/media/${storagePath}`;
+        }
+      } catch {
+        // Storage cloud fallback below
+      }
+
+      if (!fileUrl) {
+        try {
+          const fs = await import("node:fs/promises");
+          const path = await import("node:path");
+          const uploadDir = path.resolve("./public/uploads/field-media");
+          await fs.mkdir(uploadDir, { recursive: true });
+          const localFilePath = path.join(uploadDir, path.basename(storagePath));
+          await fs.writeFile(localFilePath, buffer);
+          fileUrl = `/uploads/field-media/${path.basename(storagePath)}`;
+        } catch {
+          fileUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+        }
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          url: fileUrl,
+          storagePath,
+          name: rawFileName,
+          size,
+          mimeType,
+          uploadedAt: new Date().toISOString(),
+        },
+        201,
+        cors,
+      );
+    }
+
     // 8. Offline Package Download
     if (pathname === "/api/sync/package" && request.method === "GET") {
       const pkg = await getOfflinePackage();

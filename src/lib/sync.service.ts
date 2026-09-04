@@ -21,6 +21,24 @@ export interface FieldObservationInput {
   road_status?: ("open" | "restricted" | "blocked" | "unknown") | undefined;
   observer_id?: string | undefined;
   idempotency_key?: string | undefined;
+  // Geo-tagged Media & Sensor Coordinates (Task 2)
+  media_urls?: string[] | undefined;
+  media_metadata?:
+    | Array<{
+        name: string;
+        size: number;
+        mimeType: string;
+        storagePath?: string | undefined;
+        url?: string | undefined;
+      }>
+    | undefined;
+  geo_lat?: number | undefined;
+  geo_lng?: number | undefined;
+  geo_accuracy_m?: number | undefined;
+  geo_captured_at?: string | undefined;
+  consent_given?: boolean | undefined;
+  submitter_role?: string | undefined;
+  review_status?: ("PENDING_REVIEW" | "APPROVED" | "REJECTED") | undefined;
 }
 
 export interface SyncResult {
@@ -111,6 +129,14 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
     is_training_eligible: boolean;
     source: string;
+    media_urls: string[];
+    media_metadata: unknown[];
+    geo_lat: number | null;
+    geo_lng: number | null;
+    geo_accuracy_m: number | null;
+    geo_captured_at: string | null;
+    consent_given: boolean;
+    review_status: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
   }> = [];
 
   const acknowledgedKeys: string[] = [];
@@ -134,6 +160,20 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       r.idempotency_key ??
       `OBS-${parsedZone}-${new Date(r.observed_at).getTime()}-${r.observer_id ?? "field"}`;
 
+    const isOfficial =
+      r.submitter_role === "VERIFIED_OFFICIAL" ||
+      r.submitter_role === "DISPATCHER" ||
+      r.submitter_role === "ADMIN" ||
+      (r.observer_id && /^(official|ddma|gsi|sdma|admin)/i.test(r.observer_id));
+
+    const reviewStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = isOfficial
+      ? "APPROVED"
+      : "PENDING_REVIEW";
+    const status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" = isOfficial
+      ? "OFFICIAL_VERIFIED"
+      : "PENDING_VERIFICATION";
+    const source = isOfficial ? "OFFICIAL_SURVEY" : "PUBLIC_REPORT";
+
     validRows.push({
       zone_id: parsedZone,
       observed_at: new Date(r.observed_at).toISOString(),
@@ -144,9 +184,17 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       road_status: r.road_status ?? null,
       observer_id: r.observer_id ?? "field_worker",
       idempotency_key: key,
-      status: "PENDING_VERIFICATION",
-      is_training_eligible: false,
-      source: "PUBLIC_REPORT",
+      status,
+      is_training_eligible: isOfficial,
+      source,
+      media_urls: r.media_urls ?? [],
+      media_metadata: r.media_metadata ?? [],
+      geo_lat: r.geo_lat ?? null,
+      geo_lng: r.geo_lng ?? null,
+      geo_accuracy_m: r.geo_accuracy_m ?? null,
+      geo_captured_at: r.geo_captured_at ?? null,
+      consent_given: r.consent_given ?? true,
+      review_status: reviewStatus,
     });
 
     acknowledgedKeys.push(key);
@@ -182,10 +230,10 @@ with conn.cursor() as cur:
     for r in rows:
         cur.execute("""
             INSERT INTO public.field_observations 
-            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced', %s, %s, %s)
+            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced', %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source']))
+        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source'], r['media_urls'], json.dumps(r['media_metadata']), r['geo_lat'], r['geo_lng'], r['geo_accuracy_m'], r['geo_captured_at'], r['consent_given'], r['review_status']))
 conn.commit()
 conn.close()
 `;

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getUserAuthorizationState } from "@/lib/official-auth.service";
 import {
   Area,
   AreaChart,
@@ -106,6 +107,16 @@ function ZonePage() {
   const [justification, setJustification] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
+  const [viewerRole, setViewerRole] = useState<string>("PUBLIC_USER");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email) {
+        const authState = getUserAuthorizationState(session.user.email, session.user.user_metadata);
+        setViewerRole(authState.role);
+      }
+    });
+  }, []);
 
   const daily = aggregateDaily(data.readings);
   const iThr = intensityThresholdMmPerDay(3);
@@ -552,6 +563,102 @@ function ZonePage() {
               <p className="text-sm text-muted-foreground">No alerts dispatched for this zone.</p>
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="mt-4 panel">
+        <div className="border-b border-border px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="label-caps">Field Observations & Geo-tagged Media</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              ({data.observations?.length || 0} reports)
+            </span>
+          </div>
+          <span className="font-mono text-[0.68rem] text-muted-foreground">
+            Official approval required for public media display
+          </span>
+        </div>
+        <div className="p-4 space-y-4">
+          {(!data.observations || data.observations.length === 0) && (
+            <p className="text-sm text-muted-foreground py-2">No field observations recorded for this zone yet.</p>
+          )}
+          {data.observations?.map((obs: any) => {
+            const isApproved = obs.review_status === "APPROVED" || obs.status === "OFFICIAL_VERIFIED";
+            const isOfficialViewer = ["DISPATCHER", "ADMIN", "VERIFIED_OFFICIAL"].includes(viewerRole);
+            const canViewMedia = isApproved || isOfficialViewer;
+
+            return (
+              <div key={obs.id} className="rounded border border-border/70 bg-card/40 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-semibold text-primary">
+                      {obs.observer_id || "Field Observer"}
+                    </span>
+                    <span className="text-muted-foreground text-xs">•</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {new Date(obs.observed_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isApproved ? (
+                      <span className="inline-flex items-center rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-emerald-400 border border-emerald-500/30">
+                        ✓ Verified Official
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400 border border-amber-500/30">
+                        ⏳ Unverified (Pending Review)
+                      </span>
+                    )}
+                    {obs.road_status && <RoadBadge status={obs.road_status} />}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono mb-3 text-muted-foreground">
+                  {obs.rainfall_mm !== null && obs.rainfall_mm !== undefined && (
+                    <div>Rainfall: <span className="text-foreground">{obs.rainfall_mm} mm/h</span></div>
+                  )}
+                  {obs.soil_condition && (
+                    <div>Soil: <span className="text-foreground">{obs.soil_condition}</span></div>
+                  )}
+                  {obs.visual_signs && (
+                    <div className="col-span-2">Signs: <span className="text-amber-300">{obs.visual_signs}</span></div>
+                  )}
+                  {obs.geo_lat && obs.geo_lng && (
+                    <div className="col-span-2 text-primary">
+                      GPS: {obs.geo_lat.toFixed(4)}°N, {obs.geo_lng.toFixed(4)}°E (±{Math.round(obs.geo_accuracy_m || 0)}m)
+                    </div>
+                  )}
+                </div>
+
+                {obs.media_urls && obs.media_urls.length > 0 && (
+                  <div>
+                    {canViewMedia ? (
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {obs.media_urls.map((url: string, idx: number) => {
+                          const isVideo = url.endsWith(".mp4") || url.endsWith(".webm") || url.includes("video");
+                          return (
+                            <div key={idx} className="relative rounded overflow-hidden border border-border bg-black/40 h-24 w-36 flex items-center justify-center">
+                              {isVideo ? (
+                                <video src={url} controls className="h-full w-full object-cover" />
+                              ) : (
+                                <a href={url} target="_blank" rel="noopener noreferrer">
+                                  <img src={url} alt={`Observation media ${idx + 1}`} className="h-full w-full object-cover hover:scale-105 transition-transform" />
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded bg-secondary/30 p-2 text-xs font-mono text-muted-foreground border border-border/50 mt-2">
+                        🔒 Media quarantined pending dispatcher verification.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>

@@ -40,6 +40,43 @@ describe("Frontend Offline Queue & Synchronization Layer", () => {
     expect(queued[0]?.rainfall_mm).toBe(55.4);
   });
 
+  it("queues field observations with geo-tagged coordinates and media metadata", () => {
+    const obs = queueObservation({
+      zone_id: 3,
+      observed_at: new Date().toISOString(),
+      rainfall_mm: 42.0,
+      soil_condition: "mudflow_observed",
+      visual_signs: "Active debris slide on roadside",
+      road_status: "blocked",
+      observer_id: "official_observer_aizawl",
+      geo_lat: 23.7271,
+      geo_lng: 92.7176,
+      geo_accuracy_m: 8.5,
+      geo_captured_at: new Date().toISOString(),
+      consent_given: true,
+      media_urls: ["https://storage.landalert.org/field-media/zone_3_slide.jpg"],
+      media_metadata: [
+        {
+          name: "zone_3_slide.jpg",
+          size: 2048500,
+          mimeType: "image/jpeg",
+          url: "https://storage.landalert.org/field-media/zone_3_slide.jpg",
+        },
+      ],
+    });
+
+    expect(obs.geo_lat).toBe(23.7271);
+    expect(obs.geo_lng).toBe(92.7176);
+    expect(obs.consent_given).toBe(true);
+    expect(obs.media_urls?.length).toBe(1);
+    expect(obs.media_metadata?.[0]?.size).toBe(2048500);
+
+    const queued = getQueuedObservations();
+    expect(queued.length).toBe(1);
+    expect(queued[0]?.geo_lat).toBe(23.7271);
+    expect(queued[0]?.media_urls?.[0]).toBe("https://storage.landalert.org/field-media/zone_3_slide.jpg");
+  });
+
   it("prunes synchronized observations based on acknowledged keys", () => {
     const o1 = queueObservation({
       zone_id: 1,

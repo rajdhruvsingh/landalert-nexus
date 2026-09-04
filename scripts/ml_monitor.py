@@ -190,6 +190,33 @@ def run_monitoring_check(alert_on_stale: bool = False):
             "retraining_recommended": (real_count - 8) >= 10
         }
 
+        # 6. Field Observation Media Storage Budget Check
+        cur.execute("""
+            SELECT COUNT(*),
+                   COALESCE(SUM((elem->>'size')::bigint), 0)
+            FROM public.field_observations,
+            LATERAL jsonb_array_elements(
+                CASE WHEN jsonb_typeof(media_metadata) = 'array' THEN media_metadata ELSE '[]'::jsonb END
+            ) AS elem;
+        """)
+        media_row = cur.fetchone()
+        media_count = int(media_row[0]) if media_row and media_row[0] is not None else 0
+        media_bytes = float(media_row[1]) if media_row and media_row[1] is not None else 0.0
+        media_mb = float(media_bytes / (1024 * 1024))
+        budget_mb = float(os.getenv("FIELD_MEDIA_BUDGET_MB", "1024"))
+
+        report["media_storage"] = {
+            "total_media_files": media_count,
+            "total_storage_mb": round(media_mb, 2),
+            "budget_mb": budget_mb,
+            "budget_utilized_pct": round((media_mb / budget_mb) * 100, 2)
+        }
+
+        if media_mb >= budget_mb * 0.8:
+            report["alerts"].append(f"Field media storage near capacity: {media_mb:.1f}MB ({report['media_storage']['budget_utilized_pct']}% of {budget_mb}MB budget)")
+            if media_mb >= budget_mb and report["status"] != "CRITICAL":
+                report["status"] = "WARNING"
+
     finally:
         conn.close()
 
@@ -226,6 +253,8 @@ def main():
         lbl = report.get("label_inflow", {})
         print(f"Verified Labels: {lbl.get('total_verified_rainfall_positives')} real landslides (New: {lbl.get('new_verified_positives')})")
         print(f"Retrain Trigger: {'TRIGGER RECOMMENDED (>=10 new events)' if lbl.get('retraining_recommended') else 'NO TRIGGER NEEDED'}")
+        med = report.get("media_storage", {})
+        print(f"Media Storage:   {med.get('total_media_files', 0)} files, {med.get('total_storage_mb', 0)} MB / {med.get('budget_mb', 1024)} MB ({med.get('budget_utilized_pct', 0)}%)")
         if report["alerts"]:
             print("-" * 65)
             print("ALERTS:")

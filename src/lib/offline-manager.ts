@@ -140,6 +140,38 @@ export function pruneQueue(acknowledgedKeys: string[]): void {
   }
 }
 
+async function uploadQueuedMediaItem(dataUrl: string, filename: string, zoneId: number): Promise<string | null> {
+  if (typeof window === "undefined" || typeof fetch === "undefined") return null;
+  try {
+    const arr = dataUrl.split(",");
+    if (arr.length < 2) return null;
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    const blob = new Blob([u8arr], { type: mime });
+    const fd = new FormData();
+    fd.append("file", blob, filename);
+    fd.append("zoneId", String(zoneId));
+
+    const res = await fetch("/api/field-observations/upload", {
+      method: "POST",
+      body: fd,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.url;
+    }
+  } catch (err) {
+    console.warn("Failed to upload offline-queued media:", err);
+  }
+  return null;
+}
+
 /**
  * Synchronizes all queued observations with the authoritative backend.
  */
@@ -155,9 +187,35 @@ export async function syncOfflineObservations(): Promise<SyncResult> {
     };
   }
 
+  // Pre-process offline media items if network is restored
+  const processedQueue = await Promise.all(
+    queue.map(async (obs) => {
+      if (!obs.media_metadata || !Array.isArray(obs.media_metadata)) return obs;
+
+      const newUrls: string[] = [...(obs.media_urls || [])];
+      const newMetadata = await Promise.all(
+        obs.media_metadata.map(async (meta) => {
+          if (meta.url && meta.url.startsWith("data:")) {
+            const uploadedUrl = await uploadQueuedMediaItem(meta.url, meta.name || "media", obs.zone_id);
+            if (uploadedUrl) {
+              if (!newUrls.includes(uploadedUrl)) newUrls.push(uploadedUrl);
+              return { ...meta, url: uploadedUrl };
+            }
+          }
+          return meta;
+        })
+      );
+      return {
+        ...obs,
+        media_urls: newUrls,
+        media_metadata: newMetadata,
+      };
+    })
+  );
+
   try {
     const result = await submitFieldObservationsServerFn({
-      data: { observations: queue },
+      data: { observations: processedQueue },
     });
 
     if (result.acknowledgedKeys?.length) {
