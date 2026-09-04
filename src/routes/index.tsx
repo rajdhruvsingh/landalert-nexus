@@ -188,38 +188,107 @@ function Dashboard() {
       </section>
 
       <section className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] items-start">
-        <div className="panel overflow-hidden flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 shrink-0">
-            <div className="label-caps">Risk heatmap</div>
-            <div className="flex flex-wrap gap-1">
-              {states.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStateFilter(s)}
-                  className={`rounded border px-2 py-1 font-mono text-[0.7rem] transition-colors ${
-                    stateFilter === s
-                      ? "border-primary/60 bg-primary/15 text-primary"
-                      : "border-border text-muted-foreground hover:bg-secondary"
-                  }`}
-                >
-                  {s}
-                </button>
+        <div className="flex flex-col gap-4">
+          <div className="panel overflow-hidden flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 shrink-0">
+              <div className="label-caps">Risk heatmap</div>
+              <div className="flex flex-wrap gap-1">
+                {states.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStateFilter(s)}
+                    className={`rounded border px-2 py-1 font-mono text-[0.7rem] transition-colors ${
+                      stateFilter === s
+                        ? "border-primary/60 bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="w-full h-[480px] md:h-[540px] relative isolate z-0">
+              <MapCanvas zones={zones} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+            </div>
+            <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2 shrink-0 bg-surface/40">
+              {RISK_LEVELS.map((l) => (
+                <span key={l} className="flex items-center gap-2 text-xs">
+                  <span
+                    className="inline-block h-3 w-3 rounded-sm"
+                    style={{ backgroundColor: riskColor(l) }}
+                  />
+                  {l}
+                </span>
               ))}
             </div>
           </div>
-          <div className="w-full h-[520px] md:h-[580px] relative isolate z-0">
-            <MapCanvas zones={zones} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-          </div>
-          <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2 shrink-0 bg-surface/40">
-            {RISK_LEVELS.map((l) => (
-              <span key={l} className="flex items-center gap-2 text-xs">
-                <span
-                  className="inline-block h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: riskColor(l) }}
-                />
-                {l}
-              </span>
-            ))}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="panel">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <span className="label-caps">Road connectivity</span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {blocked.length} blocked · {restricted.length} restricted
+                </span>
+              </div>
+              <div className="max-h-[280px] overflow-y-auto">
+                {[...data.roads]
+                  .sort((a, b) => a.status.localeCompare(b.status))
+                  .map((r) => {
+                    const z = data.zones.find((x) => x.id === r.zone_id);
+                    return (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2 text-sm"
+                      >
+                        <span>
+                          <span className="font-mono text-primary">{r.road_name}</span>{" "}
+                          {r.segment_label}
+                          <span className="block text-[0.68rem] text-muted-foreground">
+                            {z?.state} · {r.length_km} km
+                          </span>
+                        </span>
+                        <RoadBadge status={r.status} />
+                      </div>
+                    );
+                  })}
+                {data.roads.length === 0 && (
+                  <p className="p-4 text-sm text-muted-foreground">No road segments mapped yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <span className="label-caps">Alert console</span>
+                <Link
+                  to="/alerts"
+                  className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
+                >
+                  Full history →
+                </Link>
+              </div>
+              <div className="max-h-[280px] space-y-3 overflow-y-auto p-4">
+                {data.alerts.slice(0, 6).map((a) => (
+                  <div key={a.id} className="rounded border border-border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <RiskBadge level={a.risk_level} />
+                      <span className="font-mono text-[0.68rem] text-muted-foreground">
+                        {new Date(a.dispatched_at).toLocaleString()} · {a.channel}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm">{a.message}</p>
+                    <p className="mt-1 font-mono text-[0.7rem] leading-relaxed text-muted-foreground">
+                      {a.explanation}
+                    </p>
+                  </div>
+                ))}
+                {data.alerts.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No alerts dispatched yet.</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -315,73 +384,6 @@ function Dashboard() {
                 </p>
               )}
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="panel">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <span className="label-caps">Road connectivity</span>
-            <span className="font-mono text-xs text-muted-foreground">
-              {blocked.length} blocked · {restricted.length} restricted
-            </span>
-          </div>
-          <div className="max-h-[260px] overflow-y-auto">
-            {[...data.roads]
-              .sort((a, b) => a.status.localeCompare(b.status))
-              .map((r) => {
-                const z = data.zones.find((x) => x.id === r.zone_id);
-                return (
-                  <div
-                    key={r.id}
-                    className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2 text-sm"
-                  >
-                    <span>
-                      <span className="font-mono text-primary">{r.road_name}</span>{" "}
-                      {r.segment_label}
-                      <span className="block text-[0.68rem] text-muted-foreground">
-                        {z?.state} · {r.length_km} km
-                      </span>
-                    </span>
-                    <RoadBadge status={r.status} />
-                  </div>
-                );
-              })}
-            {data.roads.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">No road segments mapped yet.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <span className="label-caps">Alert console</span>
-            <Link
-              to="/alerts"
-              className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
-            >
-              Full history →
-            </Link>
-          </div>
-          <div className="max-h-[260px] space-y-3 overflow-y-auto p-4">
-            {data.alerts.slice(0, 6).map((a) => (
-              <div key={a.id} className="rounded border border-border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <RiskBadge level={a.risk_level} />
-                  <span className="font-mono text-[0.68rem] text-muted-foreground">
-                    {new Date(a.dispatched_at).toLocaleString()} · {a.channel}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm">{a.message}</p>
-                <p className="mt-1 font-mono text-[0.7rem] leading-relaxed text-muted-foreground">
-                  {a.explanation}
-                </p>
-              </div>
-            ))}
-            {data.alerts.length === 0 && (
-              <p className="text-sm text-muted-foreground">No alerts dispatched yet.</p>
-            )}
           </div>
         </div>
       </section>
