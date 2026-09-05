@@ -7,7 +7,16 @@
     "system_health": "System Health",
     "sign_in": "Sign In",
     "account": "Account",
-    "language": "Language"
+    "language": "Language",
+    "home": "Home",
+    "risk_map": "Risk Map",
+    "observations": "Observations",
+    "road_network": "Road Network",
+    "reports": "Reports",
+    "data": "Data",
+    "about": "About",
+    "accessibility": "Accessibility",
+    "search_placeholder": "Search location, district or keyword..."
   },
   "dashboard": {
     "monitored_zones": "Monitored Zones",
@@ -351,5 +360,119 @@
     "monitoring_unavailable": "Monitoring data could not be loaded",
     "retry": "Retry",
     "back_to_console": "Back to console"
+  },
+  "header": {
+    "gov_india": "Government of India",
+    "ministry": "Ministry of Earth Sciences",
+    "gsi": "Geological Survey of India",
+    "app_title": "LandAlert-Nexus",
+    "app_subtitle": "Landslide Early Warning System for North Eastern Region",
+    "help": "Help",
+    "accessibility": "Accessibility",
+    "operator": "Operator",
+    "sign_in": "Sign In",
+    "profile": "Operator Profile"
+  },
+  "hero": {
+    "region_tag": "NORTH EASTERN REGION",
+    "title": "Landslide Early Warning System",
+    "subtitle": "Real-time risk assessment, field observations and decision support for safer communities in North East India.",
+    "observe": "Observe",
+    "assess": "Assess",
+    "respond": "Respond",
+    "protect": "Protect",
+    "people": "PEOPLE",
+    "infrastructure": "INFRASTRUCTURE",
+    "communities": "COMMUNITIES"
+  },
+  "overview": {
+    "title": "Region Overview",
+    "districts_monitored": "Districts monitored",
+    "high_or_severe": "High or severe risk",
+    "active_alerts": "Active alerts",
+    "field_observations_30d": "Field observations (last 30 days)",
+    "elevated_risk_title": "Elevated landslide risk in parts of Mizoram and Manipur",
+    "elevated_risk_desc": "Due to sustained rainfall and saturated soil conditions.",
+    "view_details": "View details →"
+  },
+  "quick_actions": {
+    "title": "Quick Actions",
+    "view_risk_map": "View Risk Map",
+    "explore_levels": "Explore current risk levels",
+    "report_observation": "Report Observation",
+    "submit_field": "Submit a field observation",
+    "view_alerts": "View Alerts",
+    "latest_warnings": "Latest warnings and advisories",
+    "check_roads": "Check Roads",
+    "critical_links": "Critical and vulnerable links"
+  },
+  "map_panel": {
+    "title": "Landslide Risk Map",
+    "subtitle": "Real-time risk assessment across North Eastern Region",
+    "filter_region": "North East India",
+    "risk_level": "Risk level",
+    "scale_km": "100 km"
+  },
+  "operational_tables": {
+    "latest_alerts_title": "Latest Alerts",
+    "road_connectivity_title": "Road Connectivity",
+    "recent_observations_title": "Recent Observations",
+    "view_all_alerts": "View all alerts →",
+    "view_all_roads": "View all roads →",
+    "view_all_observations": "View all observations →",
+    "col_time": "Time (IST)",
+    "col_level": "Level",
+    "col_location": "Location",
+    "col_message": "Message",
+    "col_road_link": "Road / Link",
+    "col_district_state": "District / State",
+    "col_status": "Status",
+    "col_type": "Type"
+  },
+  "theme": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark",
+    "select_theme": "Select color theme"
+  },
+  "footer": {
+    "terms": "Terms of Use",
+    "privacy": "Privacy Policy",
+    "accessibility": "Accessibility",
+    "contact": "Contact",
+    "version": "LandAlert-Nexus v0.2",
+    "tagline": "Data for a Safer North East",
+    "back_to_top": "Back to top"
+  },
+  "a11y": {
+    "dialog_title": "Accessibility Statement & Navigation Aids",
+    "dialog_desc": "LandAlert-Nexus is built to government portal standards (WCAG 2.1 AA target) to ensure disaster warnings are accessible to all operators and citizens.",
+    "visual_title": "High-Contrast Typography & Colors",
+    "visual_desc": "Set in Atkinson Hyperlegible, a typeface designed for maximum legibility. Risk levels are conveyed through redundant indicators, never by color alone.",
+    "keyboard_title": "Full Keyboard Operability",
+    "keyboard_desc": "All interactive components—including the map, zone filters, alert triggers, forms, and dialogs—can be navigated using Tab, Enter, Space, and Esc.",
+    "screen_reader_title": "Live Screen-Reader Announcements",
+    "screen_reader_desc": "Critical system updates, emergency alert broadcasts, and network connection changes utilize aria-live polite regions to keep assistive technologies informed.",
+    "theme_title": "System, Light & Dark Theme Adaptation",
+    "theme_desc": "Supports OS-level dark/light mode preference by default, while allowing manual toggling without losing layout consistency or contrast ratios."
+  },
+  "about": {
+    "dialog_title": "About LandAlert-Nexus",
+    "dialog_desc": "Landslide Early Warning System for the North Eastern Region of India (SIH26001).",
+    "mission": "LandAlert-Nexus is an operational early warning platform developed to protect hilly communities, road corridors, and strategic infrastructure across 8 North Eastern states.",
+    "authority": "Operational Authority",
+    "model_engine": "Model Engine",
+    "coverage": "Monitored Geography",
+    "telemetry": "Telemetry Providers"
+  },
+  "reports": {
+    "dialog_title": "Operational Landslide Reports",
+    "dialog_desc": "Official daily bulletins, seasonal risk assessments, and road corridor advisories.",
+    "daily_bulletin": "Daily Regional Landslide Bulletin",
+    "road_corridor_report": "NH & State Highway Slope Vulnerability Report",
+    "road_corridor_desc": "Current status of 15 vulnerable corridors in Sikkim, Mizoram, Manipur & Meghalaya."
+  },
+  "common": {
+    "close": "Close"
   }
 }

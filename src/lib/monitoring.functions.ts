@@ -26,30 +26,91 @@ export type RoadRow = Database["public"]["Tables"]["road_segments"]["Row"];
 export type ReadingRow = Database["public"]["Tables"]["weather_readings"]["Row"];
 export type SlideRow = Database["public"]["Tables"]["historical_landslides"]["Row"];
 export type ModelConfigRow = Database["public"]["Tables"]["risk_model_config"]["Row"];
+export type ObservationRow = Database["public"]["Tables"]["field_observations"]["Row"];
+
+let dbPool: any = null;
+async function getDbPool() {
+  if (!dbPool && (process.env["DATABASE_URL"] || "postgresql://localhost/landalert")) {
+    try {
+      const pgModule: any = await import("pg");
+      const PoolClass = pgModule.default?.Pool || pgModule.Pool;
+      dbPool = new PoolClass({
+        connectionString: process.env["DATABASE_URL"] || "postgresql://localhost/landalert",
+        connectionTimeoutMillis: 2000,
+      });
+    } catch (e) {
+      console.error("[getDbPool] Error initializing pg pool:", e);
+    }
+  }
+  return dbPool;
+}
 
 export const getOverview = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = publicClient();
-  const [zones, roads, alerts, modelConfig, candidateConfig] = await Promise.all([
-    sb.from("risk_zones").select("*").order("risk_score", { ascending: false }),
-    sb.from("road_segments").select("*"),
-    sb.from("alerts").select("*").order("dispatched_at", { ascending: false }).limit(30),
-    sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
-    sb
-      .from("risk_model_config")
-      .select("*")
-      .eq("is_active", false)
-      .in("status", ["validated", "candidate"])
-      .order("trained_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-  if (zones.error) throw new Error(zones.error.message);
+  try {
+    const sb = publicClient();
+    const [zones, roads, alerts, modelConfig, candidateConfig, observations] = await Promise.all([
+      sb.from("risk_zones").select("*").order("risk_score", { ascending: false }),
+      sb.from("road_segments").select("*"),
+      sb.from("alerts").select("*").order("dispatched_at", { ascending: false }).limit(30),
+      sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
+      sb
+        .from("risk_model_config")
+        .select("*")
+        .eq("is_active", false)
+        .in("status", ["validated", "candidate"])
+        .order("trained_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      sb.from("field_observations").select("*").order("observed_at", { ascending: false }).limit(20),
+    ]);
+    if (!zones.error && zones.data && zones.data.length > 0) {
+      return {
+        zones: zones.data ?? [],
+        roads: roads.data ?? [],
+        alerts: alerts.data ?? [],
+        activeModel: modelConfig.data ?? null,
+        candidateModel: candidateConfig?.data ?? null,
+        observations: observations?.data ?? [],
+      };
+    }
+  } catch {
+    // Proceed to Postgres fallback
+  }
+
+  // Authoritative Postgres fallback
+  const pool = await getDbPool();
+  if (pool) {
+    try {
+      const [zRes, rRes, aRes, mRes, cRes, oRes] = await Promise.all([
+        pool.query("SELECT * FROM risk_zones ORDER BY risk_score DESC"),
+        pool.query("SELECT * FROM road_segments"),
+        pool.query("SELECT * FROM alerts ORDER BY dispatched_at DESC LIMIT 30"),
+        pool.query("SELECT * FROM risk_model_config WHERE is_active = true LIMIT 1"),
+        pool.query(
+          "SELECT * FROM risk_model_config WHERE is_active = false AND status IN ('validated', 'candidate') ORDER BY trained_at DESC LIMIT 1"
+        ),
+        pool.query("SELECT * FROM field_observations ORDER BY observed_at DESC LIMIT 20"),
+      ]);
+      return {
+        zones: zRes.rows || [],
+        roads: rRes.rows || [],
+        alerts: aRes.rows || [],
+        activeModel: mRes.rows[0] || null,
+        candidateModel: cRes.rows[0] || null,
+        observations: oRes.rows || [],
+      };
+    } catch (pgErr) {
+      console.error("[getOverview] Postgres fallback query error:", pgErr);
+    }
+  }
+
   return {
-    zones: zones.data ?? [],
-    roads: roads.data ?? [],
-    alerts: alerts.data ?? [],
-    activeModel: modelConfig.data ?? null,
-    candidateModel: candidateConfig?.data ?? null,
+    zones: [],
+    roads: [],
+    alerts: [],
+    activeModel: null,
+    candidateModel: null,
+    observations: [],
   };
 });
 
