@@ -136,6 +136,8 @@ function AlertsPage() {
     } finally {
       setDispatching(false);
     }
+  }
+
   // Alert retraction modal state
   const [retractDialogOpen, setRetractDialogOpen] = useState(false);
   const [selectedAlertToRetract, setSelectedAlertToRetract] = useState<number | null>(null);
