@@ -29,11 +29,19 @@ export type ModelConfigRow = Database["public"]["Tables"]["risk_model_config"]["
 
 export const getOverview = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const [zones, roads, alerts, modelConfig] = await Promise.all([
+  const [zones, roads, alerts, modelConfig, candidateConfig] = await Promise.all([
     sb.from("risk_zones").select("*").order("risk_score", { ascending: false }),
     sb.from("road_segments").select("*"),
     sb.from("alerts").select("*").order("dispatched_at", { ascending: false }).limit(30),
     sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
+    sb
+      .from("risk_model_config")
+      .select("*")
+      .eq("is_active", false)
+      .in("status", ["validated", "candidate"])
+      .order("trained_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
   if (zones.error) throw new Error(zones.error.message);
   return {
@@ -41,6 +49,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
     roads: roads.data ?? [],
     alerts: alerts.data ?? [],
     activeModel: modelConfig.data ?? null,
+    candidateModel: candidateConfig?.data ?? null,
   };
 });
 
@@ -92,6 +101,20 @@ export const getActiveModelConfig = createServerFn({ method: "GET" }).handler(as
     .from("risk_model_config")
     .select("*")
     .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+});
+
+export const getCandidateModelConfig = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("risk_model_config")
+    .select("*")
+    .eq("is_active", false)
+    .in("status", ["validated", "candidate"])
+    .order("trained_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data;

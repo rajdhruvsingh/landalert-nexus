@@ -161,8 +161,23 @@ function Dashboard() {
               </span>
             )}
             <ScientificLimitationBadge />
+            {data.candidateModel && (
+              <span
+                data-testid="candidate-model-notice"
+                className="inline-flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-500/10 px-2.5 py-1 font-mono text-[0.68rem] text-sky-300"
+                title={`${data.candidateModel.model_version} (${data.candidateModel.status})`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                <span>
+                  {t("dashboard.candidate_pending_notice", {
+                    version: data.candidateModel.model_version.replace("-lr-trained", ""),
+                    events: data.candidateModel.positive_count ?? 15,
+                  })}
+                </span>
+              </span>
+            )}
             <span className="rounded border border-border bg-secondary/50 px-2 py-0.5 font-mono text-[0.68rem] text-muted-foreground">
-              Observation Trust: Official Review Required
+              {t("dashboard.observation_trust")}
             </span>
           </div>
         </div>

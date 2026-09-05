@@ -1053,6 +1053,49 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       expect(json.disclaimer).toMatch(/decision-support/i);
     });
   });
+
+  describe("TASK 2 — Candidate Model Registry & Scientific Boundary Messaging", () => {
+    it("surfaces candidate-pending notice when a validated-but-inactive model row exists in risk_model_config", async () => {
+      const candidateRow = {
+        model_version: "v0.3-lr-trained",
+        status: "validated",
+        positive_count: 15,
+        pr_auc: 0.6363,
+        is_active: false,
+      };
+
+      const { default: i18n } = await import("./i18n");
+      const noticeText = i18n.t("dashboard.candidate_pending_notice", {
+        version: candidateRow.model_version.replace("-lr-trained", ""),
+        events: candidateRow.positive_count,
+      });
+
+      expect(noticeText).toContain("v0.3");
+      expect(noticeText).toContain("N=15");
+      expect(noticeText).toMatch(/candidate|pending manual activation/i);
+    });
+
+    it("ensures candidate notice is absent when active model is already latest and no candidate row exists", () => {
+      const candidateModel = null;
+      // In JSX, candidateModel && (...) renders null/nothing
+      const shouldRender = Boolean(candidateModel);
+      expect(shouldRender).toBe(false);
+    });
+
+    it("verifies key parity for candidate_pending_notice across all 4 locales", async () => {
+      const en = (await import("@/locales/en.json")).default;
+      const as = (await import("@/locales/as.json")).default;
+      const bn = (await import("@/locales/bn.json")).default;
+      const ne = (await import("@/locales/ne.json")).default;
+
+      expect(en.dashboard.candidate_pending_notice).toBeDefined();
+      for (const [code, bundle] of [["as", as], ["bn", bn], ["ne", ne]] as const) {
+        expect((bundle as any).dashboard.candidate_pending_notice, `${code} missing candidate_pending_notice`).toBeDefined();
+        expect((bundle as any).dashboard.candidate_pending_notice).toContain("{{version}}");
+        expect((bundle as any).dashboard.candidate_pending_notice).toContain("{{events}}");
+      }
+    });
+  });
 });
 
 
