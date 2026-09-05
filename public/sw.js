@@ -9,12 +9,11 @@
  * 4. Stale-data offline fallback indicators
  */
 
-const CACHE_NAME = "landalert-pwa-v1";
+const CACHE_NAME = "landalert-pwa-v2";
 const MAP_CACHE = "landalert-tiles-v1";
 const DATA_CACHE = "landalert-data-v1";
 
 const APP_SHELL_URLS = [
-  "/",
   "/manifest.json",
   "/favicon.svg",
   "/favicon.ico",

@@ -549,7 +549,7 @@ function Dashboard() {
                 )}
 
                 {/* Weather Forecast Preview */}
-                {selectedForecast && selectedForecast.status !== "UNAVAILABLE" && (
+                {selectedForecast && selectedForecast.forecastStatus === "AVAILABLE" && selectedForecast.forecastWindows && (
                   <div className="rounded border border-border bg-secondary/20 p-3">
                     <div className="flex items-center justify-between pb-2 border-b border-border/60">
                       <span className="label-caps">{t("weather_forecast.section_title", "Forward Rainfall Risk Projection")}</span>
@@ -562,34 +562,34 @@ function Dashboard() {
                         <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">24 Hours</div>
                         <div className="my-1 flex justify-center">
                           <ForecastRiskBadge
-                            level={selectedForecast.windows.w24.projectedRiskLevel}
+                            level={selectedForecast.forecastWindows["24h"].projectedRiskLevel}
                             leadHours={24}
-                            trend={selectedForecast.windows.w24.trend}
+                            trend={selectedForecast.forecastWindows["24h"].trend}
                           />
                         </div>
-                        <div className="font-mono text-xs font-semibold">{selectedForecast.windows.w24.forecastPrecipMm.toFixed(1)} mm</div>
+                        <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["24h"].forecastRainfallMm.toFixed(1)} mm</div>
                       </div>
                       <div className="rounded border border-border p-2 text-center bg-surface">
                         <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">48 Hours</div>
                         <div className="my-1 flex justify-center">
                           <ForecastRiskBadge
-                            level={selectedForecast.windows.w48.projectedRiskLevel}
+                            level={selectedForecast.forecastWindows["48h"].projectedRiskLevel}
                             leadHours={48}
-                            trend={selectedForecast.windows.w48.trend}
+                            trend={selectedForecast.forecastWindows["48h"].trend}
                           />
                         </div>
-                        <div className="font-mono text-xs font-semibold">{selectedForecast.windows.w48.forecastPrecipMm.toFixed(1)} mm</div>
+                        <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["48h"].forecastRainfallMm.toFixed(1)} mm</div>
                       </div>
                       <div className="rounded border border-border p-2 text-center bg-surface">
                         <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">72 Hours</div>
                         <div className="my-1 flex justify-center">
                           <ForecastRiskBadge
-                            level={selectedForecast.windows.w72.projectedRiskLevel}
+                            level={selectedForecast.forecastWindows["72h"].projectedRiskLevel}
                             leadHours={72}
-                            trend={selectedForecast.windows.w72.trend}
+                            trend={selectedForecast.forecastWindows["72h"].trend}
                           />
                         </div>
-                        <div className="font-mono text-xs font-semibold">{selectedForecast.windows.w72.forecastPrecipMm.toFixed(1)} mm</div>
+                        <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["72h"].forecastRainfallMm.toFixed(1)} mm</div>
                       </div>
                     </div>
                   </div>

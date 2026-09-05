@@ -446,14 +446,14 @@ function ZonePage() {
           <div className="py-6 text-center text-xs text-muted-foreground font-mono">
             Loading forecast projections…
           </div>
-        ) : !forecastData || forecastData.status === "UNAVAILABLE" ? (
+        ) : !forecastData || forecastData.forecastStatus === "UNAVAILABLE" || !forecastData.forecastWindows ? (
           <div className="mt-3 rounded border border-border/80 bg-secondary/30 p-4 text-center">
             <p className="font-mono text-xs text-muted-foreground">
               ⚠ {t("weather_forecast.forecast_unavailable")}
             </p>
-            {forecastData?.unavailableReason && (
+            {forecastData?.explanation && (
               <p className="mt-1 text-[0.7rem] text-muted-foreground/80">
-                {forecastData.unavailableReason}
+                {forecastData.explanation}
               </p>
             )}
           </div>
@@ -487,17 +487,17 @@ function ZonePage() {
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <ForecastRiskBadge
-                  level={forecastData.windows.w24.projectedRiskLevel}
+                  level={forecastData.forecastWindows["24h"].projectedRiskLevel}
                   leadHours={24}
-                  trend={forecastData.windows.w24.trend}
-                  confidence={forecastData.windows.w24.confidence}
+                  trend={forecastData.forecastWindows["24h"].trend}
+                  confidence={forecastData.forecastWindows["24h"].confidence}
                 />
                 <span className="font-mono text-xs text-foreground font-semibold">
-                  {forecastData.windows.w24.forecastPrecipMm.toFixed(1)} mm
+                  {forecastData.forecastWindows["24h"].forecastRainfallMm.toFixed(1)} mm
                 </span>
               </div>
               <p className="mt-2 text-[0.72rem] text-muted-foreground">
-                {forecastData.windows.w24.narrative}
+                {forecastData.forecastWindows["24h"].narrative}
               </p>
             </div>
 
@@ -513,17 +513,17 @@ function ZonePage() {
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <ForecastRiskBadge
-                  level={forecastData.windows.w48.projectedRiskLevel}
+                  level={forecastData.forecastWindows["48h"].projectedRiskLevel}
                   leadHours={48}
-                  trend={forecastData.windows.w48.trend}
-                  confidence={forecastData.windows.w48.confidence}
+                  trend={forecastData.forecastWindows["48h"].trend}
+                  confidence={forecastData.forecastWindows["48h"].confidence}
                 />
                 <span className="font-mono text-xs text-foreground font-semibold">
-                  {forecastData.windows.w48.forecastPrecipMm.toFixed(1)} mm
+                  {forecastData.forecastWindows["48h"].forecastRainfallMm.toFixed(1)} mm
                 </span>
               </div>
               <p className="mt-2 text-[0.72rem] text-muted-foreground">
-                {forecastData.windows.w48.narrative}
+                {forecastData.forecastWindows["48h"].narrative}
               </p>
             </div>
 
@@ -539,17 +539,17 @@ function ZonePage() {
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <ForecastRiskBadge
-                  level={forecastData.windows.w72.projectedRiskLevel}
+                  level={forecastData.forecastWindows["72h"].projectedRiskLevel}
                   leadHours={72}
-                  trend={forecastData.windows.w72.trend}
-                  confidence={forecastData.windows.w72.confidence}
+                  trend={forecastData.forecastWindows["72h"].trend}
+                  confidence={forecastData.forecastWindows["72h"].confidence}
                 />
                 <span className="font-mono text-xs text-foreground font-semibold">
-                  {forecastData.windows.w72.forecastPrecipMm.toFixed(1)} mm
+                  {forecastData.forecastWindows["72h"].forecastRainfallMm.toFixed(1)} mm
                 </span>
               </div>
               <p className="mt-2 text-[0.72rem] text-muted-foreground">
-                {forecastData.windows.w72.narrative}
+                {forecastData.forecastWindows["72h"].narrative}
               </p>
             </div>
           </div>

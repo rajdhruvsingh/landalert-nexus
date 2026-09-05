@@ -143,17 +143,31 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(
-          (reg) => {
-            console.log("[PWA] ServiceWorker registered with scope:", reg.scope);
-          },
-          (err) => {
-            console.warn("[PWA] ServiceWorker registration failed:", err);
-          },
-        );
-      });
+    if (typeof window !== "undefined") {
+      // Proactively clear stale PWA caches
+      if ("caches" in window) {
+        caches.keys().then((keys) => {
+          keys.forEach((key) => {
+            if (key === "landalert-pwa-v1") {
+              caches.delete(key);
+            }
+          });
+        });
+      }
+
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(
+            (reg) => {
+              reg.update();
+              console.log("[PWA] ServiceWorker registered with scope:", reg.scope);
+            },
+            (err) => {
+              console.warn("[PWA] ServiceWorker registration failed:", err);
+            },
+          );
+        });
+      }
     }
   }, []);
 
