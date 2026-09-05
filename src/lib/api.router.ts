@@ -304,14 +304,56 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       return jsonResponse(syncResult, syncResult.success ? 200 : 422, cors);
     }
 
-    // 7b. Field Observation Media Upload (Task 2)
+    // 7a. Field Observation Status & Capability Flag
+    if (pathname === "/api/field-observations/status" && request.method === "GET") {
+      const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] === "true";
+      return jsonResponse({ mediaUploadEnabled }, 200, cors);
+    }
+
+    // 7b. Field Observation Media Upload
     if (pathname === "/api/field-observations/upload" && request.method === "POST") {
+      const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] === "true";
+      if (!mediaUploadEnabled) {
+        return errorResponse(
+          "Media upload is currently disabled on this server instance",
+          "MEDIA_UPLOAD_DISABLED",
+          403,
+          cors,
+        );
+      }
+
+      const authHeader = request.headers.get("Authorization");
+      if (!authHeader) {
+        return errorResponse(
+          "Authentication required for field media upload",
+          "UNAUTHORIZED",
+          401,
+          cors,
+        );
+      }
+
+      const { authenticateToken } = await import("./official-auth.service");
+      const profile = await authenticateToken(authHeader);
+      const cronSecret = process.env["CRON_SECRET"];
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const isSystemSecret = Boolean(cronSecret && token === cronSecret);
+
+      if (!profile && !isSystemSecret) {
+        return errorResponse(
+          "Invalid or expired authentication session",
+          "UNAUTHORIZED",
+          401,
+          cors,
+        );
+      }
+
       let formData: FormData;
       try {
         formData = await request.formData();
       } catch {
         return errorResponse("Invalid multipart form data", "INVALID_MULTIPART", 400, cors);
       }
+
 
       const file = formData.get("file");
       if (!file || !(file instanceof Blob)) {

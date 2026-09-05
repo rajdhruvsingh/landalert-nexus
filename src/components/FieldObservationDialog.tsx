@@ -59,6 +59,21 @@ interface MediaItem {
   url?: string;
 }
 
+// Helper to ensure an authenticated Supabase session exists before media upload
+export async function ensureAuthenticatedSession() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) return session;
+    const { data: anonData, error } = await supabase.auth.signInAnonymously();
+    if (!error && anonData?.session) {
+      return anonData.session;
+    }
+  } catch (err) {
+    console.warn("Anonymous auth session establishment failed:", err);
+  }
+  return null;
+}
+
 export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Props) {
   const [open, setOpen] = useState(false);
   const isOnline = useOnlineStatus();
@@ -94,15 +109,36 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
 
   // 2. Submitter Role & Trust Tier
   const [userRole, setUserRole] = useState<string>("PUBLIC_USER");
+  const [mediaUploadEnabled, setMediaUploadEnabled] = useState<boolean>(true);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) {
-        const authState = getUserAuthorizationState(session.user.email, session.user.user_metadata);
+        const authState = getUserAuthorizationState({
+          email: session.user.email,
+          user_metadata: session.user.user_metadata,
+        });
         setUserRole(authState.role);
         setObserverId(session.user.email.split("@")[0] ?? "field_observer");
+      } else if (session?.user) {
+        setUserRole("PUBLIC_USER");
+        setObserverId(`citizen_${session.user.id.slice(0, 8)}`);
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    fetch("/api/field-observations/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.mediaUploadEnabled === "boolean") {
+          setMediaUploadEnabled(data.mediaUploadEnabled);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
 
   const [rainfallMm, setRainfallMm] = useState<string>("");
   const [soilCondition, setSoilCondition] = useState<string>("damp");
@@ -210,12 +246,17 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     e.preventDefault();
     setSubmitting(true);
     setStatusMessage(null);
-
     // If online, upload media files first to obtain permanent storage URLs
     const uploadedUrls: string[] = [];
     const mediaMeta: Array<{ name: string; size: number; mimeType: string; url?: string }> = [];
 
     if (isOnline && mediaList.length > 0) {
+      const session = await ensureAuthenticatedSession();
+      const authHeaders: Record<string, string> = {};
+      if (session?.access_token) {
+        authHeaders["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
       for (const item of mediaList) {
         if (item.file) {
           try {
@@ -224,6 +265,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
             fd.append("zoneId", String(zoneId));
             const upRes = await fetch("/api/field-observations/upload", {
               method: "POST",
+              headers: authHeaders,
               body: fd,
             });
             if (upRes.ok) {
@@ -483,62 +525,64 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
             </div>
           </div>
 
-          {/* 3. Geo-Tagged Media Upload (Photos/Videos) */}
-          <div className="rounded border border-border bg-secondary/20 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-mono uppercase text-muted-foreground">
-                Field Media (Photos / Video)
-              </Label>
-              <span className="text-[0.65rem] font-mono text-muted-foreground">
-                Max 3 files (Photos &le;10MB, Videos &le;50MB)
-              </span>
-            </div>
-
-            <Input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              disabled={submitting || mediaList.length >= 3}
-              onChange={handleFileSelect}
-              className="bg-secondary/40 border-border font-mono text-xs file:font-mono file:text-xs file:bg-primary/20 file:text-primary file:border-0 file:rounded cursor-pointer"
-            />
-
-            {fileError && <p className="text-[0.7rem] text-destructive font-mono">{fileError}</p>}
-
-            {mediaList.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {mediaList.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="relative group border border-border rounded overflow-hidden bg-surface flex items-center gap-1.5 pr-2"
-                  >
-                    {item.mimeType.startsWith("image/") ? (
-                      <img
-                        src={item.previewUrl}
-                        alt={item.name}
-                        className="h-10 w-10 object-cover rounded-l"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 flex items-center justify-center bg-primary/20 text-xs">
-                        🎬
-                      </div>
-                    )}
-                    <span className="text-[0.65rem] font-mono truncate max-w-[100px]" title={item.name}>
-                      {item.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeMedia(idx)}
-                      className="text-muted-foreground hover:text-destructive text-xs ml-1"
-                      title="Remove"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+          {/* 3. Geo-Tagged Media Upload (Photos/Videos) - Hidden when disabled */}
+          {mediaUploadEnabled && (
+            <div className="rounded border border-border bg-secondary/20 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-mono uppercase text-muted-foreground">
+                  Field Media (Photos / Video)
+                </Label>
+                <span className="text-[0.65rem] font-mono text-muted-foreground">
+                  Max 3 files (Photos &le;10MB, Videos &le;50MB)
+                </span>
               </div>
-            )}
-          </div>
+
+              <Input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                disabled={submitting || mediaList.length >= 3}
+                onChange={handleFileSelect}
+                className="bg-secondary/40 border-border font-mono text-xs file:font-mono file:text-xs file:bg-primary/20 file:text-primary file:border-0 file:rounded cursor-pointer"
+              />
+
+              {fileError && <p className="text-[0.7rem] text-destructive font-mono">{fileError}</p>}
+
+              {mediaList.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {mediaList.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group border border-border rounded overflow-hidden bg-surface flex items-center gap-1.5 pr-2"
+                    >
+                      {item.mimeType.startsWith("image/") ? (
+                        <img
+                          src={item.previewUrl}
+                          alt={item.name}
+                          className="h-10 w-10 object-cover rounded-l"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 flex items-center justify-center bg-primary/20 text-xs">
+                          🎬
+                        </div>
+                      )}
+                      <span className="text-[0.65rem] font-mono truncate max-w-[100px]" title={item.name}>
+                        {item.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeMedia(idx)}
+                        className="text-muted-foreground hover:text-destructive text-xs ml-1"
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 4. GPS Geolocation Capture */}
           <div className="flex items-center justify-between rounded border border-border/70 bg-secondary/10 px-3 py-2">
@@ -595,7 +639,12 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               >
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={submitting} className="font-mono text-xs uppercase">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={submitting}
+                className="font-mono text-xs uppercase"
+              >
                 {submitting ? "Submitting…" : isOnline ? "Submit Report" : "Queue Offline"}
               </Button>
             </div>
