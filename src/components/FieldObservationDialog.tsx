@@ -110,6 +110,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   // 2. Submitter Role & Trust Tier
   const [userRole, setUserRole] = useState<string>("PUBLIC_USER");
   const [mediaUploadEnabled, setMediaUploadEnabled] = useState<boolean>(true);
+  const [consentChecked, setConsentChecked] = useState<boolean>(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -246,6 +247,17 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     e.preventDefault();
     setSubmitting(true);
     setStatusMessage(null);
+
+    const isMediaAttached = mediaList.length > 0;
+    if (isMediaAttached && !consentChecked) {
+      setStatusMessage({
+        type: "error",
+        text: "Consent required: Please accept the media review and public disclosure notice before submitting.",
+      });
+      setSubmitting(false);
+      return;
+    }
+
     // If online, upload media files first to obtain permanent storage URLs
     const uploadedUrls: string[] = [];
     const mediaMeta: Array<{ name: string; size: number; mimeType: string; url?: string }> = [];
@@ -319,7 +331,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
       geo_lng: geoLng ?? undefined,
       geo_accuracy_m: geoAccuracy ?? undefined,
       geo_captured_at: geoCapturedAt ?? undefined,
-      consent_given: true,
+      consent_given: Boolean(consentChecked),
       submitter_role: userRole,
     };
 
@@ -603,11 +615,28 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
             </Button>
           </div>
 
-          {/* 5. One-Line Mandatory Consent Notice */}
-          <p className="text-[0.68rem] text-muted-foreground leading-relaxed italic border-l-2 border-primary/50 pl-2">
-            Notice: Uploaded photos, videos, and GPS coordinates will be reviewed by emergency
-            authorities and, once approved, will be visible on the public early warning dashboard.
-          </p>
+          {/* 5. Mandatory Consent Checkbox Gate for Media Submissions */}
+          {mediaList.length > 0 ? (
+            <div className="flex items-start space-x-2.5 rounded border border-primary/40 bg-primary/10 p-2.5">
+              <input
+                type="checkbox"
+                id="mediaConsentCheckbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+              />
+              <Label
+                htmlFor="mediaConsentCheckbox"
+                className="text-[0.72rem] text-foreground leading-relaxed cursor-pointer font-sans select-none"
+              >
+                I understand this photo/video and location may be reviewed by authorities and shown publicly once approved.
+              </Label>
+            </div>
+          ) : (
+            <p className="text-[0.68rem] text-muted-foreground leading-relaxed italic border-l-2 border-primary/50 pl-2">
+              Notice: Numerical rainfall and road condition observations are routed immediately to the regional early warning engine.
+            </p>
+          )}
 
           <div className="grid gap-1.5">
             <Label htmlFor="observerInput" className="text-xs font-mono uppercase text-muted-foreground">
@@ -642,7 +671,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               <Button
                 type="submit"
                 size="sm"
-                disabled={submitting}
+                disabled={submitting || (mediaList.length > 0 && !consentChecked)}
                 className="font-mono text-xs uppercase"
               >
                 {submitting ? "Submitting…" : isOnline ? "Submit Report" : "Queue Offline"}
