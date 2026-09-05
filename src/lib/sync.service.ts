@@ -13,6 +13,8 @@ import { zonePolygon } from "./risk";
 
 export interface FieldObservationInput {
   zone_id: number;
+  district?: string | undefined;
+  state?: string | undefined;
   observed_at: string;
   client_timestamp: string;
   rainfall_mm?: number | undefined;
@@ -143,6 +145,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
   }> = [];
 
   const acknowledgedKeys: string[] = [];
+  const seenKeys = new Set<string>();
 
   for (let i = 0; i < records.length; i++) {
     const r = records[i]!;
@@ -187,6 +190,14 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     const key =
       r.idempotency_key ??
       `OBS-${parsedZone}-${new Date(r.observed_at).getTime()}-${r.observer_id ?? "field"}`;
+
+    if (seenKeys.has(key)) {
+      if (!acknowledgedKeys.includes(key)) {
+        acknowledgedKeys.push(key);
+      }
+      continue;
+    }
+    seenKeys.add(key);
 
     const isOfficial =
       r.submitter_role === "VERIFIED_OFFICIAL" ||

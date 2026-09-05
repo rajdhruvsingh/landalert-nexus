@@ -40,11 +40,6 @@ export function OfflineBanner() {
     }
   }
 
-  // If online and no queued items and no notice, don't show full alert banner
-  if (isOnline && queueCount === 0 && !bannerNotice) {
-    return null;
-  }
-
   return (
     <aside
       aria-label={t("offline.aria_label", "Offline status and synchronization")}
@@ -74,16 +69,14 @@ export function OfflineBanner() {
         </div>
 
         <div className="flex items-center gap-2">
-          {queueCount > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setQueueDialogOpen(true)}
-              className="h-7 px-2.5 text-[0.68rem] font-mono uppercase border-primary/50 text-primary hover:bg-primary/10 cursor-pointer"
-            >
-              {syncing ? t("offline.syncing", "Syncing…") : t("offline.sync_queue_count", "Sync Queue ({{count}})", { count: queueCount })}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setQueueDialogOpen(true)}
+            className="h-7 px-2.5 text-[0.68rem] font-mono uppercase border-primary/50 text-primary hover:bg-primary/10 cursor-pointer"
+          >
+            {syncing ? t("offline.syncing", "Syncing…") : t("offline.sync_queue_count", "Sync Queue ({{count}})", { count: queueCount })}
+          </Button>
 
           {isOnline && (
             <Button

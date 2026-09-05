@@ -163,12 +163,12 @@ export function SyncQueueDialog({
             <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <CheckCircle2 className="h-10 w-10 text-emerald-500/80 mb-2" />
               <p className="text-sm font-semibold text-foreground font-display">
-                {t("sync_queue.empty_title", "Queue is Synchronized")}
+                {t("sync_queue.empty_title", "No observations pending synchronization.")}
               </p>
               <p className="text-xs max-w-sm mt-1">
                 {t(
                   "sync_queue.empty_desc",
-                  "No pending field observations in local storage. All observations have been acknowledged by the server.",
+                  "All field observations have been synchronized with the central monitoring server.",
                 )}
               </p>
             </div>
@@ -177,13 +177,15 @@ export function SyncQueueDialog({
               {queueItems.map((item, index) => {
                 const zone = FALLBACK_ZONES.find((z) => z.id === item.zone_id);
                 const locLabel = zone
-                  ? `${zone.name} (${zone.district}, ${zone.state})`
+                  ? `${zone.name} • ${zone.district}, ${zone.state}`
                   : `Zone ${item.zone_id}`;
+                const mediaCount = item.media_metadata?.length || item.media_urls?.length || 0;
+                const status = item.queue_status || "PENDING";
 
                 return (
                   <div
                     key={item.idempotency_key || index}
-                    className="p-3 rounded border border-border bg-secondary/20 hover:bg-secondary/30 transition-colors text-xs font-sans flex flex-col gap-1.5"
+                    className="p-3 rounded border border-border bg-secondary/20 hover:bg-secondary/30 transition-colors text-xs font-sans flex flex-col gap-2"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -197,25 +199,37 @@ export function SyncQueueDialog({
                       <div className="flex items-center gap-2 font-mono text-[0.65rem]">
                         <span className="text-muted-foreground flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {new Date(item.client_timestamp || item.observed_at).toLocaleTimeString([], {
+                          {new Date(item.client_timestamp || item.observed_at).toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
                         </span>
                         <span
                           className={`px-1.5 py-0.5 rounded font-semibold uppercase ${
-                            item.queue_status === "FAILED"
+                            status === "FAILED"
                               ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                              : status === "SYNCHRONIZED"
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                              : status === "SYNCING"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                               : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
                           }`}
                         >
-                          {item.queue_status || "PENDING"}
+                          {status === "FAILED"
+                            ? "Failed"
+                            : status === "SYNCHRONIZED"
+                            ? "Synced"
+                            : status === "SYNCING"
+                            ? "Syncing"
+                            : "Pending"}
                         </span>
                       </div>
                     </div>
 
                     {/* Details Row */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.72rem] text-muted-foreground font-mono bg-background/50 p-2 rounded">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[0.72rem] text-muted-foreground font-mono bg-background/50 p-2 rounded">
                       <div>
                         <span className="block text-[0.65rem] uppercase text-muted-foreground/80">
                           {t("field_observation.col_rainfall", "Rainfall")}
@@ -242,6 +256,14 @@ export function SyncQueueDialog({
                       </div>
                       <div>
                         <span className="block text-[0.65rem] uppercase text-muted-foreground/80">
+                          {t("sync_queue.col_media", "Media")}
+                        </span>
+                        <span className="font-semibold text-foreground">
+                          {mediaCount} {mediaCount === 1 ? "file" : "files"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[0.65rem] uppercase text-muted-foreground/80">
                           {t("field_observation.col_retries", "Retries")}
                         </span>
                         <span className="font-semibold text-foreground">
@@ -250,17 +272,28 @@ export function SyncQueueDialog({
                       </div>
                     </div>
 
-                    {/* Idempotency Key & Error */}
-                    <div className="flex flex-wrap items-center justify-between gap-1 text-[0.65rem] font-mono text-muted-foreground">
-                      <span className="truncate max-w-[280px]" title={item.idempotency_key}>
-                        Key: {item.idempotency_key?.slice(0, 24)}…
+                    {/* Queue ID, Observer, and Error row */}
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-[0.68rem] font-mono text-muted-foreground pt-0.5">
+                      <span className="truncate max-w-[320px]" title={item.idempotency_key}>
+                        Queue ID: {item.idempotency_key}
                       </span>
-                      {item.last_error && (
-                        <span className="text-red-600 dark:text-red-400 font-sans">
-                          {item.last_error}
-                        </span>
-                      )}
+                      <span className="text-muted-foreground">
+                        Observer: {item.observer_id || "citizen_observer"}
+                      </span>
                     </div>
+
+                    {item.last_error && (
+                      <div className="text-[0.68rem] text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1 flex items-center justify-between gap-2">
+                        <span>Last error: {item.last_error}</span>
+                        <button
+                          type="button"
+                          onClick={handleSyncNow}
+                          className="font-bold underline hover:text-red-700 dark:hover:text-red-300 shrink-0 cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
