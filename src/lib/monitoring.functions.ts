@@ -30,13 +30,13 @@ export type ObservationRow = Database["public"]["Tables"]["field_observations"][
 
 let dbPool: any = null;
 async function getDbPool() {
-  if (!dbPool && (process.env["DATABASE_URL"] || "postgresql://localhost/landalert")) {
+  if (!dbPool && process.env["DATABASE_URL"]) {
     try {
       const pgModule: any = await import("pg");
       const PoolClass = pgModule.default?.Pool || pgModule.Pool;
       dbPool = new PoolClass({
-        connectionString: process.env["DATABASE_URL"] || "postgresql://localhost/landalert",
-        connectionTimeoutMillis: 2000,
+        connectionString: process.env["DATABASE_URL"],
+        connectionTimeoutMillis: 3000,
       });
     } catch (e) {
       console.error("[getDbPool] Error initializing pg pool:", e);
@@ -63,7 +63,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
         .maybeSingle(),
       sb.from("field_observations").select("*").order("observed_at", { ascending: false }).limit(20),
     ]);
-    if (!zones.error && zones.data && zones.data.length > 0) {
+    if (!zones.error && zones.data) {
       return {
         zones: zones.data ?? [],
         roads: roads.data ?? [],
@@ -74,7 +74,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
       };
     }
   } catch {
-    // Proceed to Postgres fallback
+    // Proceed to Postgres fallback if available
   }
 
   // Authoritative Postgres fallback
