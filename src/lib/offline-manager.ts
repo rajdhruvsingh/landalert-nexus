@@ -68,6 +68,75 @@ export function useOnlineStatus(): boolean {
   return isOnline;
 }
 
+export type ConnectivityState = "api_reachable" | "api_unavailable" | "browser_offline";
+
+/**
+ * Truthfully checks browser network state and backend API reachability.
+ */
+export function useConnectivityStatus(): {
+  isOnline: boolean;
+  apiReachable: boolean;
+  connectivityState: ConnectivityState;
+  checkHealth: () => Promise<boolean>;
+} {
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return true;
+    return navigator.onLine;
+  });
+  const [apiReachable, setApiReachable] = useState<boolean>(true);
+
+  const checkHealth = useCallback(async () => {
+    if (typeof window === "undefined" || !navigator.onLine) {
+      setIsOnline(false);
+      setApiReachable(false);
+      return false;
+    }
+    setIsOnline(true);
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      const res = await fetch("/api/health", { signal: ctrl.signal });
+      clearTimeout(timer);
+      const ok = res.ok;
+      setApiReachable(ok);
+      return ok;
+    } catch {
+      setApiReachable(false);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      checkHealth();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setApiReachable(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    checkHealth();
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [checkHealth]);
+
+  const connectivityState: ConnectivityState = !isOnline
+    ? "browser_offline"
+    : !apiReachable
+    ? "api_unavailable"
+    : "api_reachable";
+
+  return { isOnline, apiReachable, connectivityState, checkHealth };
+}
+
 /**
  * Retrieves the local offline observation queue from localStorage.
  */
@@ -265,16 +334,49 @@ export async function syncOfflineObservations(): Promise<SyncResult> {
       pruneQueue(result.acknowledgedKeys);
     }
 
+    if (!result.success || (result.errors && result.errors.length > 0)) {
+      const storage = getStorage();
+      if (storage) {
+        const remaining = getQueuedObservations();
+        const updated = remaining.map((item) => ({
+          ...item,
+          retry_count: (item.retry_count || 0) + 1,
+          queue_status: "FAILED" as const,
+          last_error: result.errors?.[0] || "Sync rejected by server",
+        }));
+        storage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(updated));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("landalert-queue-updated"));
+        }
+      }
+    }
+
     return result;
   } catch (err) {
     console.error("Offline sync error:", err);
+    const errorMsg = err instanceof Error ? err.message : "Sync connection failed";
+    const storage = getStorage();
+    if (storage) {
+      const remaining = getQueuedObservations();
+      const updated = remaining.map((item) => ({
+        ...item,
+        retry_count: (item.retry_count || 0) + 1,
+        queue_status: "FAILED" as const,
+        last_error: errorMsg,
+      }));
+      storage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(updated));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("landalert-queue-updated"));
+      }
+    }
+
     return {
       success: false,
       receivedCount: queue.length,
       syncedCount: 0,
       skippedDuplicates: 0,
       acknowledgedKeys: [],
-      errors: [err instanceof Error ? err.message : "Sync connection failed"],
+      errors: [errorMsg],
     };
   }
 }
@@ -363,6 +465,14 @@ export function useOfflineQueue() {
 
   useEffect(() => {
     refreshQueueCount();
+    if (typeof window !== "undefined") {
+      window.addEventListener("landalert-queue-updated", refreshQueueCount);
+      window.addEventListener("storage", refreshQueueCount);
+      return () => {
+        window.removeEventListener("landalert-queue-updated", refreshQueueCount);
+        window.removeEventListener("storage", refreshQueueCount);
+      };
+    }
   }, [refreshQueueCount]);
 
   const triggerSync = useCallback(async () => {

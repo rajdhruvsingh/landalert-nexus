@@ -593,11 +593,17 @@ function Dashboard() {
                   </span>
                 </div>
 
+                {/* Regional Scope Clarification */}
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[0.68rem] text-muted-foreground font-mono">
+                  <span>{t("overview.coverage_scope", "Coverage: 8 NER States (Arunachal, Assam, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura)")}</span>
+                  <span className="font-semibold text-primary">{data.zones.length} {t("overview.operational_zones", "Operational Monitoring Zones")}</span>
+                </div>
+
                 {/* 4 Metrics in a row with subtle vertical separators */}
                 <div className="grid grid-cols-4 divide-x divide-border py-4 my-1 text-center">
                   <div className="px-2">
                     <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {distinctDistricts.length || 12}
+                      {distinctDistricts.length}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
                       {t("overview.districts_monitored", "Districts monitored")}
@@ -605,7 +611,7 @@ function Dashboard() {
                   </div>
                   <div className="px-2">
                     <div className="font-display text-2xl sm:text-3xl font-bold text-red-600">
-                      {highOrSevereZones.length || 8}
+                      {highOrSevereZones.length}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
                       {t("overview.high_or_severe", "High or severe risk")}
@@ -613,7 +619,7 @@ function Dashboard() {
                   </div>
                   <div className="px-2">
                     <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {data.alerts.length || 24}
+                      {data.alerts.length}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
                       {t("overview.active_alerts", "Active alerts")}
@@ -621,7 +627,7 @@ function Dashboard() {
                   </div>
                   <div className="px-2">
                     <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {observationsList.length ? 180 + observationsList.length : 183}
+                      {((data as any).observations || []).length}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
                       {t("overview.field_observations_30d", "Field observations (last 30 days)")}
@@ -638,7 +644,9 @@ function Dashboard() {
                   </div>
                   <div>
                     <div className="font-semibold text-xs text-red-900 dark:text-red-300 font-display">
-                      {t("overview.elevated_risk_title", `Elevated landslide risk in parts of ${elevatedStates}`)}
+                      {highOrSevereZones.length > 0
+                        ? t("overview.elevated_risk_title", `Elevated landslide risk in parts of ${elevatedStates}`)
+                        : t("overview.standard_risk_title", "Operational situational monitoring active across North Eastern Region")}
                     </div>
                     <div className="text-[0.68rem] text-red-700/80 dark:text-red-400 mt-0.5">
                       {t("overview.elevated_risk_desc", "Due to sustained rainfall and saturated soil conditions.")}
@@ -650,6 +658,7 @@ function Dashboard() {
                   type="button"
                   onClick={() => {
                     setShowZoneDetails(true);
+                    window.history.pushState(null, "", "/#risk-map");
                     setTimeout(() => {
                       const el = document.getElementById("zone-details-brief") || document.getElementById("risk-map");
                       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -746,9 +755,10 @@ function Dashboard() {
                 <a
                   href="#risk-map"
                   onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState(null, "", "/#risk-map");
                     const el = document.getElementById("risk-map");
                     if (el) {
-                      e.preventDefault();
                       el.scrollIntoView({ behavior: "smooth" });
                     }
                   }}
@@ -798,6 +808,7 @@ function Dashboard() {
                   type="button"
                   onClick={() => {
                     setRoadDialogOpen(true);
+                    window.history.pushState(null, "", "/#road-connectivity");
                     const el = document.getElementById("road-connectivity");
                     if (el) el.scrollIntoView({ behavior: "smooth" });
                   }}
@@ -826,6 +837,7 @@ function Dashboard() {
                   onClick={() => {
                     setSelectedObsId(null);
                     setObsDialogOpen(true);
+                    window.history.pushState(null, "", "/#recent-observations");
                   }}
                   className="text-xs font-medium text-primary hover:underline font-sans cursor-pointer"
                 >
@@ -906,7 +918,10 @@ function Dashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => setRoadDialogOpen(true)}
+                onClick={() => {
+                  setRoadDialogOpen(true);
+                  window.history.pushState(null, "", "/#road-connectivity");
+                }}
                 className="text-xs font-medium text-primary hover:underline font-sans cursor-pointer"
               >
                 {t("operational_tables.view_all_roads", "See All Roads →")}

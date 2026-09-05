@@ -39,6 +39,9 @@ export interface FieldObservationInput {
   consent_given?: boolean | undefined;
   submitter_role?: string | undefined;
   review_status?: ("PENDING_REVIEW" | "APPROVED" | "REJECTED") | undefined;
+  retry_count?: number | undefined;
+  queue_status?: ("PENDING" | "SYNCING" | "FAILED" | "SYNCHRONIZED") | undefined;
+  last_error?: string | undefined;
 }
 
 export interface SyncResult {
@@ -149,13 +152,38 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       continue;
     }
 
+    if (!r.observer_id || typeof r.observer_id !== "string" || !r.observer_id.trim()) {
+      errors.push(`Record ${i}: observer_id is required and cannot be empty`);
+      continue;
+    }
+
     if (Number.isNaN(Date.parse(r.observed_at))) {
       errors.push(`Record ${i}: invalid observed_at timestamp`);
       continue;
     }
 
-    const rainfall =
-      r.rainfall_mm !== undefined ? Math.max(0, Math.min(1200, Number(r.rainfall_mm))) : null;
+    let rainfall: number | null = null;
+    if (r.rainfall_mm !== undefined && r.rainfall_mm !== null) {
+      const num = Number(r.rainfall_mm);
+      if (Number.isNaN(num) || num < 0 || num > 1200) {
+        errors.push(`Record ${i}: invalid rainfall_mm ${r.rainfall_mm} (must be a valid number between 0 and 1200 mm)`);
+        continue;
+      }
+      rainfall = num;
+    }
+
+    const hasRainfall = rainfall !== null;
+    const hasVisualSigns = Boolean(r.visual_signs && r.visual_signs !== "None");
+    const hasRoadStatus = Boolean(r.road_status && r.road_status !== "unknown");
+    const hasSoil = Boolean(r.soil_condition && r.soil_condition.trim() !== "");
+    const hasMedia = Boolean(r.media_urls && r.media_urls.length > 0);
+    const hasGeo = r.geo_lat !== undefined && r.geo_lat !== null;
+
+    if (!hasRainfall && !hasVisualSigns && !hasRoadStatus && !hasSoil && !hasMedia && !hasGeo) {
+      errors.push(`Record ${i}: empty observation, at least one observational measurement or signal is required`);
+      continue;
+    }
+
     const key =
       r.idempotency_key ??
       `OBS-${parsedZone}-${new Date(r.observed_at).getTime()}-${r.observer_id ?? "field"}`;
@@ -182,7 +210,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       soil_condition: r.soil_condition ?? null,
       visual_signs: r.visual_signs ?? null,
       road_status: r.road_status ?? null,
-      observer_id: r.observer_id ?? "field_worker",
+      observer_id: r.observer_id.trim(),
       idempotency_key: key,
       status,
       is_training_eligible: isOfficial,

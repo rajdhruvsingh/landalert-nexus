@@ -45,18 +45,29 @@ describe("Multilingual UI (i18n) Support", () => {
     }
   });
 
-  it("persists language selection across user sessions", () => {
-    setAppLanguage("as");
-    expect(i18n.language).toBe("as");
-    expect(localStorage.getItem("landalert_ui_language")).toBe("as");
+  it("persists language selection across user sessions and allows clean return to English", () => {
+    const languagePairs: Array<[string, string]> = [
+      ["hi", "हिन्दी"],
+      ["as", "অসমীয়া"],
+      ["bn", "বাংলা"],
+      ["ne", "नेपाली"],
+      ["mni", "মৈতৈলোন্"],
+      ["kha", "Khasi"],
+      ["lus", "Mizo ṭawng"],
+      ["grt", "A·chik"],
+    ];
 
-    setAppLanguage("ne");
-    expect(i18n.language).toBe("ne");
-    expect(localStorage.getItem("landalert_ui_language")).toBe("ne");
+    for (const [code] of languagePairs) {
+      // Switch from English to target language
+      setAppLanguage(code as any);
+      expect(i18n.language).toBe(code);
+      expect(localStorage.getItem("landalert_ui_language")).toBe(code);
 
-    // Reset back to English
-    setAppLanguage("en");
-    expect(i18n.language).toBe("en");
+      // Verify immediate reversible switch back to English
+      setAppLanguage("en");
+      expect(i18n.language).toBe("en");
+      expect(localStorage.getItem("landalert_ui_language")).toBe("en");
+    }
   });
 
   it("maintains complete key parity and non-empty translations across all 4 languages", () => {

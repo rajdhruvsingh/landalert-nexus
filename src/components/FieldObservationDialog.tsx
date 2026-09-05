@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useOnlineStatus, queueObservation } from "@/lib/offline-manager";
+import { useOnlineStatus, useConnectivityStatus, queueObservation, pruneQueue } from "@/lib/offline-manager";
 import { submitFieldObservationsServerFn } from "@/lib/monitoring.functions";
 import type { FieldObservationInput } from "@/lib/sync.service";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,7 +81,8 @@ export async function ensureAuthenticatedSession() {
 export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const isOnline = useOnlineStatus();
+  const { isOnline, connectivityState, checkHealth } = useConnectivityStatus();
+  const [fieldErrors, setFieldErrors] = useState<{ zone?: string; observer?: string; rainfall?: string; general?: string }>({});
 
   // 1. Live Zones from Database (Fixing the bug where ZONES_LIST had non-existent zones)
   const [zones, setZones] = useState(FALLBACK_ZONES);
@@ -349,6 +350,40 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     e.preventDefault();
     setSubmitting(true);
     setStatusMessage(null);
+    setFieldErrors({});
+
+    const newErrors: { zone?: string; observer?: string; rainfall?: string; general?: string } = {};
+
+    if (!zoneId || isNaN(Number(zoneId))) {
+      newErrors.zone = t("field_observation.error_zone_req", "Please select an operational monitoring zone.");
+    }
+
+    if (!observerId.trim()) {
+      newErrors.observer = t("field_observation.error_observer_req", "Observer name / agency ID is required.");
+    }
+
+    if (rainfallMm.trim() !== "") {
+      const rVal = Number(rainfallMm);
+      if (isNaN(rVal) || rVal < 0 || rVal > 600) {
+        newErrors.rainfall = t("field_observation.error_rainfall_range", "Rainfall must be a positive number between 0 and 600 mm.");
+      }
+    }
+
+    const hasRain = rainfallMm.trim() !== "" && !isNaN(Number(rainfallMm));
+    const hasSigns = visualSigns !== "None";
+    const hasRoad = roadStatus !== "open";
+    const hasMedia = mediaList.length > 0;
+    const hasGeo = geoLat !== null;
+
+    if (!hasRain && !hasSigns && !hasRoad && !hasMedia && !hasGeo) {
+      newErrors.general = t("field_observation.error_empty", "Empty observation: At least one field observation signal (rainfall mm, slope signs, road status, ground photo, or GPS reading) must be provided.");
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors);
+      setSubmitting(false);
+      return;
+    }
 
     const isMediaAttached = mediaList.length > 0;
     if (isMediaAttached && !consentChecked) {
@@ -438,12 +473,12 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     };
 
     try {
-      if (!isOnline) {
-        // Offline: save to local queue
-        queueObservation(record);
+      const fullRecord = queueObservation(record);
+
+      if (!isOnline || connectivityState === "api_unavailable") {
         setStatusMessage({
           type: "offline",
-          text: t("field_observation.offline_queued", "Device is offline. Observation & media queued locally; will sync automatically upon reconnection."),
+          text: t("field_observation.offline_queued", "Device offline/API unavailable. Observation preserved in local offline queue; will sync automatically upon reconnection."),
         });
         setTimeout(() => {
           setOpen(false);
@@ -451,13 +486,12 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           onSuccess?.();
         }, 2200);
       } else {
-        // Online: direct server call
-        const fullRecord = queueObservation(record);
         const res = await submitFieldObservationsServerFn({
           data: { observations: [fullRecord] },
         });
 
         if (res.success && res.syncedCount > 0) {
+          pruneQueue([fullRecord.idempotency_key]);
           const trustNotice =
             userRole === "PUBLIC_USER"
               ? t("field_observation.trust_notice_citizen", "Submitted for official review (unverified citizen signal).")
@@ -474,13 +508,12 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         } else {
           setStatusMessage({
             type: "error",
-            text: res.errors?.[0] || "Server sync failed; queued locally for automatic retry.",
+            text: res.errors?.[0] || "Server sync failed; observation preserved in offline queue.",
           });
         }
       }
     } catch (err) {
-      console.error("Submission failed:", err);
-      queueObservation(record);
+      console.error("Submission failed, preserving in offline queue:", err);
       setStatusMessage({
         type: "offline",
         text: t("field_observation.network_error", "Network error encountered. Observation preserved in offline queue."),
@@ -544,14 +577,26 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           </div>
         )}
 
+        {fieldErrors.general && (
+          <div className="rounded border border-red-500/50 bg-red-500/10 p-2.5 text-xs text-red-600 dark:text-red-400 font-mono">
+            {fieldErrors.general}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {/* 1. Zone Selection (Live 15 Monitored Zones) */}
           <div className="grid gap-1.5">
             <Label htmlFor="zoneSelect" className="text-xs font-mono uppercase text-muted-foreground">
-              {t("field_observation.zone_label", "Monitored Zone (NER)")}
+              {t("field_observation.zone_label", "Operational Monitoring Zone (NER)")}
             </Label>
-            <Select value={String(zoneId)} onValueChange={(v) => setZoneId(Number(v))}>
-              <SelectTrigger id="zoneSelect" aria-label={t("field_observation.zone_label", "Monitored Zone (NER)")} className="bg-secondary/40 border-border font-mono text-xs">
+            <p className="text-[0.65rem] text-muted-foreground">
+              {t("field_observation.zone_note", "15 operational monitoring zones instrumented across Arunachal Pradesh, Assam, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, and Tripura.")}
+            </p>
+            <Select value={String(zoneId)} onValueChange={(v) => {
+              setZoneId(Number(v));
+              setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
+            }}>
+              <SelectTrigger id="zoneSelect" aria-label={t("field_observation.zone_label", "Operational Monitoring Zone (NER)")} className="bg-secondary/40 border-border font-mono text-xs">
                 <SelectValue placeholder={t("field_observation.zone_placeholder", "Select Zone")} />
               </SelectTrigger>
               <SelectContent className="bg-surface border-border max-h-60">
@@ -567,6 +612,9 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.zone && (
+              <p className="text-[0.68rem] text-red-500 font-mono">{fieldErrors.zone}</p>
+            )}
           </div>
 
           {/* 2. Measurements */}
@@ -583,9 +631,15 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 step="0.1"
                 placeholder="e.g. 45.0"
                 value={rainfallMm}
-                onChange={(e) => setRainfallMm(e.target.value)}
+                onChange={(e) => {
+                  setRainfallMm(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, rainfall: undefined, general: undefined }));
+                }}
                 className="bg-secondary/40 border-border font-mono text-xs"
               />
+              {fieldErrors.rainfall && (
+                <p className="text-[0.68rem] text-red-500 font-mono">{fieldErrors.rainfall}</p>
+              )}
             </div>
 
             <div className="grid gap-1.5">
@@ -774,15 +828,35 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               type="text"
               placeholder={t("field_observation.observer_placeholder", "e.g. DDMA Field Team / Citizen Observer")}
               value={observerId}
-              onChange={(e) => setObserverId(e.target.value)}
+              onChange={(e) => {
+                setObserverId(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, observer: undefined, general: undefined }));
+              }}
               className="bg-secondary/40 border-border font-mono text-xs"
             />
+            {fieldErrors.observer && (
+              <p className="text-[0.68rem] text-red-500 font-mono">{fieldErrors.observer}</p>
+            )}
           </div>
 
           <DialogFooter className="mt-4 flex items-center justify-between sm:justify-between pt-2 border-t border-border">
             <div className="flex items-center gap-1.5 font-mono text-[0.68rem] text-muted-foreground">
-              <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-400" : "bg-blue-400"}`} />
-              <span>{isOnline ? t("field_observation.status_online", "Online (Direct API)") : t("field_observation.status_offline", "Offline (Local Queue)")}</span>
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  connectivityState === "api_reachable"
+                    ? "bg-emerald-400"
+                    : connectivityState === "api_unavailable"
+                    ? "bg-amber-400"
+                    : "bg-blue-400"
+                }`}
+              />
+              <span>
+                {connectivityState === "api_reachable"
+                  ? t("field_observation.status_online", "Online (Direct API)")
+                  : connectivityState === "api_unavailable"
+                  ? t("field_observation.status_api_down", "API Unavailable (Will Queue Offline)")
+                  : t("field_observation.status_offline", "Offline (Local Queue)")}
+              </span>
             </div>
             <div className="flex gap-2">
               <Button
@@ -801,7 +875,11 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 disabled={submitting || (mediaList.length > 0 && !consentChecked)}
                 className="font-mono text-xs uppercase"
               >
-                {submitting ? t("field_observation.submitting", "Submitting…") : isOnline ? t("field_observation.submit_report", "Submit Report") : t("field_observation.queue_offline", "Queue Offline")}
+                {submitting
+                  ? t("field_observation.submitting", "Submitting…")
+                  : connectivityState === "api_reachable"
+                  ? t("field_observation.submit_report", "Submit Report")
+                  : t("field_observation.queue_offline", "Queue Offline")}
               </Button>
             </div>
           </DialogFooter>
