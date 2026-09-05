@@ -466,4 +466,14 @@ describe("Authoritative End-to-End Real Sync, Media, and DB Schema Pipeline Test
     expect(body.zoneId).toBe(1);
     expect(typeof body.dispatched).toBe("boolean");
   });
+
+  // 23: FieldObservationDialog module exports and evaluates without ReferenceError
+  it("23: FieldObservationDialog loads and evaluates without useMemo or ReferenceError", async () => {
+    const mod = await import("@/components/FieldObservationDialog");
+    expect(mod.FieldObservationDialog).toBeDefined();
+    expect(typeof mod.FieldObservationDialog).toBe("function");
+    expect(mod.FALLBACK_ZONES.length).toBeGreaterThan(0);
+    expect(mod.NER_GEOGRAPHY).toBeDefined();
+  });
 });
+
