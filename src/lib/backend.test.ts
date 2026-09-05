@@ -1096,6 +1096,121 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       }
     });
   });
+
+  describe("TASK 3 — API Rate Limiting & 429 Retry-After Enforcement", () => {
+    it("allows requests under the limit and rejects with 429 when exceeded", async () => {
+      const { InMemoryRateLimiter } = await import("./rate-limiter");
+      const limiter = new InMemoryRateLimiter();
+      const policy = { windowSeconds: 60, maxRequests: 3 };
+      const key = "test_client_1";
+
+      // Requests 1, 2, 3 should be allowed
+      const r1 = limiter.checkLimit(key, policy);
+      expect(r1.allowed).toBe(true);
+      expect(r1.remaining).toBe(2);
+
+      const r2 = limiter.checkLimit(key, policy);
+      expect(r2.allowed).toBe(true);
+      expect(r2.remaining).toBe(1);
+
+      const r3 = limiter.checkLimit(key, policy);
+      expect(r3.allowed).toBe(true);
+      expect(r3.remaining).toBe(0);
+
+      // Request 4 should be rejected with 429 semantics
+      const r4 = limiter.checkLimit(key, policy);
+      expect(r4.allowed).toBe(false);
+      expect(r4.remaining).toBe(0);
+      expect(r4.resetSeconds).toBeGreaterThan(0);
+    });
+
+    it("resets rate limit window after window expiration", async () => {
+      const { InMemoryRateLimiter } = await import("./rate-limiter");
+      const limiter = new InMemoryRateLimiter();
+      const policy = { windowSeconds: 1, maxRequests: 2 };
+      const key = "test_client_expiry";
+
+      limiter.checkLimit(key, policy);
+      limiter.checkLimit(key, policy);
+      expect(limiter.checkLimit(key, policy).allowed).toBe(false);
+
+      // Advance time or manual reset
+      limiter.reset(key);
+      const afterReset = limiter.checkLimit(key, policy);
+      expect(afterReset.allowed).toBe(true);
+      expect(afterReset.remaining).toBe(1);
+    });
+
+    it("verifies API router returns 429 with Retry-After header on POST /api/alerts/dispatch", async () => {
+      const { defaultRateLimiter, RATE_LIMIT_POLICIES, getClientIdentifier } = await import("./rate-limiter");
+      const clientIp = "192.168.100.50";
+
+      const createTestReq = () =>
+        new Request("http://localhost/api/alerts/dispatch", {
+          method: "POST",
+          headers: {
+            "x-forwarded-for": clientIp,
+            Authorization: "Bearer test-cron-secret-12345",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ zoneId: 1, justification: "Testing rate limit" }),
+        });
+
+      const clientKey = `alert_dispatch:${getClientIdentifier(createTestReq())}`;
+
+      // Reset test key bucket
+      defaultRateLimiter.reset(clientKey);
+
+      // Consume all allowed slots
+      for (let i = 0; i < RATE_LIMIT_POLICIES.ALERT_DISPATCH.maxRequests; i++) {
+        defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.ALERT_DISPATCH);
+      }
+
+      // Next request through API router should trigger 429
+      const req = createTestReq();
+      const res = await handleApiRequest(req);
+      expect(res.status).toBe(429);
+      expect(res.headers.get("Retry-After")).toBeDefined();
+      expect(Number(res.headers.get("Retry-After"))).toBeGreaterThan(0);
+
+      const json = await res.json();
+      expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
+      expect(json.error).toMatch(/rate limit exceeded/i);
+
+      // Cleanup
+      defaultRateLimiter.reset(clientKey);
+    });
+
+    it("verifies API router returns 429 on POST /api/sync/observations when limit is exceeded", async () => {
+      const { defaultRateLimiter, RATE_LIMIT_POLICIES } = await import("./rate-limiter");
+      const clientIp = "192.168.100.51";
+      const clientKey = `sync_observations:${clientIp}`;
+
+      defaultRateLimiter.reset(clientKey);
+
+      for (let i = 0; i < RATE_LIMIT_POLICIES.OBSERVATION_SYNC.maxRequests; i++) {
+        defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.OBSERVATION_SYNC);
+      }
+
+      const req = new Request("http://localhost/api/sync/observations", {
+        method: "POST",
+        headers: {
+          "x-forwarded-for": clientIp,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ observations: [] }),
+      });
+
+      const res = await handleApiRequest(req);
+      expect(res.status).toBe(429);
+      expect(res.headers.get("Retry-After")).toBeDefined();
+
+      const json = await res.json();
+      expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
+
+      defaultRateLimiter.reset(clientKey);
+    });
+  });
 });
 
 

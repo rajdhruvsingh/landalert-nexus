@@ -23,6 +23,11 @@ import { getSatelliteLayerStatus, fetchSatelliteTile } from "./satellite.service
 import { processIMDTelemetry } from "./integrations/imd.adapter";
 import { processSensorTelemetry } from "./integrations/sensors.adapter";
 import { processRoadStatusUpdate } from "./integrations/road-status.adapter";
+import {
+  defaultRateLimiter,
+  RATE_LIMIT_POLICIES,
+  getClientIdentifier,
+} from "./rate-limiter";
 
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
 
@@ -156,6 +161,23 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
     // 6. Alert Dispatch Service (Explicit Dispatcher Authorization Required)
     if (pathname === "/api/alerts/dispatch" && request.method === "POST") {
+      const clientKey = `alert_dispatch:${getClientIdentifier(request)}`;
+      const limitResult = defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.ALERT_DISPATCH);
+      if (!limitResult.allowed) {
+        return errorResponse(
+          `Rate limit exceeded for alert dispatch. Maximum ${RATE_LIMIT_POLICIES.ALERT_DISPATCH.maxRequests} requests per ${RATE_LIMIT_POLICIES.ALERT_DISPATCH.windowSeconds}s.`,
+          "RATE_LIMIT_EXCEEDED",
+          429,
+          {
+            ...cors,
+            "Retry-After": String(limitResult.resetSeconds),
+            "X-RateLimit-Limit": String(limitResult.limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(limitResult.resetSeconds),
+          },
+        );
+      }
+
       const authHeader = request.headers.get("Authorization");
       if (!authHeader) {
         return errorResponse("Authentication required for emergency dispatch", "UNAUTHORIZED", 401, cors);
@@ -289,6 +311,23 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
     // 7. Offline Field Observation Synchronization
     if (pathname === "/api/sync/observations" && request.method === "POST") {
+      const clientKey = `sync_observations:${getClientIdentifier(request)}`;
+      const limitResult = defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.OBSERVATION_SYNC);
+      if (!limitResult.allowed) {
+        return errorResponse(
+          `Rate limit exceeded for observation sync. Maximum ${RATE_LIMIT_POLICIES.OBSERVATION_SYNC.maxRequests} requests per ${RATE_LIMIT_POLICIES.OBSERVATION_SYNC.windowSeconds}s.`,
+          "RATE_LIMIT_EXCEEDED",
+          429,
+          {
+            ...cors,
+            "Retry-After": String(limitResult.resetSeconds),
+            "X-RateLimit-Limit": String(limitResult.limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(limitResult.resetSeconds),
+          },
+        );
+      }
+
       let body: { observations?: unknown } = {};
       try {
         body = await request.json();
@@ -312,6 +351,23 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
     // 7b. Field Observation Media Upload
     if (pathname === "/api/field-observations/upload" && request.method === "POST") {
+      const clientKey = `media_upload:${getClientIdentifier(request)}`;
+      const limitResult = defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.MEDIA_UPLOAD);
+      if (!limitResult.allowed) {
+        return errorResponse(
+          `Rate limit exceeded for media upload. Maximum ${RATE_LIMIT_POLICIES.MEDIA_UPLOAD.maxRequests} requests per ${RATE_LIMIT_POLICIES.MEDIA_UPLOAD.windowSeconds}s.`,
+          "RATE_LIMIT_EXCEEDED",
+          429,
+          {
+            ...cors,
+            "Retry-After": String(limitResult.resetSeconds),
+            "X-RateLimit-Limit": String(limitResult.limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(limitResult.resetSeconds),
+          },
+        );
+      }
+
       const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] === "true";
       if (!mediaUploadEnabled) {
         return errorResponse(

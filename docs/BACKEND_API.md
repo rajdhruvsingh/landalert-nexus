@@ -371,3 +371,44 @@ Because RLS is strictly enforced by the PostgreSQL database engine rather than a
   2. Configure the database connection string: `export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"`
   3. Run the integration test: `npx vitest run src/lib/storage-rls.test.ts`
 
+---
+
+## 5. API Rate Limiting
+
+To prevent resource exhaustion, uncontrolled SMS financial spend, and storage quota depletion, LandAlert-Nexus enforces rate limiting on all cost- and write-intensive endpoints.
+
+### 5.1 Architecture & Swappable Limiter Interface
+
+Rate limiting is architected behind the `RateLimiter` interface (`src/lib/rate-limiter.ts`), allowing the default `InMemoryRateLimiter` to be swapped for a distributed Redis-backed limiter (e.g. Upstash) when scaling horizontally across multi-region server clusters.
+
+Clients are tracked by their authenticated Bearer token prefix or client IP (`CF-Connecting-IP`, `X-Forwarded-For`, or `X-Real-IP`).
+
+### 5.2 Configured Policies & Operational Rationale
+
+| Endpoint | Limit | Window | Operational Rationale |
+| :--- | :--- | :--- | :--- |
+| `POST /api/alerts/dispatch` | 5 requests | 60 seconds | **SMS Gateway Quota & Financial Spend**: Prevents rogue dispatches or compromised credentials from triggering massive SMS billing spikes or cellular carrier spam blacklisting. |
+| `POST /api/field-observations/upload` | 20 requests | 60 seconds | **Storage & Bandwidth Quota**: Protects Supabase Object Storage from storage consumption denial-of-service and multipart payload saturation. |
+| `POST /api/sync/observations` | 30 requests | 60 seconds | **Database Write Volume**: Manages burst concurrency from field devices reconnecting after network blackouts. |
+
+### 5.3 Error Envelope & Response Headers (HTTP 429)
+
+When a client exceeds the limit, the router immediately returns `429 Too Many Requests` with a standard `Retry-After` header:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 48
+X-RateLimit-Limit: 5
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 48
+```
+
+```json
+{
+  "error": "Rate limit exceeded for alert dispatch. Maximum 5 requests per 60s.",
+  "code": "RATE_LIMIT_EXCEEDED"
+}
+```
+
+
