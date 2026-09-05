@@ -5,7 +5,12 @@ import {
   pruneQueue,
   getCachedOfflinePackage,
 } from "./offline-manager";
-import { riskColor, riskBadgeClass, RISK_LEVELS } from "./risk";
+import {
+  riskColor,
+  riskBadgeClass,
+  RISK_LEVELS,
+  severityRank,
+} from "./risk";
 
 describe("Frontend Offline Queue & Synchronization Layer", () => {
   beforeEach(() => {
@@ -158,10 +163,25 @@ describe("Authoritative Risk Representation & Color Consistency", () => {
     expect(riskColor("Moderate")).toBe("var(--risk-moderate)");
     expect(riskColor("High")).toBe("var(--risk-high)");
     expect(riskColor("Severe")).toBe("var(--risk-severe)");
+    expect(riskColor("UNKNOWN")).toBe("var(--risk-unknown, #94a3b8)");
 
     expect(riskBadgeClass("Low")).toContain("text-risk-low");
     expect(riskBadgeClass("Moderate")).toContain("text-risk-moderate");
     expect(riskBadgeClass("High")).toContain("text-risk-high");
     expect(riskBadgeClass("Severe")).toContain("text-risk-severe");
+    expect(riskBadgeClass("UNKNOWN")).toContain("text-muted-foreground");
+
+    // Severity rank ensures UNKNOWN is never coerced into or compared as <= Low
+    expect(severityRank("Low")).toBe(1);
+    expect(severityRank("Moderate")).toBe(2);
+    expect(severityRank("High")).toBe(3);
+    expect(severityRank("Severe")).toBe(4);
+    expect(severityRank("UNKNOWN")).toBeNull();
+
+    // Verify ordering logic handles null severity rank safely
+    const levels = ["Severe", "UNKNOWN", "Low", "High", "Moderate"];
+    const sortable = levels.filter((l) => severityRank(l) !== null);
+    sortable.sort((a, b) => severityRank(a)! - severityRank(b)!);
+    expect(sortable).toEqual(["Low", "Moderate", "High", "Severe"]);
   });
 });

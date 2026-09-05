@@ -219,11 +219,13 @@ function ZonePage() {
                   <div>
                     <div className="label-caps text-[0.68rem]">{t("zone_detail.authoritative_risk_level")}</div>
                     <div className="mt-1 flex items-center gap-2">
-                      <RiskBadge level={zone.current_risk_level} score={zone.risk_score} />
+                      <RiskBadge level={mlPrediction?.risk_level ?? zone.current_risk_level} score={mlPrediction?.risk_score ?? zone.risk_score} />
                       <span className="font-mono text-xs text-muted-foreground">
                         {t("zone_detail.ml_probability")}:{" "}
                         {mlPrediction
-                          ? `${(mlPrediction.probability * 100).toFixed(1)}%`
+                          ? mlPrediction.probability !== null
+                            ? `${(mlPrediction.probability * 100).toFixed(1)}%`
+                            : "Unavailable"
                           : "Loading…"}
                       </span>
                     </div>
@@ -345,17 +347,37 @@ function ZonePage() {
         </div>
         <div className="flex flex-col items-end gap-1">
           <RiskBadge
-            level={zone.current_risk_level}
-            score={zone.risk_score}
+            level={mlPrediction?.risk_level ?? zone.current_risk_level}
+            score={mlPrediction?.risk_score ?? zone.risk_score}
             className="px-3 py-1.5 text-sm"
           />
           {mlPrediction && (
             <span className="font-mono text-[0.7rem] text-muted-foreground">
-              {t("zone_detail.ml_probability")}: {(mlPrediction.probability * 100).toFixed(1)}%
+              {mlPrediction.probability !== null
+                ? `${t("zone_detail.ml_probability")}: ${(mlPrediction.probability * 100).toFixed(1)}%`
+                : "ML Probability: Unavailable"}
             </span>
           )}
         </div>
       </header>
+
+      {mlPrediction?.status === "STALE" && (
+        <div className="mt-3 flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 font-mono text-xs text-amber-300">
+          <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+          <span className="font-semibold uppercase tracking-wider">⚠ Stale Telemetry</span>
+          <span className="text-amber-200">
+            — last computed at {mlPrediction.data_freshness.latest_weather_timestamp ?? mlPrediction.inference_timestamp}, may be stale.
+          </span>
+        </div>
+      )}
+
+      {mlPrediction?.risk_level === "UNKNOWN" && (
+        <div className="mt-3 flex items-center gap-2 rounded border border-border bg-secondary/60 px-3 py-1.5 font-mono text-xs text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-slate-400" />
+          <span className="font-semibold uppercase tracking-wider">Status Unknown</span>
+          <span>— system data unavailable (inference engine and telemetry database offline).</span>
+        </div>
+      )}
 
       <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat
@@ -372,9 +394,15 @@ function ZonePage() {
         />
         <Stat
           label={t("zone_detail.stat_ml_inferred")}
-          value={mlPrediction ? `${(mlPrediction.probability * 100).toFixed(1)}%` : "…"}
-          hint="Logistic Regression v2 (19 features)"
-          tone={mlPrediction && mlPrediction.probability >= 0.65 ? riskColor("Severe") : undefined}
+          value={
+            mlPrediction
+              ? mlPrediction.probability !== null
+                ? `${(mlPrediction.probability * 100).toFixed(1)}%`
+                : "Unavailable"
+              : "…"
+          }
+          hint={mlPrediction?.risk_level === "UNKNOWN" ? "Telemetry unavailable" : "Logistic Regression v2 (19 features)"}
+          tone={mlPrediction && mlPrediction.probability !== null && mlPrediction.probability >= 0.65 ? riskColor("Severe") : undefined}
         />
         <Stat
           label={t("zone_detail.stat_mean_slope")}

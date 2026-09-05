@@ -11,7 +11,7 @@
  * - GIS GeoJSON geometry standards
  */
 
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 
 // Ensure environment variables for CI/test execution
 process.env["CRON_SECRET"] = "test-cron-secret-12345";
@@ -93,10 +93,15 @@ interface MockQuery {
   then: (resolve: (res: { data: unknown; error: null }) => void) => void;
 }
 
+let mockDbUnreachable = false;
+
 vi.mock("@/integrations/supabase/client.server", () => {
   return {
     supabaseAdmin: {
       from: (table: string) => {
+        if (mockDbUnreachable) {
+          throw new Error("Connection refused: PostgreSQL database offline");
+        }
         const query: MockQuery = {
           select: (_cols: string) => query,
           order: (_col: string, _opt?: { ascending: boolean }) => query,
@@ -155,9 +160,98 @@ vi.mock("@/integrations/supabase/client.server", () => {
   };
 });
 
-import { validatePredictionInput } from "./ml.service";
+import {
+  validatePredictionInput,
+  getDatabaseFallbackPrediction,
+  setLastKnownPredictionForTesting,
+  clearLastKnownPredictionsForTesting,
+  type RiskPredictionResult,
+} from "./ml.service";
+import { severityRank, riskColor, riskBadgeClass } from "./risk";
 import { ALERT_TEMPLATES } from "./alert.service";
 import { handleApiRequest } from "./api.router";
+
+describe("Authoritative ML Fallback & Degraded State Handling", () => {
+  beforeEach(() => {
+    clearLastKnownPredictionsForTesting();
+    mockDbUnreachable = false;
+  });
+
+  afterEach(() => {
+    clearLastKnownPredictionsForTesting();
+    mockDbUnreachable = false;
+  });
+
+  it("returns explicit UNKNOWN/DEGRADED state when database is unreachable with no prior prediction", async () => {
+    mockDbUnreachable = true;
+    const result = await getDatabaseFallbackPrediction(1);
+
+    expect(result.status).toBe("DEGRADED");
+    expect(result.risk_level).toBe("UNKNOWN");
+    expect(result.probability).toBeNull();
+    expect(result.risk_score).toBeNull();
+    expect(result.zone_id).toBe(1);
+    expect(result.explanation_narrative).toContain("Status Unknown");
+    expect(result.explanation_narrative).toContain("system data unavailable");
+  });
+
+  it("preserves last-known prediction with staleness flag when database is unreachable with prior computation", async () => {
+    const priorPrediction: RiskPredictionResult = {
+      status: "VALID",
+      zone_id: 3,
+      zone_name: "Aizawl East",
+      district: "Aizawl",
+      state: "Mizoram",
+      model_version: "v0.2-lr-trained",
+      feature_schema_version: "v1.0.0",
+      probability: 0.72,
+      risk_score: 72,
+      risk_level: "Severe",
+      explanation_narrative: "Intense 72h monsoon rainfall crossing threshold",
+      data_freshness: {
+        latest_weather_timestamp: "2026-09-04T18:00:00Z",
+        weather_age_hours: 4.2,
+        soil_moisture_status: "measured",
+      },
+      inference_timestamp: "2026-09-04T18:05:00Z",
+      persisted: true,
+    };
+
+    setLastKnownPredictionForTesting(3, priorPrediction);
+
+    mockDbUnreachable = true;
+    const result = await getDatabaseFallbackPrediction(3);
+
+    // Must NOT downgrade to UNKNOWN or Low
+    expect(result.status).toBe("STALE");
+    expect(result.risk_level).toBe("Severe");
+    expect(result.risk_score).toBe(72);
+    expect(result.probability).toBe(0.72);
+    expect(result.data_freshness.soil_moisture_status).toBe("stale");
+    expect(result.explanation_narrative).toContain("showing last-known computation from");
+    expect(result.explanation_narrative).toContain("(may be stale)");
+  });
+
+  it("guarantees UNKNOWN is never numerically sortable alongside Low/Moderate/High/Severe", () => {
+    expect(severityRank("Low")).toBe(1);
+    expect(severityRank("Moderate")).toBe(2);
+    expect(severityRank("High")).toBe(3);
+    expect(severityRank("Severe")).toBe(4);
+    expect(severityRank("UNKNOWN")).toBeNull();
+
+    // Verify ordering logic handles null severity rank safely
+    const mixedLevels = ["Severe", "UNKNOWN", "Low", "High", "Moderate"];
+    const sortable = mixedLevels.filter((l) => severityRank(l) !== null);
+    sortable.sort((a, b) => severityRank(a)! - severityRank(b)!);
+    expect(sortable).toEqual(["Low", "Moderate", "High", "Severe"]);
+
+    // UNKNOWN is never coerced to <= Low
+    expect(severityRank("UNKNOWN")).toBeNull();
+    expect(riskColor("UNKNOWN")).toBe("var(--risk-unknown, #94a3b8)");
+    expect(riskBadgeClass("UNKNOWN")).toContain("text-muted-foreground");
+    expect(riskBadgeClass("UNKNOWN")).not.toContain("text-risk-low");
+  });
+});
 
 describe("ML Service Input Validation", () => {
   it("accepts valid zone IDs between 1 and 15", () => {

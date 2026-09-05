@@ -1,12 +1,14 @@
-export type RiskLevel = "Low" | "Moderate" | "High" | "Severe";
+export type RiskLevel = "Low" | "Moderate" | "High" | "Severe" | "UNKNOWN";
 
 export const RISK_LEVELS: RiskLevel[] = ["Low", "Moderate", "High", "Severe"];
+export const ALL_RISK_LEVELS: RiskLevel[] = ["Low", "Moderate", "High", "Severe", "UNKNOWN"];
 
 export const riskToken: Record<RiskLevel, string> = {
   Low: "risk-low",
   Moderate: "risk-moderate",
   High: "risk-high",
   Severe: "risk-severe",
+  UNKNOWN: "risk-unknown",
 };
 
 export function riskColor(level: string): string {
@@ -17,8 +19,11 @@ export function riskColor(level: string): string {
       return "var(--risk-high)";
     case "Moderate":
       return "var(--risk-moderate)";
-    default:
+    case "Low":
       return "var(--risk-low)";
+    case "UNKNOWN":
+    default:
+      return "var(--risk-unknown, #94a3b8)";
   }
 }
 
@@ -30,8 +35,32 @@ export function riskBadgeClass(level: string): string {
       return "bg-risk-high/15 text-risk-high border-risk-high/40";
     case "Moderate":
       return "bg-risk-moderate/15 text-risk-moderate border-risk-moderate/40";
-    default:
+    case "Low":
       return "bg-risk-low/15 text-risk-low border-risk-low/40";
+    case "UNKNOWN":
+    default:
+      return "bg-secondary/40 text-muted-foreground border-border";
+  }
+}
+
+/**
+ * Authoritative numeric severity rank for operational prioritization.
+ * UNKNOWN returns null because it cannot be ordered or compared alongside
+ * valid risk levels (it must never be coerced into <= Low or treated as low-risk).
+ */
+export function severityRank(level: RiskLevel | string): number | null {
+  switch (level) {
+    case "Low":
+      return 1;
+    case "Moderate":
+      return 2;
+    case "High":
+      return 3;
+    case "Severe":
+      return 4;
+    case "UNKNOWN":
+    default:
+      return null;
   }
 }
 

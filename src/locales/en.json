@@ -31,7 +31,8 @@
     "Low": "Low",
     "Moderate": "Moderate",
     "High": "High",
-    "Severe": "Severe"
+    "Severe": "Severe",
+    "UNKNOWN": "Status Unknown"
   },
   "road_status": {
     "open": "Passable / Open",

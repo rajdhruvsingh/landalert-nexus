@@ -87,6 +87,7 @@ function Dashboard() {
     lvl,
     n: data.zones.filter((z) => z.current_risk_level === lvl).length,
   }));
+  const unknownZonesCount = data.zones.filter((z) => z.current_risk_level === "UNKNOWN").length;
 
   const blocked = data.roads.filter((r) => r.status === "blocked");
   const restricted = data.roads.filter((r) => r.status === "restricted");
@@ -185,6 +186,14 @@ function Dashboard() {
             tone={riskColor(c.lvl)}
           />
         ))}
+        {unknownZonesCount > 0 && (
+          <Stat
+            label="Status Unknown"
+            value={unknownZonesCount}
+            hint="System data unavailable"
+            tone={riskColor("UNKNOWN")}
+          />
+        )}
         <Stat
           label="Population exposed"
           value={atRisk.toLocaleString("en-IN")}
@@ -225,6 +234,13 @@ function Dashboard() {
                 {l}
               </span>
             ))}
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span
+                className="inline-block h-3 w-3 rounded-sm"
+                style={{ backgroundColor: riskColor("UNKNOWN") }}
+              />
+              Unknown
+            </span>
           </div>
         </div>
 
@@ -249,15 +265,48 @@ function Dashboard() {
                       }
                     />
                     {selectedMl && (
-                      <span className="font-mono text-[0.68rem] text-primary">
-                        ML Risk: {(selectedMl.probability * 100).toFixed(1)}% (
-                        {selectedMl.risk_level})
+                      <span
+                        className={`font-mono text-[0.68rem] ${
+                          selectedMl.risk_level === "UNKNOWN"
+                            ? "text-muted-foreground"
+                            : "text-primary"
+                        }`}
+                      >
+                        {selectedMl.risk_level === "UNKNOWN"
+                          ? "ML Risk: Unavailable (Status Unknown)"
+                          : `ML Risk: ${
+                              selectedMl.probability !== null
+                                ? `${(selectedMl.probability * 100).toFixed(1)}%`
+                                : "Unavailable"
+                            } (${selectedMl.risk_level})`}
                       </span>
                     )}
                   </div>
                 </div>
-                <RiskBadge level={selected.current_risk_level} score={selected.risk_score} />
+                <RiskBadge
+                  level={selectedMl?.risk_level ?? selected.current_risk_level}
+                  score={selectedMl?.risk_score ?? selected.risk_score}
+                />
               </div>
+
+              {selectedMl?.status === "STALE" && (
+                <div className="flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 font-mono text-[0.7rem] text-amber-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span>
+                    Last computed at{" "}
+                    {selectedMl.data_freshness.latest_weather_timestamp ??
+                      selectedMl.inference_timestamp}
+                    , may be stale.
+                  </span>
+                </div>
+              )}
+
+              {selectedMl?.risk_level === "UNKNOWN" && (
+                <div className="flex items-center gap-2 rounded border border-border bg-secondary/60 px-2.5 py-1 font-mono text-[0.7rem] text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  <span>Status Unknown — system data unavailable.</span>
+                </div>
+              )}
 
               <div>
                 <ExplanationCard explanation={selected.explanation} />

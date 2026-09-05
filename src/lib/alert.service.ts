@@ -94,7 +94,10 @@ export async function evaluateAndDispatchAlert(
   if (level !== "High" && level !== "Severe") {
     return {
       dispatched: false,
-      reason: `Risk level ${level} below threshold (High/Severe required)`,
+      reason:
+        level === "UNKNOWN"
+          ? "Prediction unavailable: risk level is UNKNOWN (High/Severe required)"
+          : `Risk level ${level} below threshold (High/Severe required)`,
       zoneId,
     };
   }
@@ -130,9 +133,11 @@ export async function evaluateAndDispatchAlert(
   // 3. Telemetry / Stale Data Advisory
   let advisory: string | undefined = undefined;
   if (prediction.status === "STALE") {
-    advisory = "DATA ADVISORY: Weather telemetry >72h old";
+    advisory = `DATA ADVISORY: Weather telemetry stale (last computed at ${prediction.data_freshness?.latest_weather_timestamp ?? prediction.inference_timestamp})`;
   } else if (prediction.status === "FALLBACK") {
     advisory = "DATA ADVISORY: Soil moisture using 50% neutral fallback";
+  } else if (prediction.status === "DEGRADED") {
+    advisory = "DATA ADVISORY: System data unavailable — inference engine and telemetry database offline";
   }
 
   // 4. Construct message and explanation

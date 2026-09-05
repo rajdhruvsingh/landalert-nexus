@@ -10,8 +10,12 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { RiskLevel } from "./risk";
 
 const execFileAsync = promisify(execFile);
+
+// Authoritative in-memory cache of last successful computations per zone
+const lastKnownPredictions = new Map<number, RiskPredictionResult>();
 
 export interface FactorContribution {
   category: string;
@@ -28,16 +32,16 @@ export interface FeatureAttribution {
 }
 
 export interface RiskPredictionResult {
-  status: "VALID" | "STALE" | "FALLBACK" | "MISSING" | "INVALID";
+  status: "VALID" | "STALE" | "FALLBACK" | "MISSING" | "INVALID" | "DEGRADED";
   zone_id: number;
   zone_name: string;
   district: string;
   state: string;
   model_version: string;
   feature_schema_version: string;
-  probability: number;
-  risk_score: number;
-  risk_level: "Low" | "Moderate" | "High" | "Severe";
+  probability: number | null;
+  risk_score: number | null;
+  risk_level: RiskLevel;
   explanation_narrative: string;
   factor_attribution?: {
     top_categories: FactorContribution[];
@@ -46,8 +50,8 @@ export interface RiskPredictionResult {
   };
   canonical_features?: Record<string, number>;
   data_freshness: {
-    latest_weather_timestamp: string | null;
-    weather_age_hours: number;
+    latest_weather_timestamp?: string | null;
+    weather_age_hours?: number;
     soil_moisture_status: "measured" | "stale" | "missing" | "fallback";
   };
   inference_timestamp: string;
@@ -135,6 +139,7 @@ export async function getRiskPrediction(
       return parsed;
     }
     parsed.persisted = true;
+    lastKnownPredictions.set(validation.zoneId, parsed);
     return parsed;
   } catch (err) {
     // If Python execution encounters an environmental issue or times out (>4s), execute safe fallback
@@ -148,9 +153,9 @@ export async function getRiskPrediction(
 
 /**
  * Fallback prediction path querying PostgreSQL public.risk_zones and active model config,
- * with deterministic baseline heuristic fallback if database is hydrating or offline.
+ * with last-known-prediction preservation and explicit UNKNOWN/DEGRADED fallback if database is hydrating or offline.
  */
-async function getDatabaseFallbackPrediction(zoneId: number): Promise<RiskPredictionResult> {
+export async function getDatabaseFallbackPrediction(zoneId: number): Promise<RiskPredictionResult> {
   const fallbackZones: Record<number, { name: string; district: string; state: string }> = {
     1: { name: "Tamenglong", district: "Tamenglong", state: "Manipur" },
     2: { name: "Noney", district: "Noney", state: "Manipur" },
@@ -187,11 +192,11 @@ async function getDatabaseFallbackPrediction(zoneId: number): Promise<RiskPredic
       const cfg = configRes.data;
       const latestPred = latestPredictionRes.data;
 
-      const riskLevel = (zone.current_risk_level as "Low" | "Moderate" | "High" | "Severe") ?? "Low";
+      const riskLevel = (zone.current_risk_level as RiskLevel) ?? "UNKNOWN";
       const riskScore = zone.risk_score ?? 0;
       const probability = latestPred?.probability ?? Math.round((riskScore / 100) * 1000) / 1000;
 
-      return {
+      const result: RiskPredictionResult = {
         status: zone.soil_moisture_status === "fallback" ? "FALLBACK" : "VALID",
         zone_id: zone.id,
         zone_name: zone.zone_name,
@@ -212,11 +217,36 @@ async function getDatabaseFallbackPrediction(zoneId: number): Promise<RiskPredic
         inference_timestamp: new Date().toISOString(),
         persisted: false,
       };
+
+      lastKnownPredictions.set(zoneId, result);
+      return result;
     }
   } catch {
     // Database connection failure fallback below
   }
 
+  // If a recent prior prediction exists for this zone, preserve that last-known value
+  // with an explicit staleness indicator rather than degrading to UNKNOWN
+  const prior = lastKnownPredictions.get(zoneId);
+  if (prior) {
+    const lastTimestamp =
+      prior.data_freshness?.latest_weather_timestamp ||
+      prior.inference_timestamp ||
+      "prior computation";
+    return {
+      ...prior,
+      status: "STALE",
+      persisted: false,
+      explanation_narrative: `Telemetry & database offline: showing last-known computation from ${lastTimestamp} (may be stale). ${prior.explanation_narrative}`,
+      data_freshness: {
+        ...prior.data_freshness,
+        soil_moisture_status: "stale",
+      },
+    };
+  }
+
+  // When there is truly no prior value to fall back to and both ML engine and DB are unreachable,
+  // return an explicit UNKNOWN / DEGRADED state (never fabricate "Low risk" or 0.20 probability).
   const zInfo = fallbackZones[zoneId] || {
     name: `Zone ${zoneId}`,
     district: "NER District",
@@ -224,22 +254,36 @@ async function getDatabaseFallbackPrediction(zoneId: number): Promise<RiskPredic
   };
 
   return {
-    status: "FALLBACK",
+    status: "DEGRADED",
     zone_id: zoneId,
     zone_name: zInfo.name,
     district: zInfo.district,
     state: zInfo.state,
     model_version: "v0.2-lr-trained",
     feature_schema_version: "v1.0.0",
-    probability: 0.20,
-    risk_score: 20,
-    risk_level: "Low",
-    explanation_narrative: "Baseline heuristic threshold calculation (test/offline environment)",
+    probability: null,
+    risk_score: null,
+    risk_level: "UNKNOWN",
+    explanation_narrative:
+      "Status Unknown: system data unavailable — inference engine and telemetry database offline.",
     data_freshness: {
+      latest_weather_timestamp: null,
+      weather_age_hours: undefined,
       soil_moisture_status: "fallback",
     },
     inference_timestamp: new Date().toISOString(),
     persisted: false,
   };
+}
+
+export function setLastKnownPredictionForTesting(
+  zoneId: number,
+  prediction: RiskPredictionResult,
+): void {
+  lastKnownPredictions.set(zoneId, prediction);
+}
+
+export function clearLastKnownPredictionsForTesting(): void {
+  lastKnownPredictions.clear();
 }
 

@@ -7,9 +7,10 @@ export function RiskBadge({
   className,
 }: {
   level: string;
-  score?: number | undefined;
+  score?: number | null | undefined;
   className?: string | undefined;
 }) {
+  const isUnknown = level === "UNKNOWN";
   return (
     <span
       className={cn(
@@ -17,9 +18,12 @@ export function RiskBadge({
         riskBadgeClass(level),
         className,
       )}
+      title={isUnknown ? "Status Unknown — system data unavailable" : undefined}
     >
-      {level}
-      {score !== undefined && <span className="font-mono text-[0.65rem] opacity-80">{score}</span>}
+      {isUnknown ? "Status Unknown — system data unavailable" : level}
+      {!isUnknown && score !== undefined && score !== null && (
+        <span className="font-mono text-[0.65rem] opacity-80">{score}</span>
+      )}
     </span>
   );
 }
