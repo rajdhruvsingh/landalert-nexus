@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useRouter, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { IndiaEmblem } from "./IndiaEmblem";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -19,6 +19,9 @@ import "@/lib/i18n";
 
 export function ConsoleNav() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const routerState = useRouterState();
+  const currentPath = routerState.location.pathname;
   const [user, setUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -47,12 +50,63 @@ export function ConsoleNav() {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return;
+
     if (typeof window !== "undefined") {
-      const q = searchQuery.trim().toLowerCase();
-      window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q } }));
-      const mapEl = document.getElementById("risk-map");
-      if (mapEl) {
-        mapEl.scrollIntoView({ behavior: "smooth" });
+      if (currentPath === "/") {
+        window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q } }));
+        const mapEl = document.getElementById("risk-map");
+        if (mapEl) {
+          mapEl.scrollIntoView({ behavior: "smooth" });
+        }
+      } else {
+        sessionStorage.setItem("landalert_pending_search", q);
+        navigate({ to: "/", hash: "risk-map" });
+      }
+    }
+  };
+
+  const handleNavToSection = (
+    e: React.MouseEvent,
+    hash: string,
+    eventName?: string
+  ) => {
+    e.preventDefault();
+    if (typeof window === "undefined") return;
+
+    if (currentPath === "/") {
+      const targetId =
+        hash === "observations" || hash === "recent-observations"
+          ? "recent-observations"
+          : hash === "road-network" || hash === "roads" || hash === "road-connectivity"
+          ? "road-connectivity"
+          : hash;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+      }
+      window.history.pushState(null, "", `/#${hash}`);
+      if (eventName) {
+        window.dispatchEvent(new CustomEvent(eventName));
+      }
+    } else {
+      if (eventName) {
+        sessionStorage.setItem("landalert_pending_event", eventName);
+      }
+      navigate({
+        to: "/",
+        hash,
+      });
+    }
+  };
+
+  const handleHomeClick = (e: React.MouseEvent) => {
+    if (currentPath === "/") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (window.location.hash) {
+        window.history.pushState(null, "", "/");
       }
     }
   };
@@ -175,45 +229,50 @@ export function ConsoleNav() {
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 lg:px-8">
           {/* Horizontal Links */}
           <div className="flex items-center overflow-x-auto scrollbar-none gap-1 sm:gap-2 py-0 font-sans text-xs">
-            <NavLink to="/" label={t("nav.home", "Home")} exact />
+            <Link
+              to="/"
+              activeOptions={{ exact: true }}
+              onClick={handleHomeClick}
+              className="whitespace-nowrap relative px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&.active]:text-primary [&.active]:font-semibold [&.active]:after:content-[''] [&.active]:after:absolute [&.active]:after:bottom-0 [&.active]:after:left-0 [&.active]:after:right-0 [&.active]:after:h-[2.5px] [&.active]:after:bg-primary"
+            >
+              {t("nav.home", "Home")}
+            </Link>
             <a
-              href="#risk-map"
-              onClick={(e) => {
-                const el = document.getElementById("risk-map");
-                if (el) {
-                  e.preventDefault();
-                  el.scrollIntoView({ behavior: "smooth" });
-                }
-              }}
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+              href="/#risk-map"
+              onClick={(e) => handleNavToSection(e, "risk-map")}
+              className={`whitespace-nowrap px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                currentPath === "/" && routerState.location.hash === "risk-map"
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {t("nav.risk_map", "Risk Map")}
             </a>
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("landalert-open-observations"));
-                }
-              }}
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+            <a
+              href="/#recent-observations"
+              onClick={(e) => handleNavToSection(e, "recent-observations", "landalert-open-observations")}
+              className={`whitespace-nowrap px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                currentPath === "/" &&
+                (routerState.location.hash === "recent-observations" || routerState.location.hash === "observations")
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {t("nav.observations", "Observations")}
-            </button>
+            </a>
             <NavLink to="/alerts" label={t("nav.alerts", "Alerts")} />
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("landalert-open-roads"));
-                  const el = document.getElementById("road-connectivity");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }
-              }}
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+            <a
+              href="/#road-connectivity"
+              onClick={(e) => handleNavToSection(e, "road-connectivity", "landalert-open-roads")}
+              className={`whitespace-nowrap px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                currentPath === "/" &&
+                (routerState.location.hash === "road-connectivity" || routerState.location.hash === "road-network")
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {t("nav.road_network", "Road Network")}
-            </button>
+            </a>
             <ReportsDialog />
             <AboutDialog />
           </div>

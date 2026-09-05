@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { getOverview, dispatchAlertServerFn, retractAlertServerFn } from "@/lib/monitoring.functions";
 import { RiskBadge } from "@/components/RiskBits";
@@ -81,11 +81,28 @@ export const Route = createFileRoute("/alerts")({
 
 function AlertsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data } = useSuspenseQuery(overviewQuery);
   const qc = useQueryClient();
   const [lang, setLang] = useState("en");
   const [level, setLevel] = useState("All");
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<string>("All");
+
+  // Seamlessly transition if the user navigates directly to /alerts#risk-map or similar hash anchors
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const rawHash = window.location.hash.replace("#", "");
+      if (
+        rawHash === "risk-map" ||
+        rawHash === "observations" ||
+        rawHash === "recent-observations" ||
+        rawHash === "road-network" ||
+        rawHash === "road-connectivity"
+      ) {
+        navigate({ to: "/", hash: rawHash });
+      }
+    }
+  }, [navigate]);
 
   // Alert dispatch modal state
   const [openDispatch, setOpenDispatch] = useState(false);

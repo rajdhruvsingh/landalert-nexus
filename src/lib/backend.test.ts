@@ -542,6 +542,67 @@ describe("REST API Router (/api/*)", () => {
     expect(body.acknowledgedKeys).toContain(idempotencyKey);
   });
 
+  it("executes complete offline-to-online lifecycle with idempotency and duplicate replay prevention", async () => {
+    const idempotencyKey = `LIFECYCLE-KEY-${Date.now()}`;
+    const payload = {
+      observations: [
+        {
+          zone_id: 2,
+          observed_at: new Date().toISOString(),
+          client_timestamp: new Date().toISOString(),
+          rainfall_mm: 68.4,
+          soil_condition: "saturated",
+          visual_signs: "Debris slide on roadside",
+          road_status: "restricted",
+          observer_id: "field_officer_02",
+          idempotency_key: idempotencyKey,
+        },
+      ],
+    };
+
+    // 1. First sync submission (simulating initial reconnection)
+    const req1 = new Request("http://localhost:3000/api/sync/observations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res1 = await handleApiRequest(req1);
+    expect(res1).not.toBeNull();
+    expect(res1!.status).toBe(200);
+
+    const body1 = (await res1!.json()) as {
+      success: boolean;
+      syncedCount: number;
+      skippedDuplicates: number;
+      acknowledgedKeys: string[];
+    };
+    expect(body1.success).toBe(true);
+    expect(body1.syncedCount).toBe(1);
+    expect(body1.acknowledgedKeys).toContain(idempotencyKey);
+
+    // 2. Duplicate sync replay (simulating network retry or re-queued item)
+    const req2 = new Request("http://localhost:3000/api/sync/observations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res2 = await handleApiRequest(req2);
+    expect(res2).not.toBeNull();
+    expect(res2!.status).toBe(200);
+
+    const body2 = (await res2!.json()) as {
+      success: boolean;
+      syncedCount: number;
+      skippedDuplicates: number;
+      acknowledgedKeys: string[];
+    };
+    expect(body2.success).toBe(true);
+    expect(body2.syncedCount).toBe(1);
+    expect(body2.acknowledgedKeys).toContain(idempotencyKey);
+  });
+
   it("GET /api/unknown-route returns 404 NOT_FOUND", async () => {
     const req = new Request("http://localhost:3000/api/unknown-route");
     const res = await handleApiRequest(req);

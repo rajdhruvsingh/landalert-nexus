@@ -112,6 +112,9 @@ export function queueObservation(
   if (storage) {
     try {
       storage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(updatedQueue));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("landalert-queue-updated"));
+      }
     } catch (err) {
       console.error("Failed to save observation to storage:", err);
     }
@@ -135,8 +138,27 @@ export function pruneQueue(acknowledgedKeys: string[]): void {
   );
   try {
     storage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("landalert-queue-updated"));
+    }
   } catch (err) {
     console.error("Failed to prune offline queue:", err);
+  }
+}
+
+/**
+ * Clears the entire offline queue (e.g. on manual reset or test teardown).
+ */
+export function clearOfflineQueue(): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(OFFLINE_QUEUE_KEY);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("landalert-queue-updated"));
+    }
+  } catch (err) {
+    console.error("Failed to clear offline queue:", err);
   }
 }
 

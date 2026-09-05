@@ -88,7 +88,7 @@ function Dashboard() {
   const recompute = useServerFn(recomputeAll);
   const ingest = useServerFn(ingestLiveRainfall);
 
-  // Listen to header search query and modal trigger events
+  // Listen to header search query, modal trigger events, and URL hash scrolling
   useEffect(() => {
     const handleSearch = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -107,11 +107,48 @@ function Dashboard() {
       setObsDialogOpen(true);
     };
 
+    const handleHashScroll = () => {
+      if (typeof window === "undefined") return;
+      const rawHash = window.location.hash.replace("#", "");
+      if (!rawHash) return;
+
+      const targetId =
+        rawHash === "observations"
+          ? "recent-observations"
+          : rawHash === "road-network" || rawHash === "roads"
+          ? "road-connectivity"
+          : rawHash;
+
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth" });
+        }, 120);
+      }
+
+      const pendingEvent = sessionStorage.getItem("landalert_pending_event");
+      if (pendingEvent) {
+        sessionStorage.removeItem("landalert_pending_event");
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(pendingEvent));
+        }, 250);
+      }
+
+      const pendingSearch = sessionStorage.getItem("landalert_pending_search");
+      if (pendingSearch) {
+        sessionStorage.removeItem("landalert_pending_search");
+        setSearchQuery(pendingSearch);
+      }
+    };
+
+    handleHashScroll();
+    window.addEventListener("hashchange", handleHashScroll);
     window.addEventListener("landalert-filter", handleSearch);
     window.addEventListener("landalert-open-roads", handleOpenRoads);
     window.addEventListener("landalert-open-observations", handleOpenObs);
 
     return () => {
+      window.removeEventListener("hashchange", handleHashScroll);
       window.removeEventListener("landalert-filter", handleSearch);
       window.removeEventListener("landalert-open-roads", handleOpenRoads);
       window.removeEventListener("landalert-open-observations", handleOpenObs);
@@ -288,7 +325,7 @@ function Dashboard() {
         <section className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
           {/* LEFT: Landslide Risk Map */}
           <div className="space-y-4">
-            <div id="risk-map" className="panel overflow-hidden flex flex-col">
+            <div id="risk-map" className="panel overflow-hidden flex flex-col scroll-mt-20">
               {/* Card Header */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 bg-surface shrink-0">
                 <div>
@@ -778,7 +815,8 @@ function Dashboard() {
             </div>
 
             {/* 4. Regional Observations (with See Details) */}
-            <div id="recent-observations" className="panel p-4 flex flex-col">
+            <div id="recent-observations" className="panel p-4 flex flex-col relative scroll-mt-20">
+              <span id="observations" className="absolute -top-20" aria-hidden="true" />
               <div className="flex items-center justify-between border-b border-border pb-2.5">
                 <h2 className="text-base font-bold text-foreground font-display">
                   {t("operational_tables.recent_observations_title", "Regional Observations")}
@@ -855,7 +893,8 @@ function Dashboard() {
         {/* BOTTOM SECTION: Road Connectivity (50%) & Alert Console (50%) */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* Left: Road Connectivity */}
-          <div id="road-connectivity" className="panel flex flex-col h-full overflow-hidden">
+          <div id="road-connectivity" className="panel flex flex-col h-full overflow-hidden relative scroll-mt-20">
+            <span id="road-network" className="absolute -top-20" aria-hidden="true" />
             <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface shrink-0">
               <div>
                 <h2 className="text-base font-bold text-foreground font-display">
