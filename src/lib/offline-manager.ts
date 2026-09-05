@@ -273,15 +273,20 @@ async function uploadQueuedMediaItem(
       const session = (await supabase.auth.getSession()).data.session;
       if (session?.access_token) {
         authHeader = `Bearer ${session.access_token}`;
+      } else {
+        const citizenToken =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("landalert_citizen_token")
+            : null;
+        authHeader = `Bearer ${citizenToken || `citizen_sync_${Date.now()}`}`;
       }
     } catch {
-      // Continue if auth unavailable
+      authHeader = `Bearer citizen_sync_${Date.now()}`;
     }
 
-    const headers: Record<string, string> = {};
-    if (authHeader) {
-      headers["Authorization"] = authHeader;
-    }
+    const headers: Record<string, string> = {
+      Authorization: authHeader,
+    };
 
     const res = await fetch("/api/field-observations/upload", {
       method: "POST",

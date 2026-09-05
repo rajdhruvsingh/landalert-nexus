@@ -261,73 +261,104 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     .upsert(validRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
 
   if (insErr) {
-    const dbUrl = getDatabaseUrl();
-    const isProd = isProductionEnvironment();
-
-    if (!dbUrl) {
-      if (isProd) {
-        throw new Error(
-          `Failed to sync field observations: ${insErr.message} (Production DATABASE_URL is not configured)`,
-        );
-      }
-      throw new Error(`Failed to sync field observations: ${insErr.message}`);
-    }
+    const isSchemaCacheErr =
+      insErr.message?.includes("schema cache") ||
+      insErr.message?.includes("column") ||
+      insErr.message?.includes("consent_given");
 
     const pool = getPostgresPool();
-    if (!pool) {
-      throw new Error(
-        isProd
-          ? `Failed to sync field observations: ${insErr.message} (Production DATABASE_URL is not configured)`
-          : `Failed to sync field observations: ${insErr.message}`,
-      );
+    let directPgSucceeded = false;
+
+    if (pool) {
+      let client = null;
+      try {
+        await ensureFieldObservationsSchema();
+        client = await pool.connect();
+        await client.query("BEGIN");
+        for (const r of validRows) {
+          await client.query(
+            `
+            INSERT INTO public.field_observations 
+            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
+          `,
+            [
+              r.zone_id,
+              r.observer_id,
+              r.observed_at,
+              r.client_timestamp,
+              r.rainfall_mm,
+              r.soil_condition,
+              r.visual_signs,
+              r.road_status,
+              r.idempotency_key,
+              r.status,
+              r.is_training_eligible,
+              r.source,
+              r.media_urls,
+              JSON.stringify(r.media_metadata),
+              r.geo_lat,
+              r.geo_lng,
+              r.geo_accuracy_m,
+              r.geo_captured_at,
+              r.consent_given,
+              r.review_status,
+            ],
+          );
+        }
+        await client.query("COMMIT");
+        directPgSucceeded = true;
+      } catch (pgErr: any) {
+        if (client) await client.query("ROLLBACK").catch(() => {});
+        console.warn("[PostgreSQL Sync Notice]", pgErr?.message || pgErr);
+      } finally {
+        if (client) client.release();
+      }
     }
 
-    let client = null;
-    try {
-      client = await pool.connect();
-      await client.query("BEGIN");
-      for (const r of validRows) {
-        await client.query(
-          `
-          INSERT INTO public.field_observations 
-          (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-          ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-        `,
-          [
-            r.zone_id,
-            r.observer_id,
-            r.observed_at,
-            r.client_timestamp,
-            r.rainfall_mm,
-            r.soil_condition,
-            r.visual_signs,
-            r.road_status,
-            r.idempotency_key,
-            r.status,
-            r.is_training_eligible,
-            r.source,
-            r.media_urls,
-            JSON.stringify(r.media_metadata),
-            r.geo_lat,
-            r.geo_lng,
-            r.geo_accuracy_m,
-            r.geo_captured_at,
-            r.consent_given,
-            r.review_status,
-          ],
-        );
+    if (!directPgSucceeded) {
+      // Tier 3: If PostgREST schema cache is missing newly added columns (like consent_given),
+      // preserve all data inside evidence_summary JSON and retry via PostgREST so the observation is safely stored!
+      if (isSchemaCacheErr) {
+        const sanitizedRows = validRows.map((r) => {
+          const rowCopy: Record<string, any> = { ...r };
+          rowCopy.evidence_summary = {
+            consent_given: r.consent_given,
+            review_status: r.review_status,
+            media_urls: r.media_urls,
+            media_metadata: r.media_metadata,
+            geo_accuracy_m: r.geo_accuracy_m,
+            geo_captured_at: r.geo_captured_at,
+          };
+          delete rowCopy.consent_given;
+          delete rowCopy.review_status;
+          delete rowCopy.media_urls;
+          delete rowCopy.media_metadata;
+          delete rowCopy.geo_accuracy_m;
+          delete rowCopy.geo_captured_at;
+          return rowCopy;
+        });
+
+        const { error: retryErr } = await supabaseAdmin
+          .from("field_observations")
+          .upsert(sanitizedRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
+
+        if (!retryErr) {
+          directPgSucceeded = true;
+        }
       }
-      await client.query("COMMIT");
-    } catch (pgErr: any) {
-      if (client) {
-        await client.query("ROLLBACK").catch(() => {});
+
+      if (!directPgSucceeded) {
+        const dbUrl = getDatabaseUrl();
+        const isProd = isProductionEnvironment();
+        if (!dbUrl && isProd) {
+          throw new Error(
+            `Failed to sync field observations: ${insErr.message} (Production DATABASE_URL is not configured)`,
+          );
+        }
+        throw new Error(`Failed to sync field observations: ${insErr.message}`);
       }
-      throw new Error(
-        `Failed to sync field observations: ${insErr.message} (PostgreSQL error: ${pgErr instanceof Error ? pgErr.message : String(pgErr)})`,
-      );
-    } finally {
-      if (client) client.release();
     }
   }
 

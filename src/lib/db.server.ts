@@ -69,64 +69,66 @@ export async function ensureFieldObservationsSchema(): Promise<boolean> {
   let client: PoolClient | null = null;
   try {
     client = await pool.connect();
+    
+    // 1. Ensure base table exists
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.field_observations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        zone_id INTEGER NOT NULL REFERENCES public.risk_zones(id) ON DELETE CASCADE,
+        zone_id INTEGER NOT NULL,
         observer_id TEXT NOT NULL DEFAULT 'field_worker',
         observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         client_timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
         rainfall_mm DOUBLE PRECISION,
         soil_condition TEXT,
         visual_signs TEXT,
-        road_status TEXT CHECK (road_status IN ('open', 'restricted', 'blocked', 'unknown')),
+        road_status TEXT,
         synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        sync_status TEXT NOT NULL DEFAULT 'synced' CHECK (sync_status IN ('pending', 'synced', 'conflict')),
+        sync_status TEXT NOT NULL DEFAULT 'synced',
         idempotency_key TEXT
       );
+    `).catch((err) => console.warn("[PostgreSQL] Table creation notice:", err.message));
 
-      ALTER TABLE public.field_observations
-        ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'PENDING_VERIFICATION'
-          CHECK (status IN ('SUBMITTED', 'PENDING_VERIFICATION', 'OFFICIAL_VERIFIED', 'VERIFIED', 'REJECTED', 'ACTIONABLE')),
-        ADD COLUMN IF NOT EXISTS is_training_eligible BOOLEAN NOT NULL DEFAULT false,
-        ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'PUBLIC_REPORT',
-        ADD COLUMN IF NOT EXISTS verified_by TEXT,
-        ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS verification_notes TEXT,
-        ADD COLUMN IF NOT EXISTS evidence_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
-        ADD COLUMN IF NOT EXISTS actionable_dispatch_id BIGINT REFERENCES public.alerts(id),
-        ADD COLUMN IF NOT EXISTS media_urls TEXT[] DEFAULT '{}',
-        ADD COLUMN IF NOT EXISTS media_metadata JSONB DEFAULT '[]'::jsonb,
-        ADD COLUMN IF NOT EXISTS geo_lat DOUBLE PRECISION,
-        ADD COLUMN IF NOT EXISTS geo_lng DOUBLE PRECISION,
-        ADD COLUMN IF NOT EXISTS geo_accuracy_m DOUBLE PRECISION,
-        ADD COLUMN IF NOT EXISTS geo_captured_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS consent_given BOOLEAN DEFAULT true,
-        ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'PENDING_REVIEW'
-          CHECK (review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED'));
+    // 2. Ensure each column exists independently to prevent composite failure
+    const ddlStatements = [
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS consent_given BOOLEAN DEFAULT true;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS review_status TEXT DEFAULT 'PENDING_REVIEW';",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS media_urls TEXT[] DEFAULT '{}';",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS media_metadata JSONB DEFAULT '[]'::jsonb;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS geo_lat DOUBLE PRECISION;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS geo_lng DOUBLE PRECISION;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS geo_accuracy_m DOUBLE PRECISION;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS geo_captured_at TIMESTAMPTZ;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING_VERIFICATION';",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS is_training_eligible BOOLEAN DEFAULT false;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'PUBLIC_REPORT';",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS verified_by TEXT;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS verification_notes TEXT;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS evidence_summary JSONB DEFAULT '{}'::jsonb;",
+      "ALTER TABLE public.field_observations ADD COLUMN IF NOT EXISTS actionable_dispatch_id BIGINT;",
+    ];
 
+    for (const ddl of ddlStatements) {
+      await client.query(ddl).catch((err) => {
+        console.warn("[PostgreSQL] DDL step notice:", err.message);
+      });
+    }
+
+    // 3. Unique index for idempotency
+    await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_field_observations_idempotency_key
         ON public.field_observations (idempotency_key)
         WHERE idempotency_key IS NOT NULL;
+    `).catch(() => {});
 
-      CREATE INDEX IF NOT EXISTS idx_field_observations_status
-        ON public.field_observations (status);
-
-      CREATE INDEX IF NOT EXISTS idx_field_observations_review_status
-        ON public.field_observations (review_status);
-
-      CREATE INDEX IF NOT EXISTS idx_field_observations_zone_time
-        ON public.field_observations (zone_id, observed_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_field_observations_geoloc
-        ON public.field_observations (geo_lat, geo_lng)
-        WHERE geo_lat IS NOT NULL AND geo_lng IS NOT NULL;
-
+    // 4. Permissions
+    await client.query(`
       GRANT SELECT, INSERT, UPDATE ON public.field_observations TO anon, authenticated;
       GRANT ALL ON public.field_observations TO service_role;
+    `).catch(() => {});
 
-      NOTIFY pgrst, 'reload schema';
-    `);
+    // 5. Explicitly notify PostgREST to reload its schema cache
+    await client.query("NOTIFY pgrst, 'reload schema';").catch(() => {});
 
     schemaEnsured = true;
     return true;

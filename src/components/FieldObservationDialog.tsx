@@ -380,12 +380,20 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         return;
       }
 
-      // Convert to base64 for offline durability
-      const base64Data = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
+      // Fast preview URL (Blob / object URL)
+      let base64Data = "";
+      if (isImg && file.size <= 2 * 1024 * 1024) {
+        try {
+          base64Data = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string) || "");
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(file);
+          });
+        } catch {
+          base64Data = "";
+        }
+      }
 
       newItems.push({
         file,
@@ -473,9 +481,31 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         const session = await ensureAuthenticatedSession();
         if (session?.access_token) {
           authHeaders["Authorization"] = `Bearer ${session.access_token}`;
+        } else {
+          let citizenToken =
+            typeof localStorage !== "undefined"
+              ? localStorage.getItem("landalert_citizen_token")
+              : null;
+          if (!citizenToken) {
+            citizenToken = `citizen_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+            try {
+              localStorage.setItem("landalert_citizen_token", citizenToken);
+            } catch {}
+          }
+          authHeaders["Authorization"] = `Bearer ${citizenToken}`;
         }
       } catch {
-        // Public reporter
+        let citizenToken =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("landalert_citizen_token")
+            : null;
+        if (!citizenToken) {
+          citizenToken = `citizen_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          try {
+            localStorage.setItem("landalert_citizen_token", citizenToken);
+          } catch {}
+        }
+        authHeaders["Authorization"] = `Bearer ${citizenToken}`;
       }
 
       for (const item of mediaList) {
@@ -863,96 +893,97 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
             </div>
           </div>
 
-          {/* 3. Geo-Tagged Media Upload (Photos/Videos) - Hidden when disabled */}
-          {mediaUploadEnabled && (
-            <div className="rounded border border-border bg-secondary/20 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="fieldMediaUploadInput" className="text-xs font-mono uppercase text-muted-foreground">
-                  {t("field_observation.media_title", "Field Media (Photos / Video)")}
-                </Label>
-                <span className="text-[0.65rem] font-mono text-muted-foreground">
-                  {t("field_observation.media_limit", "Max 3 files (Photos ≤10MB, Videos ≤50MB)")}
+          {/* 3. Geo-Tagged Media Upload (Photos/Videos) - Guaranteed Always Visible */}
+          <div className="rounded border border-border bg-secondary/20 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="fieldMediaUploadInput" className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
+                <span>{t("field_observation.media_title", "Field Media (Photos / Video)")}</span>
+                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[0.68rem] text-primary font-bold">
+                  {mediaList.length}/3 {t("field_observation.files_attached", "files attached")}
                 </span>
-              </div>
-
-              <div className="flex gap-2">
-                <Input
-                  id="fieldMediaUploadInput"
-                  aria-label={t("field_observation.media_title", "Field Media (Photos / Video)")}
-                  type="file"
-                  accept="image/*,video/*"
-                  multiple
-                  disabled={submitting || mediaList.length >= 3}
-                  onChange={handleFileSelect}
-                  className="bg-secondary/40 border-border font-mono text-xs file:font-mono file:text-xs file:bg-primary/20 file:text-primary file:border-0 file:rounded cursor-pointer flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={t("field_observation.camera_button", "📷 Camera")}
-                  disabled={submitting || mediaList.length >= 3}
-                  onClick={handleNativeCameraCapture}
-                  className="font-mono text-xs shrink-0"
-                  title={t("field_observation.camera_title", "Capture photo using device camera or gallery")}
-                >
-                  {t("field_observation.camera_button", "📷 Camera")}
-                </Button>
-              </div>
-
-              {fileError && <p className="text-[0.7rem] text-destructive font-mono">{fileError}</p>}
-
-              {mediaList.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {mediaList.map((item, idx) => {
-                    const isImg = item.mimeType.startsWith("image/");
-                    const sizeStr =
-                      item.size > 1024 * 1024
-                        ? `${(item.size / (1024 * 1024)).toFixed(1)} MB`
-                        : `${Math.round(item.size / 1024)} KB`;
-                    const typeLabel =
-                      item.mimeType.split("/")[1]?.toUpperCase() || (isImg ? "IMAGE" : "VIDEO");
-
-                    return (
-                      <div
-                        key={idx}
-                        className="relative group border border-border rounded overflow-hidden bg-surface flex items-center gap-2 p-1.5 pr-2.5"
-                      >
-                        {isImg ? (
-                          <img
-                            src={item.previewUrl}
-                            alt={item.name}
-                            className="h-11 w-11 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="h-11 w-11 flex flex-col items-center justify-center bg-primary/20 text-xs rounded">
-                            <span className="text-base">🎬</span>
-                          </div>
-                        )}
-                        <div className="flex flex-col text-left font-mono text-[0.68rem] min-w-0 max-w-[150px]">
-                          <span className="truncate font-semibold text-foreground" title={item.name}>
-                            {item.name}
-                          </span>
-                          <span className="text-[0.62rem] text-muted-foreground">
-                            {typeLabel} • {sizeStr}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Remove media ${item.name}`}
-                          onClick={() => removeMedia(idx)}
-                          className="text-muted-foreground hover:text-destructive text-sm font-bold ml-auto px-1 cursor-pointer"
-                          title="Remove"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              </Label>
+              <span className="text-[0.65rem] font-mono text-muted-foreground">
+                {t("field_observation.media_limit", "Max 3 files (Photos ≤10MB, Videos ≤50MB)")}
+              </span>
             </div>
-          )}
+
+            <div className="flex gap-2">
+              <Input
+                id="fieldMediaUploadInput"
+                aria-label={t("field_observation.media_title", "Field Media (Photos / Video)")}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                disabled={submitting || mediaList.length >= 3}
+                onChange={handleFileSelect}
+                className="bg-secondary/40 border-border font-mono text-xs file:font-mono file:text-xs file:bg-primary/20 file:text-primary file:border-0 file:rounded cursor-pointer flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={t("field_observation.camera_button", "📷 Camera")}
+                disabled={submitting || mediaList.length >= 3}
+                onClick={handleNativeCameraCapture}
+                className="font-mono text-xs shrink-0"
+                title={t("field_observation.camera_title", "Capture photo using device camera or gallery")}
+              >
+                {t("field_observation.camera_button", "📷 Camera")}
+              </Button>
+            </div>
+
+            {fileError && <p className="text-[0.7rem] text-destructive font-mono">{fileError}</p>}
+
+            {mediaList.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {mediaList.map((item, idx) => {
+                  const isImg = item.mimeType.startsWith("image/");
+                  const sizeStr =
+                    item.size > 1024 * 1024
+                      ? `${(item.size / (1024 * 1024)).toFixed(1)} MB`
+                      : `${Math.round(item.size / 1024)} KB`;
+                  const typeLabel =
+                    item.mimeType.split("/")[1]?.toUpperCase() || (isImg ? "IMAGE" : "VIDEO");
+
+                  return (
+                    <div
+                      key={idx}
+                      className="relative group border border-border rounded overflow-hidden bg-surface flex items-center gap-2 p-1.5 pr-2.5"
+                    >
+                      {isImg ? (
+                        <img
+                          src={item.previewUrl}
+                          alt={item.name}
+                          className="h-11 w-11 object-cover rounded"
+                        />
+                      ) : (
+                        <div className="h-11 w-11 flex flex-col items-center justify-center bg-primary/20 text-xs rounded">
+                          <span className="text-base">🎬</span>
+                        </div>
+                      )}
+                      <div className="flex flex-col text-left font-mono text-[0.68rem] min-w-0 max-w-[150px]">
+                        <span className="truncate font-semibold text-foreground" title={item.name}>
+                          {item.name}
+                        </span>
+                        <span className="text-[0.62rem] text-muted-foreground">
+                          {typeLabel} • {sizeStr}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remove media ${item.name}`}
+                        onClick={() => removeMedia(idx)}
+                        className="text-muted-foreground hover:text-destructive text-sm font-bold ml-auto px-1 cursor-pointer"
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* 4. GPS Geolocation Capture */}
           <div className="flex items-center justify-between rounded border border-border/70 bg-secondary/10 px-3 py-2">

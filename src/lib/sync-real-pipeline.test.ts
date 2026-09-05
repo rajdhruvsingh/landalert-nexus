@@ -15,7 +15,8 @@ vi.mock("@/integrations/supabase/client.server", () => {
         return {
           upsert: async (rows: any[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
             if (mockUpsertError) {
-              return { data: null, error: mockUpsertError };
+              const err = typeof mockUpsertError === "function" ? (mockUpsertError as any)(rows) : mockUpsertError;
+              if (err) return { data: null, error: err };
             }
             let inserted = 0;
             for (const r of rows) {
@@ -474,6 +475,41 @@ describe("Authoritative End-to-End Real Sync, Media, and DB Schema Pipeline Test
     expect(typeof mod.FieldObservationDialog).toBe("function");
     expect(mod.FALLBACK_ZONES.length).toBeGreaterThan(0);
     expect(mod.NER_GEOGRAPHY).toBeDefined();
+  });
+
+  // 24: Resilient schema cache error recovery
+  it("24: syncFieldObservations recovers when Supabase reports missing consent_given in schema cache", async () => {
+    const { syncFieldObservations } = await import("./sync.service");
+    
+    // Simulate Supabase PostgREST returning schema cache error when consent_given is present in row
+    mockUpsertError = ((rows: any[]) => {
+      if (rows.some((r) => "consent_given" in r)) {
+        return {
+          message: "Could not find the 'consent_given' column of 'field_observations' in the schema cache",
+        };
+      }
+      return null;
+    }) as any;
+
+    const testRecord = {
+      zone_id: 1,
+      observed_at: new Date().toISOString(),
+      client_timestamp: new Date().toISOString(),
+      rainfall_mm: 35.5,
+      visual_signs: "Minor cracks on road edge",
+      road_status: "restricted" as const,
+      observer_id: "field_worker_test",
+      idempotency_key: `CACHE_TEST_${Date.now()}`,
+      consent_given: true,
+      review_status: "PENDING_REVIEW" as const,
+      media_urls: ["https://storage.landalert.org/test.jpg"],
+      media_metadata: [{ name: "test.jpg", size: 1024, mimeType: "image/jpeg" }],
+    };
+
+    const res = await syncFieldObservations([testRecord]);
+    expect(res.success).toBe(true);
+    expect(res.syncedCount).toBe(1);
+    mockUpsertError = null;
   });
 });
 
