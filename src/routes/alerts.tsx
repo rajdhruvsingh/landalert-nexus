@@ -397,7 +397,7 @@ function AlertsPage() {
       <div className="mt-6 space-y-4">
         {alerts.map((a) => {
           const zone = data.zones.find((z) => z.id === a.zone_id);
-          const zoneName = zone ? `${zone.zone_name}, ${zone.state}` : `Zone ${a.zone_id}`;
+          const zoneName = zone ? `${zone.zone_name} (${zone.district}, ${zone.state})` : `Zone ${a.zone_id}`;
           const isDelivered = (a as { delivery_status?: string }).delivery_status === "delivered";
 
           const isRetracted = Boolean((a as any).is_retracted || (a as any).status === "retracted");

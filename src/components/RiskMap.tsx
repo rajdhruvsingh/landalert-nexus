@@ -5,7 +5,15 @@ import type { ZoneRow, SlideRow } from "@/lib/monitoring.functions";
 import { riskColor, zonePolygon } from "@/lib/risk";
 import { useTranslation } from "react-i18next";
 
-function MapResizeHandler({ selectedZone }: { selectedZone?: ZoneRow | null }) {
+function MapResizeHandler({
+  selectedZone,
+  center,
+  zoom,
+}: {
+  selectedZone?: ZoneRow | null;
+  center?: [number, number];
+  zoom?: number;
+}) {
   const map = useMap();
   useEffect(() => {
     map.invalidateSize();
@@ -38,8 +46,12 @@ function MapResizeHandler({ selectedZone }: { selectedZone?: ZoneRow | null }) {
       map.flyTo([selectedZone.centroid_lat, selectedZone.centroid_lng], Math.max(map.getZoom(), 8), {
         duration: 0.8,
       });
+    } else if (center) {
+      map.flyTo(center, zoom ?? map.getZoom(), {
+        duration: 0.8,
+      });
     }
-  }, [selectedZone, map]);
+  }, [selectedZone, center, zoom, map]);
 
   return null;
 }
@@ -129,7 +141,7 @@ export default function RiskMap({
         className="isolate w-full h-full min-h-[460px]"
         style={{ height: "100%", width: "100%", minHeight: "460px", zIndex: 1 }}
       >
-        <MapResizeHandler selectedZone={selectedZone} />
+        <MapResizeHandler selectedZone={selectedZone} center={center} zoom={zoom} />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

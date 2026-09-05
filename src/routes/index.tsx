@@ -70,12 +70,22 @@ export const Route = createFileRoute("/")({
   errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
 });
 
+import {
+  getAllStates,
+  getStateByName,
+  getDistrictsByState,
+  getDistrictByName,
+  NER_DISTRICTS,
+  NORTH_EASTERN_REGION,
+} from "@/lib/geography";
+
 function Dashboard() {
   const { t } = useTranslation();
   const { data } = useSuspenseQuery(overviewQuery);
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("All");
+  const [districtFilter, setDistrictFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showZoneDetails, setShowZoneDetails] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
@@ -156,13 +166,33 @@ function Dashboard() {
   }, []);
 
   const states: string[] = useMemo(
-    () => ["All", ...Array.from(new Set(data.zones.map((z: ZoneRow) => z.state))).sort()],
-    [data.zones],
+    () => ["All", ...getAllStates().map((s) => s.name)],
+    [],
   );
+
+  const availableDistricts = useMemo(() => {
+    if (stateFilter === "All") return [];
+    return getDistrictsByState(stateFilter);
+  }, [stateFilter]);
+
+  const mapCenterAndZoom = useMemo<{ center: [number, number]; zoom: number }>(() => {
+    if (districtFilter !== "All" && stateFilter !== "All") {
+      const dist = getDistrictByName(districtFilter, stateFilter);
+      if (dist) {
+        return { center: dist.centroid, zoom: 9 };
+      }
+    }
+    if (stateFilter !== "All") {
+      const st = getStateByName(stateFilter);
+      if (st) {
+        return { center: st.centroid, zoom: 8 };
+      }
+    }
+    return { center: [25.6, 92.8], zoom: 7 };
+  }, [stateFilter, districtFilter]);
 
   const filteredZones = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q && stateFilter === "All") return data.zones;
 
     const matchingRoadZoneIds = new Set(
       q
@@ -178,15 +208,16 @@ function Dashboard() {
 
     return data.zones.filter((z: ZoneRow) => {
       const matchesState = stateFilter === "All" || z.state === stateFilter;
+      const matchesDistrict = districtFilter === "All" || z.district === districtFilter;
       const matchesQuery =
         !q ||
         z.zone_name.toLowerCase().includes(q) ||
         z.district.toLowerCase().includes(q) ||
         z.state.toLowerCase().includes(q) ||
         matchingRoadZoneIds.has(z.id);
-      return matchesState && matchesQuery;
+      return matchesState && matchesDistrict && matchesQuery;
     });
-  }, [data.zones, data.roads, stateFilter, searchQuery]);
+  }, [data.zones, data.roads, stateFilter, districtFilter, searchQuery]);
 
   const selected: ZoneRow | null =
     data.zones.find((z: ZoneRow) => z.id === selectedId) ?? filteredZones[0] ?? data.zones[0] ?? null;
@@ -337,15 +368,18 @@ function Dashboard() {
                   </p>
                 </div>
 
-                {/* State/Region Selector Dropdown */}
-                <div className="flex items-center gap-1.5">
+                {/* State/Region & District Hierarchical Filter Controls */}
+                <div className="flex flex-wrap items-center gap-1.5">
                   <select
                     aria-label="Filter by region or state"
                     value={stateFilter}
-                    onChange={(e) => setStateFilter(e.target.value)}
-                    className="h-8 rounded border border-border bg-background px-2.5 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
+                    onChange={(e) => {
+                      setStateFilter(e.target.value);
+                      setDistrictFilter("All");
+                    }}
+                    className="h-8 rounded border border-border bg-background px-2 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
                   >
-                    <option value="All">{t("map_panel.filter_region", "North East India")}</option>
+                    <option value="All">{t("map_panel.filter_region", "North East India (All 8 States)")}</option>
                     {states
                       .filter((s: string) => s !== "All")
                       .map((s: string) => (
@@ -354,8 +388,53 @@ function Dashboard() {
                         </option>
                       ))}
                   </select>
+
+                  {stateFilter !== "All" && (
+                    <select
+                      aria-label="Filter by district"
+                      value={districtFilter}
+                      onChange={(e) => setDistrictFilter(e.target.value)}
+                      className="h-8 rounded border border-border bg-background px-2 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
+                    >
+                      <option value="All">{t("map_panel.all_districts", `All Districts in ${stateFilter}`)}</option>
+                      {availableDistricts.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name} {d.zoneIds.length > 0 ? `(${d.zoneIds.length} station)` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {(stateFilter !== "All" || districtFilter !== "All") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStateFilter("All");
+                        setDistrictFilter("All");
+                      }}
+                      className="h-8 rounded border border-border bg-secondary/50 px-2 text-[0.68rem] font-mono text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Notice for Districts without active monitored zones */}
+              {districtFilter !== "All" && filteredZones.length === 0 && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                  <span>
+                    No active monitored telemetry stations registered in {districtFilter}. District territory is monitored under regional coverage.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDistrictFilter("All")}
+                    className="text-[0.68rem] font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100"
+                  >
+                    View All {stateFilter} Districts
+                  </button>
+                </div>
+              )}
 
               {/* Map Container */}
               <div
@@ -367,6 +446,8 @@ function Dashboard() {
                 <MapCanvas
                   zones={filteredZones}
                   selectedId={selected?.id ?? null}
+                  center={mapCenterAndZoom.center}
+                  zoom={mapCenterAndZoom.zoom}
                   onSelect={(id) => {
                     setSelectedId(id);
                     setShowZoneDetails(true);
@@ -595,42 +676,58 @@ function Dashboard() {
 
                 {/* Regional Scope Clarification */}
                 <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[0.68rem] text-muted-foreground font-mono">
-                  <span>{t("overview.coverage_scope", "Coverage: 8 NER States (Arunachal, Assam, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura)")}</span>
-                  <span className="font-semibold text-primary">{data.zones.length} {t("overview.operational_zones", "Operational Monitoring Zones")}</span>
+                  <span>{t("overview.coverage_scope", "Coverage: 8 NER States · 130 Official Districts")}</span>
+                  <span className="font-semibold text-primary">{data.zones.length} {t("overview.operational_zones", "Operational Telemetry Stations")}</span>
                 </div>
 
-                {/* 4 Metrics in a row with subtle vertical separators */}
-                <div className="grid grid-cols-4 divide-x divide-border py-4 my-1 text-center">
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {distinctDistricts.length}
+                {/* 6 Metrics Grid with subtle vertical separators */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-border py-4 my-1 text-center">
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
+                      8
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
-                      {t("overview.districts_monitored", "Districts monitored")}
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.states_monitored", "States Covered")}
                     </div>
                   </div>
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-red-600">
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
+                      {Object.keys(NER_DISTRICTS).length}
+                    </div>
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.districts_monitored", "Districts Covered")}
+                    </div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-primary">
+                      {data.zones.length}
+                    </div>
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.active_zones", "Active Stations")}
+                    </div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-red-600">
                       {highOrSevereZones.length}
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
-                      {t("overview.high_or_severe", "High or severe risk")}
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.high_or_severe", "High / Severe")}
                     </div>
                   </div>
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
                       {data.alerts.length}
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
                       {t("overview.active_alerts", "Active alerts")}
                     </div>
                   </div>
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
                       {((data as any).observations || []).length}
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
-                      {t("overview.field_observations_30d", "Field observations (last 30 days)")}
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.field_observations_30d", "Field Reports")}
                     </div>
                   </div>
                 </div>

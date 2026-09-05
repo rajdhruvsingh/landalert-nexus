@@ -14,6 +14,7 @@ import { OfflineBanner } from "./OfflineBanner";
 import { Search, ChevronDown, UserCheck, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserAuthorizationState } from "@/lib/auth-domains";
+import { searchGeography, type SearchResultItem } from "@/lib/geography";
 import type { User } from "@supabase/supabase-js";
 import "@/lib/i18n";
 
@@ -41,15 +42,44 @@ export function ConsoleNav() {
 
   const authState = getUserAuthorizationState(user);
 
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+
   const handleSearchChange = (val: string) => {
     setSearchQuery(val);
+    if (val.trim().length >= 2) {
+      const res = searchGeography(val).slice(0, 8);
+      setSearchResults(res);
+      setShowSearchDropdown(res.length > 0);
+    } else {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+    }
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: val.trim().toLowerCase() } }));
     }
   };
 
+  const handleSelectSearchResult = (item: SearchResultItem) => {
+    setSearchQuery(item.name);
+    setShowSearchDropdown(false);
+    if (typeof window !== "undefined") {
+      if (currentPath === "/") {
+        window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: item.name.toLowerCase() } }));
+        const mapEl = document.getElementById("risk-map");
+        if (mapEl) {
+          mapEl.scrollIntoView({ behavior: "smooth" });
+        }
+      } else {
+        sessionStorage.setItem("landalert_pending_search", item.name.toLowerCase());
+        navigate({ to: "/", hash: "risk-map" });
+      }
+    }
+  };
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSearchDropdown(false);
     const q = searchQuery.trim().toLowerCase();
     if (!q) return;
 
@@ -294,6 +324,31 @@ export function ConsoleNav() {
             >
               <Search className="h-3.5 w-3.5" />
             </button>
+            {showSearchDropdown && searchResults.length > 0 && (
+              <div className="absolute top-full right-0 mt-1 w-72 sm:w-80 rounded border border-border bg-surface shadow-xl z-[300] overflow-hidden text-left">
+                <div className="px-2.5 py-1.5 border-b border-border/60 bg-secondary/30 text-[0.65rem] font-mono uppercase text-muted-foreground">
+                  Geographic Matches ({searchResults.length})
+                </div>
+                <div className="max-h-60 overflow-y-auto divide-y divide-border/40">
+                  {searchResults.map((item) => (
+                    <button
+                      key={`${item.type}-${item.id}`}
+                      type="button"
+                      onClick={() => handleSelectSearchResult(item)}
+                      className="w-full text-left px-3 py-2 hover:bg-secondary/60 flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer"
+                    >
+                      <div className="truncate">
+                        <div className="font-semibold text-foreground truncate">{item.name}</div>
+                        <div className="text-[0.68rem] text-muted-foreground truncate">{item.description}</div>
+                      </div>
+                      <span className="shrink-0 font-mono text-[0.62rem] uppercase px-1.5 py-0.5 rounded bg-secondary border border-border text-primary font-bold">
+                        {item.type}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </form>
         </div>
 

@@ -34,162 +34,40 @@ interface Props {
   onSuccess?: () => void;
 }
 
-// Authoritative fallback matching the 15 monitored hill zones in risk_zones
-export const FALLBACK_ZONES = [
-  { id: 1, name: "Tamenglong", state: "Manipur", district: "Tamenglong", centroid_lat: 24.98, centroid_lng: 93.49 },
-  { id: 2, name: "Noney", state: "Manipur", district: "Noney", centroid_lat: 24.81, centroid_lng: 93.62 },
-  { id: 3, name: "Aizawl East", state: "Mizoram", district: "Aizawl", centroid_lat: 23.73, centroid_lng: 92.72 },
-  { id: 4, name: "Lunglei Slopes", state: "Mizoram", district: "Lunglei", centroid_lat: 22.89, centroid_lng: 92.74 },
-  { id: 5, name: "Shillong-Sohra Escarpment", state: "Meghalaya", district: "East Khasi Hills", centroid_lat: 25.43, centroid_lng: 91.73 },
-  { id: 6, name: "Jaintia Hills Ridge", state: "Meghalaya", district: "West Jaintia Hills", centroid_lat: 25.45, centroid_lng: 92.20 },
-  { id: 7, name: "Kohima Ridge", state: "Nagaland", district: "Kohima", centroid_lat: 25.67, centroid_lng: 94.11 },
-  { id: 8, name: "Dimapur Foothills", state: "Nagaland", district: "Dimapur", centroid_lat: 25.91, centroid_lng: 93.73 },
-  { id: 9, name: "Papum Pare", state: "Arunachal Pradesh", district: "Papum Pare", centroid_lat: 27.15, centroid_lng: 93.58 },
-  { id: 10, name: "Dibang Valley", state: "Arunachal Pradesh", district: "Dibang Valley", centroid_lat: 28.32, centroid_lng: 95.84 },
-  { id: 11, name: "Gangtok-Singtam Corridor", state: "Sikkim", district: "East Sikkim", centroid_lat: 27.28, centroid_lng: 88.55 },
-  { id: 12, name: "Mangan North", state: "Sikkim", district: "Mangan", centroid_lat: 27.51, centroid_lng: 88.53 },
-  { id: 13, name: "Haflong Hills", state: "Assam", district: "Dima Hasao", centroid_lat: 25.17, centroid_lng: 93.02 },
-  { id: 14, name: "Karbi Anglong West", state: "Assam", district: "Karbi Anglong", centroid_lat: 25.90, centroid_lng: 93.35 },
-  { id: 15, name: "Ambassa Hills", state: "Tripura", district: "Dhalai", centroid_lat: 23.92, centroid_lng: 91.85 },
-];
+import {
+  getAllStates,
+  getDistrictsByState,
+  getZonesByDistrict,
+  getZonesByState,
+  getZoneById,
+  getAllZones,
+  resolveLocationFromGps,
+  type MonitoredZoneEntity,
+} from "@/lib/geography";
 
-export const NER_GEOGRAPHY: Record<string, { districts: string[]; defaultZoneId: number }> = {
-  "Arunachal Pradesh": {
-    districts: [
-      "Papum Pare",
-      "Dibang Valley",
-      "Tawang",
-      "West Kameng",
-      "East Kameng",
-      "Lower Subansiri",
-      "Upper Subansiri",
-      "West Siang",
-      "East Siang",
-      "Changlang",
-      "Tirap",
-      "Lohit",
-      "Anjaw",
-      "Kurung Kumey",
-      "Namsai",
-      "Lepa Rada",
-      "Shi Yomi",
-    ],
-    defaultZoneId: 9,
-  },
-  "Assam": {
-    districts: [
-      "Dima Hasao",
-      "Karbi Anglong",
-      "West Karbi Anglong",
-      "Cachar",
-      "Hailakandi",
-      "Karimganj",
-      "Kamrup Metropolitan",
-      "Kamrup",
-      "Goalpara",
-      "Bongaigaon",
-      "Barpeta",
-      "Sonitpur",
-      "Lakhimpur",
-      "Dhemaji",
-      "Jorhat",
-      "Dibrugarh",
-      "Tinsukia",
-    ],
-    defaultZoneId: 13,
-  },
-  "Manipur": {
-    districts: [
-      "Tamenglong",
-      "Noney",
-      "Imphal West",
-      "Imphal East",
-      "Bishnupur",
-      "Thoubal",
-      "Ukhrul",
-      "Churachandpur",
-      "Senapati",
-      "Kangpokpi",
-      "Chandel",
-      "Tengnoupal",
-    ],
-    defaultZoneId: 1,
-  },
-  "Meghalaya": {
-    districts: [
-      "East Khasi Hills",
-      "West Jaintia Hills",
-      "East Jaintia Hills",
-      "West Khasi Hills",
-      "South West Khasi Hills",
-      "Ri-Bhoi",
-      "West Garo Hills",
-      "East Garo Hills",
-      "South Garo Hills",
-      "North Garo Hills",
-    ],
-    defaultZoneId: 5,
-  },
-  "Mizoram": {
-    districts: [
-      "Aizawl",
-      "Lunglei",
-      "Champhai",
-      "Kolasib",
-      "Serchhip",
-      "Lawngtlai",
-      "Siaha",
-      "Mamit",
-      "Hnahthial",
-      "Khawzawl",
-      "Saitual",
-    ],
-    defaultZoneId: 3,
-  },
-  "Nagaland": {
-    districts: [
-      "Kohima",
-      "Dimapur",
-      "Mokokchung",
-      "Phek",
-      "Tuensang",
-      "Mon",
-      "Wokha",
-      "Zunheboto",
-      "Kiphire",
-      "Longleng",
-      "Peren",
-      "Chümoukedima",
-      "Niuland",
-      "Tseminyü",
-    ],
-    defaultZoneId: 7,
-  },
-  "Sikkim": {
-    districts: [
-      "East Sikkim",
-      "Mangan",
-      "Namchi",
-      "Gyalshing",
-      "Pakyong",
-      "Soreng",
-    ],
-    defaultZoneId: 11,
-  },
-  "Tripura": {
-    districts: [
-      "Dhalai",
-      "West Tripura",
-      "North Tripura",
-      "South Tripura",
-      "Gomati",
-      "Khowai",
-      "Sepahijala",
-      "Unakoti",
-    ],
-    defaultZoneId: 15,
-  },
-};
+// Authoritative fallback matching the 15 monitored hill zones in risk_zones
+export const FALLBACK_ZONES = getAllZones().map((z) => ({
+  id: z.id,
+  name: z.name,
+  state: z.state,
+  district: z.district,
+  centroid_lat: z.centroid_lat,
+  centroid_lng: z.centroid_lng,
+}));
+
+export const NER_GEOGRAPHY: Record<string, { districts: string[]; defaultZoneId: number }> = Object.fromEntries(
+  getAllStates().map((st) => {
+    const districts = getDistrictsByState(st.id).map((d) => d.name);
+    const zones = getZonesByState(st.id);
+    return [
+      st.name,
+      {
+        districts,
+        defaultZoneId: zones[0]?.id ?? 1,
+      },
+    ];
+  }),
+);
 
 interface MediaItem {
   file?: File;
@@ -290,43 +168,41 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   }, []);
 
 
+  const [gpsZoneMessage, setGpsZoneMessage] = useState<string | null>(null);
+
+  const currentDistrictZones = useMemo(() => {
+    return getZonesByDistrict(selectedDistrict);
+  }, [selectedDistrict]);
+
   const handleStateChange = (newState: string) => {
     setSelectedState(newState);
-    const districts = NER_GEOGRAPHY[newState]?.districts || [];
-    const firstDistrict = districts[0] || "";
+    const districts = getDistrictsByState(newState);
+    const firstDistrict = districts[0]?.name || "";
     setSelectedDistrict(firstDistrict);
-    const matchZone =
-      zones.find((z) => z.state === newState && z.district === firstDistrict) ||
-      zones.find((z) => z.state === newState) ||
-      zones[0]!;
-    setZoneId(matchZone.id);
+    const districtZones = getZonesByDistrict(firstDistrict);
+    setZoneId(districtZones.length > 0 ? districtZones[0]!.id : null);
+    setGpsZoneMessage(null);
     setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
   };
 
   const handleDistrictChange = (newDistrict: string) => {
     setSelectedDistrict(newDistrict);
-    const matchZone =
-      zones.find((z) => z.state === selectedState && z.district === newDistrict) ||
-      zones.find((z) => z.state === selectedState) ||
-      zones[0]!;
-    setZoneId(matchZone.id);
+    const districtZones = getZonesByDistrict(newDistrict);
+    setZoneId(districtZones.length > 0 ? districtZones[0]!.id : null);
+    setGpsZoneMessage(null);
     setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
   };
 
   function autoLocateFromGps(lat: number, lng: number) {
-    let closest = FALLBACK_ZONES[0]!;
-    let minDist = Infinity;
-    for (const z of FALLBACK_ZONES) {
-      const d = Math.hypot(lat - z.centroid_lat, lng - z.centroid_lng);
-      if (d < minDist) {
-        minDist = d;
-        closest = z;
-      }
-    }
-    if (closest) {
-      setSelectedState(closest.state);
-      setSelectedDistrict(closest.district);
-      setZoneId(closest.id);
+    const res = resolveLocationFromGps(lat, lng);
+    setSelectedState(res.state.name);
+    setSelectedDistrict(res.district.name);
+    if (res.isExactZone && res.zone) {
+      setZoneId(res.zone.id);
+      setGpsZoneMessage(res.message);
+    } else {
+      setZoneId(null);
+      setGpsZoneMessage("Location captured. Exact monitored zone could not be determined.");
     }
   }
 
@@ -836,29 +712,48 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                   {t("field_observation.zone_label", "Instrumented Monitoring Zone")}
                 </Label>
                 <span className="text-[0.62rem] text-muted-foreground">
-                  {t("field_observation.telemetry_note", "Primary Telemetry Cluster for {{state}}", { state: selectedState })}
+                  {currentDistrictZones.length > 0
+                    ? `${currentDistrictZones.length} active station(s) in ${selectedDistrict}`
+                    : `District-level coverage (${selectedDistrict})`}
                 </span>
               </div>
-              <Select value={String(zoneId)} onValueChange={(v) => {
-                setZoneId(Number(v));
-                setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
-              }}>
-                <SelectTrigger id="zoneSelect" aria-label={t("field_observation.zone_label", "Instrumented Monitoring Zone")} className="bg-surface border-border font-mono text-xs h-8">
-                  <SelectValue placeholder={t("field_observation.zone_placeholder", "Select Zone")} />
-                </SelectTrigger>
-                <SelectContent className="bg-surface border-border max-h-60 z-[150]">
-                  {zones.map((z) => (
-                    <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
-                      {t("field_observation.zone_format", "Zone {{id}}: {{name}} ({{district}}, {{state}})", {
-                        id: z.id,
-                        name: z.name,
-                        district: z.district,
-                        state: z.state,
-                      })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+              {currentDistrictZones.length > 0 ? (
+                <Select
+                  value={zoneId ? String(zoneId) : ""}
+                  onValueChange={(v) => {
+                    setZoneId(v ? Number(v) : null);
+                    setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
+                  }}
+                >
+                  <SelectTrigger id="zoneSelect" aria-label={t("field_observation.zone_label", "Instrumented Monitoring Zone")} className="bg-surface border-border font-mono text-xs h-8">
+                    <SelectValue placeholder={t("field_observation.zone_placeholder", "Select Monitored Zone")} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-surface border-border max-h-60 z-[150]">
+                    {currentDistrictZones.map((z) => (
+                      <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
+                        Zone {z.id}: {z.name} ({z.district}, {z.state})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                  <span>
+                    {t("field_observation.no_zone_registered", "No active monitored risk zone currently registered.")}
+                  </span>
+                  <span className="text-[0.68rem] text-muted-foreground font-mono">
+                    {selectedDistrict}
+                  </span>
+                </div>
+              )}
+
+              {gpsZoneMessage && (
+                <div className="text-[0.68rem] font-mono px-2 py-1 rounded bg-secondary/50 border border-border text-foreground">
+                  {gpsZoneMessage}
+                </div>
+              )}
+
               {fieldErrors.zone && (
                 <p className="text-[0.68rem] text-red-500 font-mono">{fieldErrors.zone}</p>
               )}

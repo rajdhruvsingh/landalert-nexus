@@ -28,6 +28,18 @@ import {
   RATE_LIMIT_POLICIES,
   getClientIdentifier,
 } from "./rate-limiter";
+import {
+  getRegion,
+  getAllStates,
+  getStateById,
+  getDistrictsByState,
+  getDistrictById,
+  getZonesByDistrict,
+  getZonesByState,
+  getAllZones,
+  getCompleteHierarchy,
+  searchGeography,
+} from "./geography";
 
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
 
@@ -809,6 +821,57 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
       const ranking = evaluateEmergencyPrioritization(zoneInputs);
       return jsonResponse(ranking, 200, cors);
+    }
+
+    // ==========================================
+    // GEOGRAPHIC HIERARCHY REST API ENDPOINTS
+    // ==========================================
+
+    // GET /api/geo/hierarchy
+    if (pathname === "/api/geo/hierarchy" && request.method === "GET") {
+      const hierarchy = getCompleteHierarchy();
+      return jsonResponse(hierarchy, 200, cors);
+    }
+
+    // GET /api/geo/states
+    if (pathname === "/api/geo/states" && request.method === "GET") {
+      const states = getAllStates();
+      return jsonResponse({ states, count: states.length }, 200, cors);
+    }
+
+    // GET /api/geo/districts
+    if (pathname === "/api/geo/districts" && request.method === "GET") {
+      const stateId = url.searchParams.get("stateId");
+      if (stateId) {
+        const districts = getDistrictsByState(stateId);
+        return jsonResponse({ districts, stateId, count: districts.length }, 200, cors);
+      }
+      const hierarchy = getCompleteHierarchy();
+      const allDistricts = hierarchy.states.flatMap((s) => s.districts);
+      return jsonResponse({ districts: allDistricts, count: allDistricts.length }, 200, cors);
+    }
+
+    // GET /api/geo/zones
+    if (pathname === "/api/geo/zones" && request.method === "GET") {
+      const districtId = url.searchParams.get("districtId");
+      const stateId = url.searchParams.get("stateId");
+      if (districtId) {
+        const zones = getZonesByDistrict(districtId);
+        return jsonResponse({ zones, districtId, count: zones.length }, 200, cors);
+      }
+      if (stateId) {
+        const zones = getZonesByState(stateId);
+        return jsonResponse({ zones, stateId, count: zones.length }, 200, cors);
+      }
+      const zones = getAllZones();
+      return jsonResponse({ zones, count: zones.length }, 200, cors);
+    }
+
+    // GET /api/geo/search
+    if (pathname === "/api/geo/search" && request.method === "GET") {
+      const q = url.searchParams.get("q") ?? "";
+      const results = searchGeography(q);
+      return jsonResponse({ query: q, results, count: results.length }, 200, cors);
     }
 
     return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404, cors);
