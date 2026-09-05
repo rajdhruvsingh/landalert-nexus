@@ -381,8 +381,8 @@ function ZonePage() {
       {mlPrediction?.risk_level === "UNKNOWN" && (
         <div className="mt-3 flex items-center gap-2 rounded border border-border bg-secondary/60 px-3 py-1.5 font-mono text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-slate-400" />
-          <span className="font-semibold uppercase tracking-wider">Status Unknown</span>
-          <span>— system data unavailable (inference engine and telemetry database offline).</span>
+          <span className="font-semibold uppercase tracking-wider">{t("risk_levels.UNKNOWN")}</span>
+          <span>— {t("risk_bits.status_unknown_unavailable")}</span>
         </div>
       )}
 

@@ -320,7 +320,7 @@ function Dashboard() {
               {selectedMl?.risk_level === "UNKNOWN" && (
                 <div className="flex items-center gap-2 rounded border border-border bg-secondary/60 px-2.5 py-1 font-mono text-[0.7rem] text-muted-foreground">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                  <span>Status Unknown — system data unavailable.</span>
+                  <span>{t("dashboard.status_unknown_desc")}</span>
                 </div>
               )}
 
@@ -448,7 +448,7 @@ function Dashboard() {
               <div className="flex items-center justify-between">
                 <span className="label-caps">{t("response_prioritization.section_title")}</span>
                 <span className="rounded border border-border bg-secondary/60 px-2 py-0.5 font-mono text-[0.65rem] text-muted-foreground">
-                  Decision Support
+                  {t("response_prioritization.decision_support")}
                 </span>
               </div>
               <p className="mt-1 text-[0.68rem] text-muted-foreground leading-relaxed">
@@ -543,7 +543,7 @@ function Dashboard() {
 
               {(!prioritizationData?.ranked || prioritizationData.ranked.length === 0) && (
                 <p className="p-4 text-sm text-muted-foreground">
-                  No prioritised zones available.
+                  {t("response_prioritization.no_zones")}
                 </p>
               )}
             </div>
@@ -580,7 +580,7 @@ function Dashboard() {
                   );
                 })}
               {data.roads.length === 0 && (
-                <p className="p-4 text-sm text-muted-foreground">No road segments mapped yet.</p>
+                <p className="p-4 text-sm text-muted-foreground">{t("dashboard.no_roads")}</p>
               )}
             </div>
           </div>
@@ -592,7 +592,7 @@ function Dashboard() {
                 to="/alerts"
                 className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
               >
-                Full history →
+                {t("alerts.full_history")}
               </Link>
             </div>
             <div className="max-h-[280px] space-y-3 overflow-y-auto p-4">
@@ -611,7 +611,7 @@ function Dashboard() {
                 </div>
               ))}
               {data.alerts.length === 0 && (
-                <p className="text-sm text-muted-foreground">No alerts dispatched yet.</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.no_alerts")}</p>
               )}
             </div>
           </div>

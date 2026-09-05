@@ -66,12 +66,7 @@ describe("Multilingual UI (i18n) Support", () => {
       { code: "ne", bundle: ne },
     ];
 
-    const sections = [
-      "alerts",
-      "zone_detail",
-      "weather_forecast",
-      "response_prioritization",
-    ] as const;
+    const sections = Object.keys(en);
 
     for (const section of sections) {
       const enKeys = Object.keys(en[section]);
@@ -96,7 +91,75 @@ describe("Multilingual UI (i18n) Support", () => {
           ).toBe(true);
         }
       }
+
+      // Check no extra keys in any other language
+      for (const { code, bundle } of languages) {
+        const bundleKeys = Object.keys((bundle as any)[section] || {});
+        for (const bKey of bundleKeys) {
+          expect(
+            (en[section] as Record<string, string>)[bKey],
+            `Language ${code} has extra key "${section}.${bKey}" not found in en.${section}`,
+          ).toBeDefined();
+        }
+      }
     }
   });
+
+  it("fails if any user-facing component or route contains hardcoded JSX string literals", () => {
+    const fs = awaitImportFs();
+    const path = awaitImportPath();
+    const rootDir = path.resolve(__dirname, "..");
+    const violations: { file: string; line: number; text: string }[] = [];
+
+    function scan(dir: string) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === "ui") continue; // Exclude shadcn headless primitives
+          scan(fullPath);
+        } else if (entry.name.endsWith(".tsx")) {
+          const lines = fs.readFileSync(fullPath, "utf8").split("\n");
+          // Match text inside JSX tags: >Some English words<
+          const jsxRegex = />\s*([A-Za-z][A-Za-z0-9 ,.?!—–:;'-]{8,})\s*</g;
+          lines.forEach((line: string, idx: number) => {
+            // Skip comments and imports
+            const trimmed = line.trim();
+            if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return;
+            let match;
+            while ((match = jsxRegex.exec(line)) !== null) {
+              const text = match[1].trim();
+              if (text && !text.startsWith("{") && !text.includes("className")) {
+                violations.push({
+                  file: path.relative(rootDir, fullPath),
+                  line: idx + 1,
+                  text,
+                });
+              }
+            }
+          });
+        }
+      }
+    }
+
+    scan(path.resolve(__dirname, "../routes"));
+    scan(path.resolve(__dirname, "../components"));
+
+    expect(
+      violations,
+      `Found hardcoded JSX string literals without i18n translation:\n${violations
+        .map((v) => `  ${v.file}:${v.line} -> "${v.text}"`)
+        .join("\n")}`,
+    ).toEqual([]);
+  });
 });
+
+function awaitImportFs() {
+  return require("fs");
+}
+
+function awaitImportPath() {
+  return require("path");
+}
+
 

@@ -170,7 +170,7 @@ function AlertsPage() {
             </DialogHeader>
 
             <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[0.7rem] font-mono text-muted-foreground">
-              <span className="font-semibold text-primary uppercase tracking-wide">Authority Notice: </span>
+              <span className="font-semibold text-primary uppercase tracking-wide">{t("alerts.authority_notice_label")} </span>
               {t("alerts.authority_notice")}
             </div>
 

@@ -26,6 +26,7 @@ import { getUserAuthorizationState } from "@/lib/auth-domains";
 import { Capacitor } from "@capacitor/core";
 import { Geolocation as CapGeolocation } from "@capacitor/geolocation";
 import { Camera as CapCamera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   initialZoneId?: number;
@@ -78,6 +79,7 @@ export async function ensureAuthenticatedSession() {
 }
 
 export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const isOnline = useOnlineStatus();
 
@@ -158,7 +160,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
 
   async function captureGps() {
-    setGpsStatus("Acquiring GPS location…");
+    setGpsStatus(t("field_observation.gps_acquiring", "Acquiring GPS location…"));
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -166,7 +168,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         if (perm.location !== "granted") {
           const req = await CapGeolocation.requestPermissions();
           if (req.location !== "granted") {
-            setGpsStatus("GPS permission denied by user");
+            setGpsStatus(t("field_observation.gps_denied", "GPS permission denied by user"));
             return;
           }
         }
@@ -179,7 +181,11 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         setGeoAccuracy(Number(pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : "5.0"));
         setGeoCapturedAt(new Date(pos.timestamp).toISOString());
         setGpsStatus(
-          `GPS Acquired (Native): ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E (±${Math.round(pos.coords.accuracy || 5)}m)`,
+          t("field_observation.gps_acquired_native", "GPS Acquired (Native): {{lat}}°N, {{lng}}°E (±{{acc}}m)", {
+            lat: pos.coords.latitude.toFixed(4),
+            lng: pos.coords.longitude.toFixed(4),
+            acc: Math.round(pos.coords.accuracy || 5),
+          }),
         );
         return;
       } catch (err: any) {
@@ -189,7 +195,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
 
     // Web fallback
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsStatus("Browser geolocation not supported");
+      setGpsStatus(t("field_observation.gps_unsupported", "Browser geolocation not supported"));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -199,11 +205,15 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         setGeoAccuracy(Number(pos.coords.accuracy.toFixed(1)));
         setGeoCapturedAt(new Date(pos.timestamp).toISOString());
         setGpsStatus(
-          `GPS Acquired: ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E (±${Math.round(pos.coords.accuracy)}m)`,
+          t("field_observation.gps_acquired_web", "GPS Acquired: {{lat}}°N, {{lng}}°E (±{{acc}}m)", {
+            lat: pos.coords.latitude.toFixed(4),
+            lng: pos.coords.longitude.toFixed(4),
+            acc: Math.round(pos.coords.accuracy),
+          }),
         );
       },
       (err) => {
-        setGpsStatus(`GPS error: ${err.message}`);
+        setGpsStatus(t("field_observation.gps_error", "GPS error: {{msg}}", { msg: err.message }));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
@@ -212,7 +222,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   // Native Camera capture helper
   async function handleNativeCameraCapture() {
     if (mediaList.length >= 3) {
-      setFileError("Maximum 3 files allowed per observation");
+      setFileError(t("field_observation.error_max_files", "Maximum 3 files allowed per observation"));
       return;
     }
     setFileError(null);
@@ -232,7 +242,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
       // Calculate approximate size in bytes from base64 string
       const sizeInBytes = Math.round((image.base64String.length * 3) / 4);
       if (sizeInBytes > 10 * 1024 * 1024) {
-        setFileError("Captured photo exceeds 10MB limit.");
+        setFileError(t("field_observation.error_photo_size", "Captured photo exceeds 10MB limit."));
         return;
       }
 
@@ -344,7 +354,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     if (isMediaAttached && !consentChecked) {
       setStatusMessage({
         type: "error",
-        text: "Consent required: Please accept the media review and public disclosure notice before submitting.",
+        text: t("field_observation.error_consent", "Consent required: Please accept the media review and public disclosure notice before submitting."),
       });
       setSubmitting(false);
       return;
@@ -433,7 +443,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         queueObservation(record);
         setStatusMessage({
           type: "offline",
-          text: "Device is offline. Observation & media queued locally; will sync automatically upon reconnection.",
+          text: t("field_observation.offline_queued", "Device is offline. Observation & media queued locally; will sync automatically upon reconnection."),
         });
         setTimeout(() => {
           setOpen(false);
@@ -450,11 +460,11 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         if (res.success && res.syncedCount > 0) {
           const trustNotice =
             userRole === "PUBLIC_USER"
-              ? "Submitted for official review (unverified citizen signal)."
-              : "Submitted with official authority credentials.";
+              ? t("field_observation.trust_notice_citizen", "Submitted for official review (unverified citizen signal).")
+              : t("field_observation.trust_notice_official", "Submitted with official authority credentials.");
           setStatusMessage({
             type: "success",
-            text: `Observation for Zone ${zoneId} submitted. ${trustNotice}`,
+            text: t("field_observation.success_notice", "Observation for Zone {{zoneId}} submitted. {{trustNotice}}", { zoneId, trustNotice }),
           });
           setTimeout(() => {
             setOpen(false);
@@ -473,7 +483,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
       queueObservation(record);
       setStatusMessage({
         type: "offline",
-        text: "Network error encountered. Observation preserved in offline queue.",
+        text: t("field_observation.network_error", "Network error encountered. Observation preserved in offline queue."),
       });
     } finally {
       setSubmitting(false);
@@ -489,32 +499,32 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
             size="sm"
             className="font-mono text-xs uppercase tracking-wider"
           >
-            Report Observation
+            {t("field_observation.button_label", "Report Observation")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto bg-surface text-foreground border-border">
         <DialogHeader>
           <DialogTitle className="text-xl font-display uppercase tracking-wide">
-            Submit Field Observation
+            {t("field_observation.dialog_title", "Submit Field Observation")}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Feed ground-truth observations & geo-tagged photos into the NER early warning system.
+            {t("field_observation.dialog_desc", "Feed ground-truth observations & geo-tagged photos into the NER early warning system.")}
           </DialogDescription>
         </DialogHeader>
 
         {/* Trust Model Notice */}
         <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-[0.7rem] font-mono text-amber-300">
           <div className="font-semibold uppercase tracking-wider flex items-center justify-between">
-            <span>🛡️ Trust Model: {userRole === "PUBLIC_USER" ? "Citizen Report" : "Verified Official"}</span>
+            <span>🛡️ Trust Model: {userRole === "PUBLIC_USER" ? t("field_observation.trust_citizen", "Citizen Report") : t("field_observation.trust_official", "Verified Official")}</span>
             <span className="text-[0.65rem] opacity-80">
-              {userRole === "PUBLIC_USER" ? "Pending Triage" : "Direct Official Feed"}
+              {userRole === "PUBLIC_USER" ? t("field_observation.triage_pending", "Pending Triage") : t("field_observation.triage_direct", "Direct Official Feed")}
             </span>
           </div>
           <p className="mt-1 text-muted-foreground leading-normal">
             {userRole === "PUBLIC_USER"
-              ? "Public reports enter the system as unverified candidate signals. Photos & coordinates are reviewed by emergency authorities before displaying on the public dashboard."
-              : "Official survey record authenticated under emergency authority. Media displays immediately upon verification."}
+              ? t("field_observation.trust_desc_citizen", "Public reports enter the system as unverified candidate signals. Photos & coordinates are reviewed by emergency authorities before displaying on the public dashboard.")
+              : t("field_observation.trust_desc_official", "Official survey record authenticated under emergency authority. Media displays immediately upon verification.")}
           </p>
         </div>
 
@@ -536,16 +546,21 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           {/* 1. Zone Selection (Live 15 Monitored Zones) */}
           <div className="grid gap-1.5">
             <Label htmlFor="zoneSelect" className="text-xs font-mono uppercase text-muted-foreground">
-              Monitored Zone (NER)
+              {t("field_observation.zone_label", "Monitored Zone (NER)")}
             </Label>
             <Select value={String(zoneId)} onValueChange={(v) => setZoneId(Number(v))}>
               <SelectTrigger id="zoneSelect" className="bg-secondary/40 border-border font-mono text-xs">
-                <SelectValue placeholder="Select Zone" />
+                <SelectValue placeholder={t("field_observation.zone_placeholder", "Select Zone")} />
               </SelectTrigger>
               <SelectContent className="bg-surface border-border max-h-60">
                 {zones.map((z) => (
                   <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
-                    Zone {z.id}: {z.name} ({z.district}, {z.state})
+                    {t("field_observation.zone_format", "Zone {{id}}: {{name}} ({{district}}, {{state}})", {
+                      id: z.id,
+                      name: z.name,
+                      district: z.district,
+                      state: z.state,
+                    })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -556,7 +571,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="rainInput" className="text-xs font-mono uppercase text-muted-foreground">
-                Rainfall (mm, 24h)
+                {t("field_observation.rainfall_label", "Rainfall (mm, 24h)")}
               </Label>
               <Input
                 id="rainInput"
@@ -573,17 +588,17 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
 
             <div className="grid gap-1.5">
               <Label htmlFor="soilCondition" className="text-xs font-mono uppercase text-muted-foreground">
-                Soil Condition
+                {t("field_observation.soil_label", "Soil Condition")}
               </Label>
               <Select value={soilCondition} onValueChange={setSoilCondition}>
                 <SelectTrigger id="soilCondition" className="bg-secondary/40 border-border font-mono text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface border-border">
-                  <SelectItem value="dry" className="text-xs font-mono">Dry / Stable</SelectItem>
-                  <SelectItem value="damp" className="text-xs font-mono">Damp</SelectItem>
-                  <SelectItem value="saturated" className="text-xs font-mono">Saturated / Soft</SelectItem>
-                  <SelectItem value="waterlogged" className="text-xs font-mono">Waterlogged / Seepage</SelectItem>
+                  <SelectItem value="dry" className="text-xs font-mono">{t("field_observation.soil_dry", "Dry / Stable")}</SelectItem>
+                  <SelectItem value="damp" className="text-xs font-mono">{t("field_observation.soil_damp", "Damp")}</SelectItem>
+                  <SelectItem value="saturated" className="text-xs font-mono">{t("field_observation.soil_saturated", "Saturated / Soft")}</SelectItem>
+                  <SelectItem value="waterlogged" className="text-xs font-mono">{t("field_observation.soil_waterlogged", "Waterlogged / Seepage")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -592,25 +607,25 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="visualSigns" className="text-xs font-mono uppercase text-muted-foreground">
-                Visual Signs
+                {t("field_observation.signs_label", "Visual Signs")}
               </Label>
               <Select value={visualSigns} onValueChange={setVisualSigns}>
                 <SelectTrigger id="visualSigns" className="bg-secondary/40 border-border font-mono text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface border-border">
-                  <SelectItem value="None" className="text-xs font-mono">None observed</SelectItem>
-                  <SelectItem value="Tension cracks on slope" className="text-xs font-mono">Tension cracks</SelectItem>
-                  <SelectItem value="Mudflow / Slumping" className="text-xs font-mono">Mudflow / Slumping</SelectItem>
-                  <SelectItem value="Tilting trees/poles" className="text-xs font-mono">Tilting trees/poles</SelectItem>
-                  <SelectItem value="Rockfall debris" className="text-xs font-mono">Rockfall debris</SelectItem>
+                  <SelectItem value="None" className="text-xs font-mono">{t("field_observation.signs_none", "None observed")}</SelectItem>
+                  <SelectItem value="Tension cracks on slope" className="text-xs font-mono">{t("field_observation.signs_cracks", "Tension cracks")}</SelectItem>
+                  <SelectItem value="Mudflow / Slumping" className="text-xs font-mono">{t("field_observation.signs_mudflow", "Mudflow / Slumping")}</SelectItem>
+                  <SelectItem value="Tilting trees/poles" className="text-xs font-mono">{t("field_observation.signs_tilting", "Tilting trees/poles")}</SelectItem>
+                  <SelectItem value="Rockfall debris" className="text-xs font-mono">{t("field_observation.signs_rockfall", "Rockfall debris")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-1.5">
               <Label htmlFor="roadStatus" className="text-xs font-mono uppercase text-muted-foreground">
-                Road Connectivity
+                {t("field_observation.road_label", "Road Connectivity")}
               </Label>
               <Select
                 value={roadStatus}
@@ -620,10 +635,10 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface border-border">
-                  <SelectItem value="open" className="text-xs font-mono">Open / Clear</SelectItem>
-                  <SelectItem value="restricted" className="text-xs font-mono">Restricted / 1-Way</SelectItem>
-                  <SelectItem value="blocked" className="text-xs font-mono">Blocked / Impassable</SelectItem>
-                  <SelectItem value="unknown" className="text-xs font-mono">Unknown</SelectItem>
+                  <SelectItem value="open" className="text-xs font-mono">{t("field_observation.road_open", "Open / Clear")}</SelectItem>
+                  <SelectItem value="restricted" className="text-xs font-mono">{t("field_observation.road_restricted", "Restricted / 1-Way")}</SelectItem>
+                  <SelectItem value="blocked" className="text-xs font-mono">{t("field_observation.road_blocked", "Blocked / Impassable")}</SelectItem>
+                  <SelectItem value="unknown" className="text-xs font-mono">{t("field_observation.road_unknown", "Unknown")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -634,10 +649,10 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
             <div className="rounded border border-border bg-secondary/20 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-mono uppercase text-muted-foreground">
-                  Field Media (Photos / Video)
+                  {t("field_observation.media_title", "Field Media (Photos / Video)")}
                 </Label>
                 <span className="text-[0.65rem] font-mono text-muted-foreground">
-                  Max 3 files (Photos &le;10MB, Videos &le;50MB)
+                  {t("field_observation.media_limit", "Max 3 files (Photos ≤10MB, Videos ≤50MB)")}
                 </span>
               </div>
 
@@ -657,9 +672,9 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                   disabled={submitting || mediaList.length >= 3}
                   onClick={handleNativeCameraCapture}
                   className="font-mono text-xs shrink-0"
-                  title="Capture photo using device camera or gallery"
+                  title={t("field_observation.camera_title", "Capture photo using device camera or gallery")}
                 >
-                  📷 Camera
+                  {t("field_observation.camera_button", "📷 Camera")}
                 </Button>
               </div>
 
@@ -704,9 +719,9 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           {/* 4. GPS Geolocation Capture */}
           <div className="flex items-center justify-between rounded border border-border/70 bg-secondary/10 px-3 py-2">
             <div className="space-y-0.5">
-              <div className="text-xs font-mono uppercase text-muted-foreground">GPS Location</div>
+              <div className="text-xs font-mono uppercase text-muted-foreground">{t("field_observation.gps_label", "GPS Location")}</div>
               <div className="text-[0.7rem] font-mono text-foreground">
-                {gpsStatus || "Not captured yet"}
+                {gpsStatus || t("field_observation.gps_not_captured", "Not captured yet")}
               </div>
             </div>
             <Button
@@ -716,7 +731,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               onClick={captureGps}
               className="font-mono text-[0.7rem] h-7 px-2"
             >
-              📍 {geoLat ? "Recapture GPS" : "Capture GPS"}
+              {geoLat ? t("field_observation.recapture_gps", "📍 Recapture GPS") : t("field_observation.capture_gps", "📍 Capture GPS")}
             </Button>
           </div>
 
@@ -734,23 +749,23 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 htmlFor="mediaConsentCheckbox"
                 className="text-[0.72rem] text-foreground leading-relaxed cursor-pointer font-sans select-none"
               >
-                I understand this photo/video and location may be reviewed by authorities and shown publicly once approved.
+                {t("field_observation.consent_media", "I understand this photo/video and location may be reviewed by authorities and shown publicly once approved.")}
               </Label>
             </div>
           ) : (
             <p className="text-[0.68rem] text-muted-foreground leading-relaxed italic border-l-2 border-primary/50 pl-2">
-              Notice: Numerical rainfall and road condition observations are routed immediately to the regional early warning engine.
+              {t("field_observation.notice_numerical", "Notice: Numerical rainfall and road condition observations are routed immediately to the regional early warning engine.")}
             </p>
           )}
 
           <div className="grid gap-1.5">
             <Label htmlFor="observerInput" className="text-xs font-mono uppercase text-muted-foreground">
-              Observer Identity / Station
+              {t("field_observation.observer_label", "Observer Identity / Station")}
             </Label>
             <Input
               id="observerInput"
               type="text"
-              placeholder="e.g. DDMA Field Team / Citizen Observer"
+              placeholder={t("field_observation.observer_placeholder", "e.g. DDMA Field Team / Citizen Observer")}
               value={observerId}
               onChange={(e) => setObserverId(e.target.value)}
               className="bg-secondary/40 border-border font-mono text-xs"
@@ -760,7 +775,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           <DialogFooter className="mt-4 flex items-center justify-between sm:justify-between pt-2 border-t border-border">
             <div className="flex items-center gap-1.5 font-mono text-[0.68rem] text-muted-foreground">
               <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-400" : "bg-blue-400"}`} />
-              <span>{isOnline ? "Online (Direct API)" : "Offline (Local Queue)"}</span>
+              <span>{isOnline ? t("field_observation.status_online", "Online (Direct API)") : t("field_observation.status_offline", "Offline (Local Queue)")}</span>
             </div>
             <div className="flex gap-2">
               <Button
@@ -771,7 +786,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 disabled={submitting}
                 className="font-mono text-xs"
               >
-                Cancel
+                {t("field_observation.cancel", "Cancel")}
               </Button>
               <Button
                 type="submit"
@@ -779,7 +794,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 disabled={submitting || (mediaList.length > 0 && !consentChecked)}
                 className="font-mono text-xs uppercase"
               >
-                {submitting ? "Submitting…" : isOnline ? "Submit Report" : "Queue Offline"}
+                {submitting ? t("field_observation.submitting", "Submitting…") : isOnline ? t("field_observation.submit_report", "Submit Report") : t("field_observation.queue_offline", "Queue Offline")}
               </Button>
             </div>
           </DialogFooter>

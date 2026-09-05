@@ -1,5 +1,6 @@
 import { riskBadgeClass, roadStatusClass } from "@/lib/risk";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export function RiskBadge({
   level,
@@ -10,17 +11,24 @@ export function RiskBadge({
   score?: number | null | undefined;
   className?: string | undefined;
 }) {
+  const { t } = useTranslation();
   const isUnknown = level === "UNKNOWN";
+  const label = isUnknown
+    ? t("risk_bits.status_unknown", "Status Unknown — system data unavailable")
+    : t(`risk_levels.${level}`, level);
+
   return (
     <span
+      role="status"
+      aria-live="polite"
       className={cn(
         "inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-display text-xs uppercase tracking-widest",
         riskBadgeClass(level),
         className,
       )}
-      title={isUnknown ? "Status Unknown — system data unavailable" : undefined}
+      title={isUnknown ? label : undefined}
     >
-      {isUnknown ? "Status Unknown — system data unavailable" : level}
+      {label}
       {!isUnknown && score !== undefined && score !== null && (
         <span className="font-mono text-[0.65rem] opacity-80">{score}</span>
       )}
@@ -41,6 +49,7 @@ export function ForecastRiskBadge({
   trend?: "improving" | "stable" | "elevating" | "critical";
   className?: string;
 }) {
+  const { t } = useTranslation();
   const trendArrow =
     trend === "critical" || trend === "elevating"
       ? "▲"
@@ -51,18 +60,26 @@ export function ForecastRiskBadge({
   const opacityClass =
     leadHours === 72 ? "opacity-75 border-dashed" : leadHours === 48 ? "opacity-90 border-dashed" : "border-dashed";
 
+  const levelLabel = t(`risk_levels.${level}`, level);
+
   return (
     <span
+      role="status"
+      aria-live="polite"
       className={cn(
         "inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-display text-xs uppercase tracking-wider",
         riskBadgeClass(level),
         opacityClass,
         className,
       )}
-      title={`+${leadHours}h weather forecast projection (${confidence ?? "medium"} confidence). Advisory only; does not overwrite current risk.`}
+      title={t(
+        "risk_bits.forecast_title",
+        "+{{hours}}h weather forecast projection ({{confidence}} confidence). Advisory only; does not overwrite current risk.",
+        { hours: leadHours, confidence: confidence ?? "medium" },
+      )}
     >
       <span className="font-mono text-[0.65rem] opacity-75">+{leadHours}h</span>
-      <span>{level}</span>
+      <span>{levelLabel}</span>
       {trend && <span className="text-[0.65rem] font-mono">{trendArrow}</span>}
     </span>
   );
@@ -101,6 +118,7 @@ export function PrioritizationScoreBadge({
 }
 
 export function RoadBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   return (
     <span
       className={cn(
@@ -108,7 +126,7 @@ export function RoadBadge({ status }: { status: string }) {
         roadStatusClass(status),
       )}
     >
-      {status}
+      {t(`road_status.${status}`, status)}
     </span>
   );
 }
@@ -140,15 +158,16 @@ export function Stat({
 
 export function ExplanationCard({
   explanation,
-  title = "Why this fired",
+  title,
 }: {
   explanation: string | null;
   title?: string;
 }) {
+  const { t } = useTranslation();
   if (!explanation) return null;
   return (
     <div className="rounded-lg border border-primary/35 bg-primary/5 p-4">
-      <div className="label-caps text-primary">{title}</div>
+      <div className="label-caps text-primary">{title || t("risk_bits.why_this_fired", "Why this fired")}</div>
       <p className="mt-2 font-mono text-[0.8rem] leading-relaxed text-foreground/90">
         {explanation}
       </p>
@@ -165,29 +184,36 @@ export function FreshnessBadge({
   status?: "measured" | "stale" | "fallback" | "missing" | "live" | "cached" | undefined;
   label?: string | undefined;
 }) {
+  const { t } = useTranslation();
   let text = label;
   let styleClass = "border-border text-muted-foreground bg-secondary/50";
 
   if (!text) {
     if (status === "fallback") {
-      text = "⚠ Fallback proxy (50%)";
+      text = t("risk_bits.fallback_proxy", "⚠ Fallback proxy (50%)");
       styleClass = "border-amber-500/40 bg-amber-500/10 text-amber-400";
     } else if (status === "cached") {
-      text = "Offline Cached";
+      text = t("risk_bits.offline_cached", "Offline Cached");
       styleClass = "border-blue-500/40 bg-blue-500/10 text-blue-400";
     } else if (ageHours !== undefined && ageHours !== null) {
       if (ageHours < 24) {
-        text = `Live (${ageHours < 1 ? "<1h" : `${ageHours.toFixed(0)}h`} ago)`;
+        text = t("risk_bits.live_age", "Live ({{time}} ago)", {
+          time: ageHours < 1 ? "<1h" : `${ageHours.toFixed(0)}h`,
+        });
         styleClass = "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
       } else if (ageHours < 72) {
-        text = `Recent (${(ageHours / 24).toFixed(0)}d ago)`;
+        text = t("risk_bits.recent_age", "Recent ({{time}} ago)", {
+          time: `${(ageHours / 24).toFixed(0)}d`,
+        });
         styleClass = "border-amber-500/40 bg-amber-500/10 text-amber-400";
       } else {
-        text = `Stale (${(ageHours / 24).toFixed(0)}d old)`;
+        text = t("risk_bits.stale_age", "Stale ({{time}} old)", {
+          time: `${(ageHours / 24).toFixed(0)}d`,
+        });
         styleClass = "border-risk-severe/40 bg-risk-severe/10 text-risk-severe";
       }
     } else {
-      text = status ?? "Active";
+      text = status ? t(`risk_bits.${status}`, status) : t("risk_bits.active", "Active");
     }
   }
 
@@ -204,13 +230,19 @@ export function FreshnessBadge({
 }
 
 export function ScientificLimitationBadge() {
+  const { t } = useTranslation();
   return (
     <div
       className="inline-flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 font-mono text-[0.68rem] text-amber-300"
-      title="Limited verified positive landslide training samples (N=8 events, 2016-2024). Operational decisions should be coupled with ground-truth inspections."
+      title={t(
+        "risk_bits.scientific_boundary_title",
+        "Limited verified positive landslide training samples (N=8 events, 2016-2024). Operational decisions should be coupled with ground-truth inspections.",
+      )}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-      <span>Scientific boundary: N=8 real landslide events (PR-AUC: 0.5934)</span>
+      <span>
+        {t("risk_bits.scientific_boundary_text", "Scientific boundary: N=8 real landslide events (PR-AUC: 0.5934)")}
+      </span>
     </div>
   );
 }
@@ -231,21 +263,24 @@ export function MLAttributionCard({
   topCategories = [],
   topFeatures = [],
 }: FactorAttributionProps) {
+  const { t } = useTranslation();
   if (!topCategories.length && !topFeatures.length) return null;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between border-b border-border/70 pb-2">
-        <div className="label-caps text-primary">Canonical ML Attribution</div>
+        <div className="label-caps text-primary">
+          {t("risk_bits.canonical_ml_title", "Canonical ML Attribution")}
+        </div>
         <span className="font-mono text-[0.65rem] text-muted-foreground">
-          Logistic Regression v2
+          {t("risk_bits.canonical_ml_model", "Logistic Regression v2")}
         </span>
       </div>
 
       {topCategories.length > 0 && (
         <div className="mt-3 space-y-2">
           <div className="font-mono text-[0.7rem] uppercase tracking-wider text-muted-foreground">
-            Risk Categories Contribution
+            {t("risk_bits.risk_categories_contrib", "Risk Categories Contribution")}
           </div>
           <div className="grid gap-1.5">
             {topCategories.map((c) => {
@@ -286,7 +321,7 @@ export function MLAttributionCard({
       {topFeatures.length > 0 && (
         <div className="mt-4 space-y-1.5 border-t border-border/50 pt-3">
           <div className="font-mono text-[0.7rem] uppercase tracking-wider text-muted-foreground">
-            Dominant Trigger Features
+            {t("risk_bits.dominant_trigger_features", "Dominant Trigger Features")}
           </div>
           <div className="space-y-1">
             {topFeatures.slice(0, 4).map((f) => (

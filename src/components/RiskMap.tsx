@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip, useMap } from 
 import { useEffect, useState } from "react";
 import type { ZoneRow, SlideRow } from "@/lib/monitoring.functions";
 import { riskColor, zonePolygon } from "@/lib/risk";
+import { useTranslation } from "react-i18next";
 
 function MapResizeHandler() {
   const map = useMap();
@@ -46,6 +47,7 @@ export default function RiskMap({
   center = [25.6, 92.8],
   zoom = 7,
 }: Props) {
+  const { t } = useTranslation();
   const [satelliteStatus, setSatelliteStatus] = useState<{
     enabled: boolean;
     configured: boolean;
@@ -71,13 +73,13 @@ export default function RiskMap({
         <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 rounded border border-border/80 bg-background/90 p-2.5 shadow-lg backdrop-blur text-xs font-mono">
           <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 mb-1">
             <span className="font-semibold text-primary uppercase text-[0.68rem] tracking-wider">
-              🛰 Sentinel-2 Visuals
+              {t("risk_map.sentinel_visuals", "🛰 Sentinel-2 Visuals")}
             </span>
             <span
               className="text-[0.65rem] text-muted-foreground cursor-help"
-              title="Supplementary visual context only — not automated landslide scar detection or hazard prediction."
+              title={t("risk_map.visual_only_title", "Supplementary visual context only — not automated landslide scar detection or hazard prediction.")}
             >
-              ℹ Visual Only
+              {t("risk_map.visual_only", "ℹ Visual Only")}
             </span>
           </div>
           <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -87,7 +89,7 @@ export default function RiskMap({
               onChange={(e) => setShowTrueColor(e.target.checked)}
               className="rounded border-border text-primary"
             />
-            <span className="text-[0.72rem]">True-Color Imagery</span>
+            <span className="text-[0.72rem]">{t("risk_map.true_color", "True-Color Imagery")}</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
@@ -96,10 +98,10 @@ export default function RiskMap({
               onChange={(e) => setShowNdvi(e.target.checked)}
               className="rounded border-border text-primary"
             />
-            <span className="text-[0.72rem]">NDVI Vegetation Index</span>
+            <span className="text-[0.72rem]">{t("risk_map.ndvi_vegetation", "NDVI Vegetation Index")}</span>
           </label>
           <div className="text-[0.62rem] text-muted-foreground/80 pt-0.5 border-t border-border/30">
-            Copernicus Sentinel data 2026
+            {t("risk_map.sentinel_attribution", "Copernicus Sentinel data 2026")}
           </div>
         </div>
       )}
@@ -152,7 +154,7 @@ export default function RiskMap({
           >
             <Tooltip direction="top" opacity={1}>
               <span className="font-mono text-xs">
-                {z.zone_name} — {z.current_risk_level} ({z.risk_score})
+                {z.zone_name} — {t(`risk_levels.${z.current_risk_level}`, z.current_risk_level)} ({z.risk_score})
               </span>
             </Tooltip>
           </Polygon>
@@ -167,7 +169,7 @@ export default function RiskMap({
         >
           <Tooltip direction="top">
             <span className="font-mono text-xs">
-              {s.severity} slide · {s.event_date}
+              {t("risk_map.slide_tooltip", "{{severity}} slide · {{date}}", { severity: s.severity, date: s.event_date })}
             </span>
           </Tooltip>
         </CircleMarker>

@@ -15,8 +15,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
 import { getUserAuthorizationState } from "@/lib/auth-domains";
+import { useTranslation } from "react-i18next";
 
 export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
@@ -161,19 +163,19 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
             <span
               className={`h-2 w-2 rounded-full ${user ? "bg-primary" : "bg-muted-foreground/60"}`}
             />
-            <span>{user ? user.email?.split("@")[0] : "Sign in"}</span>
+            <span>{user ? user.email?.split("@")[0] : t("auth.sign_in", "Sign in")}</span>
           </button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[440px] bg-surface text-foreground border-border">
         <DialogHeader>
           <DialogTitle className="text-xl font-display uppercase tracking-wide">
-            {user ? "Disaster Console Operator Profile" : "Console Authentication"}
+            {user ? t("auth.operator_profile", "Disaster Console Operator Profile") : t("auth.console_auth", "Console Authentication")}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
             {user
-              ? "Your session grants authenticated access according to your verified official role."
-              : "Sign in with government institutional credentials or authenticate as an observer."}
+              ? t("auth.session_grant_desc", "Your session grants authenticated access according to your verified official role.")
+              : t("auth.sign_in_desc", "Sign in with government institutional credentials or authenticate as an observer.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -193,11 +195,11 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
           <div className="space-y-4 pt-2">
             <div className="rounded border border-border bg-secondary/30 p-3 font-mono text-xs space-y-2">
               <div className="flex justify-between items-start gap-2">
-                <span className="text-muted-foreground">Operator:</span>
+                <span className="text-muted-foreground">{t("auth.operator", "Operator:")}</span>
                 <span className="font-semibold text-foreground text-right break-all">{user.email}</span>
               </div>
               <div className="flex justify-between items-center gap-2">
-                <span className="text-muted-foreground">Authorization State:</span>
+                <span className="text-muted-foreground">{t("auth.auth_state", "Authorization State:")}</span>
                 <span
                   className={`rounded px-2 py-0.5 text-[0.7rem] font-bold uppercase tracking-wider ${
                     authState.tone === "primary"
@@ -213,15 +215,15 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Role:</span>
+                <span className="text-muted-foreground">{t("auth.role", "Role:")}</span>
                 <span className="uppercase font-semibold text-foreground">{authState.role}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Status:</span>
+                <span className="text-muted-foreground">{t("auth.status", "Status:")}</span>
                 <span className="text-[0.7rem] text-muted-foreground">{authState.status}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">User ID:</span>
+                <span className="text-muted-foreground">{t("auth.user_id", "User ID:")}</span>
                 <span className="text-[0.68rem] text-muted-foreground truncate max-w-[180px]">
                   {user.id}
                 </span>
@@ -236,7 +238,7 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
                 disabled={loading}
                 className="w-full font-mono text-xs uppercase"
               >
-                {loading ? "Signing out…" : "Sign Out"}
+                {loading ? t("auth.signing_out", "Signing out…") : t("auth.sign_out", "Sign Out")}
               </Button>
             </DialogFooter>
           </div>
@@ -270,17 +272,17 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                   />
                 </svg>
-                <span>Sign in with Google</span>
+                <span>{t("auth.sign_in_google", "Sign in with Google")}</span>
               </Button>
               <p className="text-[0.68rem] text-muted-foreground text-center font-mono leading-tight">
-                Google login authenticates standard observer accounts. Official disaster authorities must verify institutional credentials.
+                {t("auth.google_disclaimer", "Google login authenticates standard observer accounts. Official disaster authorities must verify institutional credentials.")}
               </p>
             </div>
 
             <div className="relative flex items-center justify-center">
               <div className="w-full border-t border-border"></div>
               <span className="relative bg-surface px-2 text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground">
-                Or Official Credentials
+                {t("auth.or_credentials", "Or Official Credentials")}
               </span>
             </div>
 
@@ -290,12 +292,12 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
                   htmlFor="emailInput"
                   className="text-xs font-mono uppercase text-muted-foreground"
                 >
-                  Official Institutional Email
+                  {t("auth.institutional_email", "Official Institutional Email")}
                 </Label>
                 <Input
                   id="emailInput"
                   type="email"
-                  placeholder="officer@gsi.gov.in / ddma@assam.gov.in"
+                  placeholder={t("auth.email_placeholder", "officer@gsi.gov.in / ddma@assam.gov.in")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -308,7 +310,7 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
                   htmlFor="passwordInput"
                   className="text-xs font-mono uppercase text-muted-foreground"
                 >
-                  Password
+                  {t("auth.password", "Password")}
                 </Label>
                 <Input
                   id="passwordInput"
@@ -324,12 +326,10 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
               {/* Institutional Domain Guidance */}
               <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[0.7rem] font-mono text-muted-foreground space-y-1">
                 <div className="font-semibold text-primary uppercase tracking-wide">
-                  Official Verification Notice
+                  {t("auth.verification_notice_title", "Official Verification Notice")}
                 </div>
                 <p>
-                  Institutional emails (@gsi.gov.in, @nesac.gov.in, @ndma.gov.in, @nic.in, @*.gov.in)
-                  are eligible for official verification. Google and public logins default to PUBLIC_USER.
-                  Emergency dispatch requires verified DISPATCHER authorization.
+                  {t("auth.verification_notice_desc", "Institutional emails (@gsi.gov.in, @nesac.gov.in, @ndma.gov.in, @nic.in, @*.gov.in) are eligible for official verification. Google and public logins default to PUBLIC_USER. Emergency dispatch requires verified DISPATCHER authorization.")}
                 </p>
               </div>
 
@@ -340,7 +340,7 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
                   disabled={loading}
                   className="w-full font-mono text-xs uppercase tracking-wider"
                 >
-                  {loading ? "Authenticating…" : "Sign In with Credentials"}
+                  {loading ? t("auth.authenticating", "Authenticating…") : t("auth.sign_in_button", "Sign In with Credentials")}
                 </Button>
               </DialogFooter>
             </form>

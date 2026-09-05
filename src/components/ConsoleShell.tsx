@@ -69,11 +69,12 @@ export function PanelSkeleton({ label = "Loading zone data…" }: { label?: stri
 }
 
 export function RouteError({ error, reset }: { error: Error; reset?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-xl px-4 py-20 text-center lg:px-8">
-      <div className="label-caps text-risk-severe">Data feed error</div>
+      <div className="label-caps text-risk-severe">{t("console.feed_error", "Data feed error")}</div>
       <h1 className="mt-2 text-2xl font-semibold uppercase tracking-wide">
-        Monitoring data could not be loaded
+        {t("console.monitoring_unavailable", "Monitoring data could not be loaded")}
       </h1>
       <p className="mt-2 font-mono text-xs text-muted-foreground">{error.message}</p>
       <div className="mt-6 flex justify-center gap-2">
@@ -82,14 +83,14 @@ export function RouteError({ error, reset }: { error: Error; reset?: () => void 
             onClick={reset}
             className="rounded border border-primary/50 bg-primary/15 px-4 py-2 font-mono text-xs uppercase tracking-wider text-primary"
           >
-            Retry
+            {t("console.retry", "Retry")}
           </button>
         )}
         <Link
           to="/"
           className="rounded border border-border px-4 py-2 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:bg-secondary"
         >
-          Back to console
+          {t("console.back_to_console", "Back to console")}
         </Link>
       </div>
     </div>
