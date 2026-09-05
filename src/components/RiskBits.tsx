@@ -166,9 +166,9 @@ export function ExplanationCard({
   const { t } = useTranslation();
   if (!explanation) return null;
   return (
-    <div className="rounded-lg border border-primary/35 bg-primary/5 p-4">
-      <div className="label-caps text-primary">{title || t("risk_bits.why_this_fired", "Why this fired")}</div>
-      <p className="mt-2 font-mono text-[0.8rem] leading-relaxed text-foreground/90">
+    <div className="rounded border border-border bg-surface-raised p-4">
+      <div className="label-caps">{title || t("risk_bits.why_this_fired", "Why this fired")}</div>
+      <p className="mt-2 text-xs leading-relaxed text-foreground/90">
         {explanation}
       </p>
     </div>
@@ -233,13 +233,12 @@ export function ScientificLimitationBadge() {
   const { t } = useTranslation();
   return (
     <div
-      className="inline-flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 font-mono text-[0.68rem] text-amber-300"
+      className="inline-flex items-center gap-1.5 rounded border border-border bg-secondary/40 px-2 py-0.5 font-sans text-[0.68rem] text-muted-foreground"
       title={t(
         "risk_bits.scientific_boundary_title",
         "Limited verified positive landslide training samples (N=8 events, 2016-2024). Operational decisions should be coupled with ground-truth inspections.",
       )}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
       <span>
         {t("risk_bits.scientific_boundary_text", "Scientific boundary: N=8 real landslide events (PR-AUC: 0.5934)")}
       </span>
@@ -267,7 +266,7 @@ export function MLAttributionCard({
   if (!topCategories.length && !topFeatures.length) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <div className="rounded border border-border bg-surface p-4">
       <div className="flex items-center justify-between border-b border-border/70 pb-2">
         <div className="label-caps text-primary">
           {t("risk_bits.canonical_ml_title", "Canonical ML Attribution")}

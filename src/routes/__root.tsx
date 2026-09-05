@@ -84,17 +84,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "NER Landslide Risk Console" },
+      { title: "LandAlert-Nexus — Landslide Early Warning System" },
       {
         name: "description",
         content:
-          "AI-based early warning and landslide risk monitoring for the North Eastern Region of India.",
+          "Landslide Early Warning System for the North Eastern Region of India (SIH26001). Real-time risk assessment, field observations, and decision support for district administrations.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "theme-color", content: "#0c0f14" },
+      { name: "theme-color", content: "#1e3a5f" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
     ],
     links: [
       { rel: "manifest", href: "/manifest.json" },
@@ -122,9 +122,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang={i18n.language || "en"}>
+    <html lang={i18n.language || "en"} suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('landalert_theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body suppressHydrationWarning>
         {children}

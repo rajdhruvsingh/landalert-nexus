@@ -179,7 +179,7 @@ function AlertsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="label-caps">{t("alerts.console_tag")}</div>
-          <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">{t("alerts.console_title")}</h1>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-foreground">{t("alerts.console_title")}</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             {t("alerts.console_desc")}
           </p>
@@ -405,12 +405,12 @@ function AlertsPage() {
                 </div>
                 <div className="flex items-center gap-2 font-mono text-[0.7rem] text-muted-foreground">
                   <span
-                    className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[0.65rem] uppercase ${
+                    className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[0.65rem] ${
                       isRetracted
-                        ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                        ? "border-border bg-secondary/40 text-muted-foreground"
                         : isDelivered
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                          : "border-blue-500/40 bg-blue-500/10 text-blue-400"
+                          ? "border-risk-low/40 bg-risk-low/10 text-risk-low"
+                          : "border-border bg-secondary/30 text-muted-foreground"
                     }`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -438,9 +438,9 @@ function AlertsPage() {
               </div>
 
               {isRetracted && (
-                <div className="mt-2.5 rounded border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs font-mono text-amber-300">
+                <div className="mt-2.5 rounded border border-border bg-secondary/20 p-2.5 text-xs text-muted-foreground">
                   <div className="font-semibold">
-                    ⚠ {t("alerts.retracted_badge")}: {(a as any).retraction_reason}
+                    Retracted: {(a as any).retraction_reason}
                   </div>
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
                     {t("alerts.retracted_by")}: {(a as any).retracted_by} · {t("alerts.retracted_at")}: {new Date((a as any).retracted_at).toLocaleString()}
@@ -453,13 +453,13 @@ function AlertsPage() {
                   <div className="label-caps">
                     {t("alerts.sms_preview")} ({TEMPLATES[lang]!.label})
                   </div>
-                  <p className="mt-2 text-sm leading-relaxed text-foreground/95">
+                  <p className="mt-2 text-xs leading-relaxed text-foreground/95">
                     {TEMPLATES[lang]!.render(zoneName, a.risk_level)}
                   </p>
                 </div>
-                <div className="rounded border border-primary/35 bg-primary/5 p-3">
-                  <div className="label-caps text-primary">{t("alerts.hydrological_reasoning")}</div>
-                  <p className="mt-2 font-mono text-[0.75rem] leading-relaxed text-foreground/90">
+                <div className="rounded border border-border bg-surface-raised p-3">
+                  <div className="label-caps">{t("alerts.hydrological_reasoning")}</div>
+                  <p className="mt-2 text-xs leading-relaxed text-foreground/90">
                     {a.explanation}
                   </p>
                 </div>

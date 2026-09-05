@@ -1,50 +1,236 @@
-import { Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { Link, useRouter } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { FieldObservationDialog } from "./FieldObservationDialog";
+import { IndiaEmblem } from "./IndiaEmblem";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { ThemeSwitcher } from "./ThemeSwitcher";
+import { AccessibilityDialog } from "./AccessibilityDialog";
+import { AboutDialog } from "./AboutDialog";
+import { ReportsDialog } from "./ReportsDialog";
 import { SystemHealthDialog } from "./SystemHealthDialog";
+import { FieldObservationDialog } from "./FieldObservationDialog";
 import { AuthDialog } from "./AuthDialog";
 import { OfflineBanner } from "./OfflineBanner";
-import { LanguageSwitcher } from "./LanguageSwitcher";
-import "@/lib/i18n"; // initialize i18n
+import { Search, ChevronDown, UserCheck, Shield } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { getUserAuthorizationState } from "@/lib/auth-domains";
+import type { User } from "@supabase/supabase-js";
+import "@/lib/i18n";
 
 export function ConsoleNav() {
   const { t } = useTranslation();
+  const [user, setUser] = useState<User | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const authState = getUserAuthorizationState(user);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (typeof window !== "undefined") {
+      const q = searchQuery.trim().toLowerCase();
+      window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q } }));
+    }
+  };
 
   return (
-    <>
-      <nav className="sticky top-0 z-[1000] border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 lg:px-8">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-risk-severe" />
-            <span className="font-display text-sm uppercase tracking-[0.2em]">
-              {t("nav.title", "NER Landslide Console")}
-            </span>
-          </Link>
+    <header className="sticky top-0 z-[1000] w-full bg-surface shadow-xs">
+      {/* Upper Government Branding & Utility Bar */}
+      <div className="border-b border-border bg-surface">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:py-2.5 lg:px-8">
+          {/* Government Identity Area */}
+          <div className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <IndiaEmblem className="h-9 w-9 text-foreground shrink-0" />
+              <div className="flex flex-col text-left leading-tight font-sans">
+                <span className="text-[0.62rem] sm:text-[0.68rem] font-bold text-foreground uppercase tracking-wider">
+                  {t("header.gov_india", "Government of India")}
+                </span>
+                <span className="text-[0.60rem] sm:text-[0.65rem] text-muted-foreground">
+                  {t("header.ministry", "Ministry of Earth Sciences")}
+                </span>
+                <span className="text-[0.60rem] sm:text-[0.65rem] text-muted-foreground">
+                  {t("header.gsi", "Geological Survey of India")}
+                </span>
+              </div>
+            </Link>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 border-r border-border pr-2 mr-1">
-              <NavLink to="/" label={t("nav.risk_console", "Risk console")} />
-              <NavLink to="/alerts" label={t("nav.alert_log", "Alert log")} />
+            <div className="hidden sm:block h-8 w-px bg-border mx-1" aria-hidden="true" />
+
+            <Link to="/" className="hidden sm:flex flex-col text-left leading-tight">
+              <span className="font-display text-lg sm:text-xl font-bold tracking-tight text-foreground">
+                {t("header.app_title", "LandAlert-Nexus")}
+              </span>
+              <span className="text-[0.65rem] sm:text-[0.7rem] text-muted-foreground font-sans">
+                {t("header.app_subtitle", "Landslide Early Warning System for North Eastern Region")}
+              </span>
+            </Link>
+          </div>
+
+          {/* Right Utility Navigation */}
+          <div className="flex items-center gap-2 sm:gap-3 text-xs">
+            {/* System Health / Help */}
+            <SystemHealthDialog
+              trigger={
+                <button
+                  type="button"
+                  className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 rounded transition-colors"
+                >
+                  {t("header.help", "Help")}
+                </button>
+              }
+            />
+
+            {/* Accessibility Dialog */}
+            <AccessibilityDialog
+              trigger={
+                <button
+                  type="button"
+                  className="hidden md:inline-block px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 rounded transition-colors"
+                >
+                  {t("header.accessibility", "Accessibility")}
+                </button>
+              }
+            />
+
+            {/* Language Switcher */}
+            <div className="border-l border-border pl-2 sm:pl-3">
+              <LanguageSwitcher />
             </div>
 
-            <LanguageSwitcher />
-            <FieldObservationDialog />
-            <SystemHealthDialog />
-            <AuthDialog />
+            {/* Theme Switcher */}
+            <div className="border-l border-border pl-2 sm:pl-3">
+              <ThemeSwitcher />
+            </div>
+
+            {/* Operator / User Profile Badge */}
+            <div className="border-l border-border pl-2 sm:pl-3">
+              {user ? (
+                <AuthDialog
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label={t("header.profile", "Operator Profile")}
+                      className="flex items-center gap-2 py-0.5 px-1.5 rounded hover:bg-secondary/60 transition-colors text-left"
+                    >
+                      <div className="h-7 w-7 rounded-full bg-slate-700 text-white dark:bg-slate-300 dark:text-slate-900 flex items-center justify-center font-display text-xs font-bold shrink-0">
+                        {user.email?.slice(0, 2).toUpperCase() || "OP"}
+                      </div>
+                      <div className="hidden lg:flex flex-col leading-tight">
+                        <span className="font-display text-xs font-semibold text-foreground">
+                          {user.email?.split("@")[0] || t("header.operator", "Operator")}
+                        </span>
+                        <span className="text-[0.62rem] text-muted-foreground flex items-center gap-0.5">
+                          <span>{authState.badge}</span>
+                          <ChevronDown className="h-2.5 w-2.5" />
+                        </span>
+                      </div>
+                    </button>
+                  }
+                />
+              ) : (
+                <AuthDialog
+                  trigger={
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded border border-border bg-secondary/40 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Shield className="h-3.5 w-3.5 text-primary" />
+                      <span>{t("header.sign_in", "Sign In")}</span>
+                    </button>
+                  }
+                />
+              )}
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Primary Horizontal Navigation Bar */}
+      <nav aria-label="Main Navigation" className="border-b border-border bg-surface">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 lg:px-8">
+          {/* Horizontal Links */}
+          <div className="flex items-center overflow-x-auto scrollbar-none gap-1 sm:gap-2 py-0 font-sans text-xs">
+            <NavLink to="/" label={t("nav.home", "Home")} exact />
+            <a
+              href="#risk-map"
+              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              {t("nav.risk_map", "Risk Map")}
+            </a>
+            <FieldObservationDialog
+              trigger={
+                <button
+                  type="button"
+                  className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+                >
+                  {t("nav.observations", "Observations")}
+                </button>
+              }
+            />
+            <NavLink to="/alerts" label={t("nav.alerts", "Alerts")} />
+            <a
+              href="#road-connectivity"
+              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              {t("nav.road_network", "Road Network")}
+            </a>
+            <ReportsDialog />
+            <a
+              href="/api/sync/package"
+              download
+              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              {t("nav.data", "Data")}
+            </a>
+            <AboutDialog />
+          </div>
+
+          {/* Search Box on Right */}
+          <form onSubmit={handleSearchSubmit} className="hidden md:flex items-center relative py-1.5">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("nav.search_placeholder", "Search location, district or keyword...")}
+              aria-label={t("nav.search_placeholder", "Search location, district or keyword...")}
+              className="h-8 w-56 lg:w-72 rounded border border-border bg-background px-3 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+            />
+            <button
+              type="submit"
+              aria-label="Search"
+              className="absolute right-2.5 text-muted-foreground hover:text-foreground"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </div>
       </nav>
+
       <OfflineBanner />
-    </>
+    </header>
   );
 }
 
-function NavLink({ to, label }: { to: "/" | "/alerts"; label: string }) {
+function NavLink({ to, label, exact = false }: { to: "/" | "/alerts"; label: string; exact?: boolean }) {
   return (
     <Link
       to={to}
-      activeOptions={{ exact: to === "/" }}
-      className="rounded px-3 py-1.5 font-display text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&.active]:bg-primary/15 [&.active]:text-primary"
+      activeOptions={{ exact }}
+      className="whitespace-nowrap relative px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&.active]:text-primary [&.active]:font-semibold [&.active]:after:content-[''] [&.active]:after:absolute [&.active]:after:bottom-0 [&.active]:after:left-0 [&.active]:after:right-0 [&.active]:after:h-[2.5px] [&.active]:after:bg-primary"
     >
       {label}
     </Link>
@@ -59,11 +245,11 @@ export function PanelSkeleton({ label = "Loading zone data…" }: { label?: stri
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-lg border border-border bg-secondary/40"
+            className="h-24 animate-pulse rounded border border-border bg-secondary/40"
           />
         ))}
       </div>
-      <div className="mt-4 h-[420px] animate-pulse rounded-lg border border-border bg-secondary/30" />
+      <div className="mt-4 h-[420px] animate-pulse rounded border border-border bg-secondary/30" />
     </div>
   );
 }
@@ -73,22 +259,22 @@ export function RouteError({ error, reset }: { error: Error; reset?: () => void 
   return (
     <div className="mx-auto max-w-xl px-4 py-20 text-center lg:px-8">
       <div className="label-caps text-risk-severe">{t("console.feed_error", "Data feed error")}</div>
-      <h1 className="mt-2 text-2xl font-semibold uppercase tracking-wide">
+      <h1 className="mt-2 font-display text-2xl font-bold text-foreground">
         {t("console.monitoring_unavailable", "Monitoring data could not be loaded")}
       </h1>
-      <p className="mt-2 font-mono text-xs text-muted-foreground">{error.message}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
       <div className="mt-6 flex justify-center gap-2">
         {reset && (
           <button
             onClick={reset}
-            className="rounded border border-primary/50 bg-primary/15 px-4 py-2 font-mono text-xs uppercase tracking-wider text-primary"
+            className="rounded border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
           >
             {t("console.retry", "Retry")}
           </button>
         )}
         <Link
           to="/"
-          className="rounded border border-border px-4 py-2 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:bg-secondary"
+          className="rounded border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors"
         >
           {t("console.back_to_console", "Back to console")}
         </Link>
