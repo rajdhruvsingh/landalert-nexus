@@ -5,18 +5,18 @@
     "alert_log": "Alert log",
     "report_field_reading": "Report Field Reading",
     "system_health": "System Health",
-    "sign_in": "Sign In",
+    "sign_in": "साइन इन",
     "account": "Account",
     "language": "Language",
-    "home": "Home",
-    "risk_map": "Risk Map",
-    "observations": "Observations",
-    "road_network": "Road Network",
-    "reports": "Reports",
+    "home": "होम",
+    "risk_map": "जोखिम मानचित्र",
+    "observations": "निरीक्षण",
+    "road_network": "सड़क नेटवर्क",
+    "reports": "रिपोर्ट",
     "data": "Data",
-    "about": "About",
-    "accessibility": "Accessibility",
-    "search_placeholder": "Search location, district or keyword..."
+    "about": "परिचय",
+    "accessibility": "सुलभता",
+    "search_placeholder": "स्थान, ज़िला या कीवर्ड खोजें..."
   },
   "dashboard": {
     "monitored_zones": "Monitored Zones",
@@ -42,17 +42,17 @@
     "no_alerts": "No alerts dispatched yet."
   },
   "risk_levels": {
-    "Low": "Low",
-    "Moderate": "Moderate",
-    "High": "High",
-    "Severe": "Severe",
-    "UNKNOWN": "Status Unknown"
+    "Low": "कम",
+    "Moderate": "मध्यम",
+    "High": "उच्च",
+    "Severe": "गंभीर",
+    "UNKNOWN": "अज्ञात"
   },
   "road_status": {
-    "open": "Passable / Open",
-    "restricted": "Restricted / Caution",
-    "blocked": "Blocked / Impassable",
-    "unknown": "Status Unknown"
+    "open": "खुला / सुगम",
+    "restricted": "सीमित / सावधानी",
+    "blocked": "अवरुद्ध",
+    "unknown": "अज्ञात"
   },
   "alerts": {
     "dispatch_alert": "Dispatch Alert",
@@ -266,7 +266,7 @@
     "unranked_desc": "Excluded from numerical ranking because risk severity is UNKNOWN due to telemetry outage. Requires ground assessment.",
     "decision_support": "Decision Support",
     "no_zones": "No prioritised zones available.",
-    "weights_summary": "40% Risk · 25% Pop · 20% Road · 15% Obs"
+    "weights_summary": "40% जोखिम · 25% आबादी · 20% सड़क · 15% निरीक्षण"
   },
   "root": {
     "not_found_title": "Page not found",
@@ -363,28 +363,28 @@
     "back_to_console": "Back to console"
   },
   "header": {
-    "gov_india": "Government of India",
-    "ministry": "Ministry of Earth Sciences",
-    "gsi": "Geological Survey of India",
-    "app_title": "LandAlert-Nexus",
-    "app_subtitle": "Landslide Early Warning System for North Eastern Region",
-    "help": "Help",
-    "accessibility": "Accessibility",
-    "operator": "Operator",
-    "sign_in": "Sign In",
-    "profile": "Operator Profile"
+    "gov_india": "भारत सरकार",
+    "ministry": "पृथ्वी विज्ञान मंत्रालय",
+    "gsi": "भारतीय भूवैज्ञानिक सर्वेक्षण",
+    "app_title": "लैंडअलर्ट-नेक्सस",
+    "app_subtitle": "उत्तर पूर्वी क्षेत्र भूस्खलन पूर्व चेतावनी प्रणाली",
+    "help": "सहायता",
+    "accessibility": "सुलभता",
+    "operator": "ऑपरेटर",
+    "sign_in": "साइन इन",
+    "profile": "ऑपरेटर प्रोफ़ाइल"
   },
   "hero": {
-    "region_tag": "NORTH EASTERN REGION",
-    "title": "Landslide Early Warning System",
-    "subtitle": "Real-time risk assessment, field observations and decision support for safer communities in North East India.",
-    "observe": "Observe",
-    "assess": "Assess",
-    "respond": "Respond",
-    "protect": "Protect",
-    "people": "PEOPLE",
-    "infrastructure": "INFRASTRUCTURE",
-    "communities": "COMMUNITIES"
+    "region_tag": "उत्तर पूर्वी क्षेत्र",
+    "title": "भूस्खलन पूर्व चेतावनी प्रणाली",
+    "subtitle": "उत्तर पूर्व भारत के पहाड़ी समुदायों की सुरक्षा हेतु वास्तविक समय जोखिम मूल्यांकन और निर्णय समर्थन।",
+    "observe": "निरीक्षण",
+    "assess": "मूल्यांकन",
+    "respond": "प्रतिक्रिया",
+    "protect": "सुरक्षा",
+    "people": "नागरिक",
+    "infrastructure": "बुनियादी ढांचा",
+    "communities": "समुदाय"
   },
   "overview": {
     "title": "Region Overview",
@@ -429,13 +429,13 @@
     "col_district_state": "District / State",
     "col_status": "Status",
     "col_type": "Type",
-    "alert_console_title": "Alert Console"
+    "alert_console_title": "अलर्ट कंसोल"
   },
   "theme": {
-    "system": "System",
-    "light": "Light",
-    "dark": "Dark",
-    "select_theme": "Select color theme"
+    "system": "सिस्टम",
+    "light": "लाइट",
+    "dark": "डार्क",
+    "select_theme": "रंग थीम चुनें"
   },
   "footer": {
     "terms": "Terms of Use",
@@ -475,8 +475,8 @@
     "road_corridor_desc": "Current status of 15 vulnerable corridors in Sikkim, Mizoram, Manipur & Meghalaya."
   },
   "common": {
-    "close": "Close",
-    "action": "Action"
+    "close": "बंद करें",
+    "action": "कार्रवाई"
   },
   "help": {
     "dialog_title": "Official Emergency Helplines & Assistance",

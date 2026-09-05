@@ -5,28 +5,42 @@ import type { ZoneRow, SlideRow } from "@/lib/monitoring.functions";
 import { riskColor, zonePolygon } from "@/lib/risk";
 import { useTranslation } from "react-i18next";
 
-function MapResizeHandler() {
+function MapResizeHandler({ selectedZone }: { selectedZone?: ZoneRow | null }) {
   const map = useMap();
   useEffect(() => {
     map.invalidateSize();
-    const timer = setTimeout(() => map.invalidateSize(), 200);
+    const t1 = setTimeout(() => map.invalidateSize(), 50);
+    const t2 = setTimeout(() => map.invalidateSize(), 250);
+    const t3 = setTimeout(() => map.invalidateSize(), 700);
     const container = map.getContainer();
-    const observer = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(() => {
-          map.invalidateSize();
-        })
-      : null;
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            map.invalidateSize();
+          })
+        : null;
     if (observer && container) {
       observer.observe(container);
     }
     const onResize = () => map.invalidateSize();
     window.addEventListener("resize", onResize);
     return () => {
-      clearTimeout(timer);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       if (observer) observer.disconnect();
       window.removeEventListener("resize", onResize);
     };
   }, [map]);
+
+  useEffect(() => {
+    if (selectedZone && selectedZone.centroid_lat && selectedZone.centroid_lng) {
+      map.flyTo([selectedZone.centroid_lat, selectedZone.centroid_lng], Math.max(map.getZoom(), 8), {
+        duration: 0.8,
+      });
+    }
+  }, [selectedZone, map]);
+
   return null;
 }
 
@@ -56,6 +70,8 @@ export default function RiskMap({
   const [showTrueColor, setShowTrueColor] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
 
+  const selectedZone = zones.find((z) => z.id === selectedId) ?? null;
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     fetch("/api/satellite/status")
@@ -67,7 +83,7 @@ export default function RiskMap({
   const hasSatellite = Boolean(satelliteStatus?.enabled && satelliteStatus?.configured);
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full min-h-[460px]">
       {/* Satellite Imagery Layer Controls (Gracefully hidden if not configured in environment) */}
       {hasSatellite && (
         <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 rounded border border-border/80 bg-background/90 p-2.5 shadow-lg backdrop-blur text-xs font-mono">
@@ -110,10 +126,10 @@ export default function RiskMap({
         center={center}
         zoom={zoom}
         scrollWheelZoom
-        className="isolate w-full h-full"
-        style={{ height: "100%", width: "100%", zIndex: 1 }}
+        className="isolate w-full h-full min-h-[460px]"
+        style={{ height: "100%", width: "100%", minHeight: "460px", zIndex: 1 }}
       >
-        <MapResizeHandler />
+        <MapResizeHandler selectedZone={selectedZone} />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

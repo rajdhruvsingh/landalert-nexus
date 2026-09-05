@@ -25,6 +25,8 @@ import {
 } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
+import { RoadNetworkDialog } from "@/components/RoadNetworkDialog";
+import { ObservationDetailsDialog } from "@/components/ObservationDetailsDialog";
 import { riskColor, RISK_LEVELS } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
 import { HimalayaSilhouette } from "@/components/HimalayaSilhouette";
@@ -79,10 +81,14 @@ function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
+  const [roadDialogOpen, setRoadDialogOpen] = useState(false);
+  const [obsDialogOpen, setObsDialogOpen] = useState(false);
+  const [selectedObsId, setSelectedObsId] = useState<number | string | null>(null);
+
   const recompute = useServerFn(recomputeAll);
   const ingest = useServerFn(ingestLiveRainfall);
 
-  // Listen to header search query events
+  // Listen to header search query and modal trigger events
   useEffect(() => {
     const handleSearch = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -90,17 +96,35 @@ function Dashboard() {
         setSearchQuery(detail.query);
       }
     };
+    const handleOpenRoads = () => setRoadDialogOpen(true);
+    const handleOpenObs = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.observationId) {
+        setSelectedObsId(detail.observationId);
+      } else {
+        setSelectedObsId(null);
+      }
+      setObsDialogOpen(true);
+    };
+
     window.addEventListener("landalert-filter", handleSearch);
-    return () => window.removeEventListener("landalert-filter", handleSearch);
+    window.addEventListener("landalert-open-roads", handleOpenRoads);
+    window.addEventListener("landalert-open-observations", handleOpenObs);
+
+    return () => {
+      window.removeEventListener("landalert-filter", handleSearch);
+      window.removeEventListener("landalert-open-roads", handleOpenRoads);
+      window.removeEventListener("landalert-open-observations", handleOpenObs);
+    };
   }, []);
 
-  const states = useMemo(
-    () => ["All", ...Array.from(new Set(data.zones.map((z) => z.state))).sort()],
+  const states: string[] = useMemo(
+    () => ["All", ...Array.from(new Set(data.zones.map((z: ZoneRow) => z.state))).sort()],
     [data.zones],
   );
 
   const filteredZones = useMemo(() => {
-    return data.zones.filter((z) => {
+    return data.zones.filter((z: ZoneRow) => {
       const matchesState = stateFilter === "All" || z.state === stateFilter;
       const matchesQuery =
         !searchQuery ||
@@ -112,7 +136,7 @@ function Dashboard() {
   }, [data.zones, stateFilter, searchQuery]);
 
   const selected: ZoneRow | null =
-    data.zones.find((z) => z.id === selectedId) ?? filteredZones[0] ?? data.zones[0] ?? null;
+    data.zones.find((z: ZoneRow) => z.id === selectedId) ?? filteredZones[0] ?? data.zones[0] ?? null;
 
   const { data: selectedMl } = useQuery({
     queryKey: ["risk-prediction", selected?.id],
@@ -134,17 +158,17 @@ function Dashboard() {
 
   // Metrics for Region Overview
   const distinctDistricts = useMemo(
-    () => Array.from(new Set(data.zones.map((z) => z.district))),
+    () => Array.from(new Set(data.zones.map((z: ZoneRow) => z.district))),
     [data.zones],
   );
   const highOrSevereZones = useMemo(
-    () => data.zones.filter((z) => ["High", "Severe"].includes(z.current_risk_level)),
+    () => data.zones.filter((z: ZoneRow) => ["High", "Severe"].includes(z.current_risk_level)),
     [data.zones],
   );
 
   // Elevated risk states
   const elevatedStates = useMemo(() => {
-    const s = Array.from(new Set(highOrSevereZones.map((z) => z.state)));
+    const s = Array.from(new Set(highOrSevereZones.map((z: ZoneRow) => z.state)));
     return s.length > 0 ? s.join(" and ") : "Mizoram and Manipur";
   }, [highOrSevereZones]);
 
@@ -261,92 +285,245 @@ function Dashboard() {
           </div>
         )}
 
-        {/* Upper Dashboard Grid: Risk Map (60%) vs Region Overview + Quick Actions (40%) */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-6 items-stretch">
+        {/* Upper Dashboard Grid: Left (Risk Map) vs Right (Region Overview + Response Priority + Quick Actions + Regional Observations) */}
+        <section className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
           {/* LEFT: Landslide Risk Map */}
-          <div id="risk-map" className="panel overflow-hidden flex flex-col h-full">
-            {/* Card Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 bg-surface shrink-0">
-              <div>
-                <h2 className="text-base font-bold text-foreground font-display">
-                  {t("map_panel.title", "Landslide Risk Map")}
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  {t("map_panel.subtitle", "Real-time risk assessment across North Eastern Region")}
-                </p>
-              </div>
-
-              {/* State/Region Selector Dropdown */}
-              <div className="flex items-center gap-1.5">
-                <select
-                  aria-label="Filter by region or state"
-                  value={stateFilter}
-                  onChange={(e) => setStateFilter(e.target.value)}
-                  className="h-8 rounded border border-border bg-background px-2.5 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
-                >
-                  <option value="All">{t("map_panel.filter_region", "North East India")}</option>
-                  {states
-                    .filter((s) => s !== "All")
-                    .map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Map Container */}
-            <div
-              role="region"
-              aria-label="Interactive Landslide Hazard Map"
-              tabIndex={0}
-              className="w-full flex-1 min-h-[460px] relative isolate z-0 focus-visible:ring-1 focus-visible:ring-primary outline-none"
-            >
-              <MapCanvas
-                zones={filteredZones}
-                selectedId={selected?.id ?? null}
-                onSelect={(id) => {
-                  setSelectedId(id);
-                  setShowZoneDetails(true);
-                }}
-              />
-
-              {/* Floating Legend Top-Right */}
-              <div className="absolute top-3 right-3 z-[400] rounded border border-border bg-surface/95 px-3 py-2 shadow-xs backdrop-blur-xs text-xs font-sans pointer-events-none">
-                <div className="font-semibold text-[0.72rem] text-foreground mb-1.5 font-display">
-                  {t("map_panel.risk_level", "Risk level")}
+          <div className="space-y-4">
+            <div id="risk-map" className="panel overflow-hidden flex flex-col">
+              {/* Card Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 bg-surface shrink-0">
+                <div>
+                  <h2 className="text-base font-bold text-foreground font-display">
+                    {t("map_panel.title", "Landslide Risk Map")}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {t("map_panel.subtitle", "Real-time risk assessment across North Eastern Region")}
+                  </p>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
-                    <span className="text-[0.7rem] text-foreground">{t("risk_levels.Low", "Low")}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-                    <span className="text-[0.7rem] text-foreground">{t("risk_levels.Moderate", "Moderate")}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
-                    <span className="text-[0.7rem] text-foreground">{t("risk_levels.High", "High")}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
-                    <span className="text-[0.7rem] text-foreground">{t("risk_levels.Severe", "Severe")}</span>
-                  </div>
+
+                {/* State/Region Selector Dropdown */}
+                <div className="flex items-center gap-1.5">
+                  <select
+                    aria-label="Filter by region or state"
+                    value={stateFilter}
+                    onChange={(e) => setStateFilter(e.target.value)}
+                    className="h-8 rounded border border-border bg-background px-2.5 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
+                  >
+                    <option value="All">{t("map_panel.filter_region", "North East India")}</option>
+                    {states
+                      .filter((s: string) => s !== "All")
+                      .map((s: string) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Scale Indicator Bottom-Left */}
-              <div className="absolute bottom-3 left-3 z-[400] rounded border border-border bg-surface/90 px-2 py-0.5 text-[0.65rem] font-mono text-muted-foreground pointer-events-none">
-                {t("map_panel.scale_km", "100 km")}
+              {/* Map Container */}
+              <div
+                role="region"
+                aria-label="Interactive Landslide Hazard Map"
+                tabIndex={0}
+                className="w-full min-h-[460px] lg:min-h-[520px] relative isolate z-0 focus-visible:ring-1 focus-visible:ring-primary outline-none"
+              >
+                <MapCanvas
+                  zones={filteredZones}
+                  selectedId={selected?.id ?? null}
+                  onSelect={(id) => {
+                    setSelectedId(id);
+                    setShowZoneDetails(true);
+                  }}
+                />
+
+                {/* Floating Legend Top-Right */}
+                <div className="absolute top-3 right-3 z-[400] rounded border border-border bg-surface/95 px-3 py-2 shadow-xs backdrop-blur-xs text-xs font-sans pointer-events-none">
+                  <div className="font-semibold text-[0.72rem] text-foreground mb-1.5 font-display">
+                    {t("map_panel.risk_level", "Risk level")}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                      <span className="text-[0.7rem] text-foreground">{t("risk_levels.Low", "Low")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+                      <span className="text-[0.7rem] text-foreground">{t("risk_levels.Moderate", "Moderate")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
+                      <span className="text-[0.7rem] text-foreground">{t("risk_levels.High", "High")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
+                      <span className="text-[0.7rem] text-foreground">{t("risk_levels.Severe", "Severe")}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scale Indicator Bottom-Left */}
+                <div className="absolute bottom-3 left-3 z-[400] rounded border border-border bg-surface/90 px-2 py-0.5 text-[0.65rem] font-mono text-muted-foreground pointer-events-none">
+                  {t("map_panel.scale_km", "100 km")}
+                </div>
               </div>
             </div>
+
+            {/* Expandable Zone Operational Drawer & Scientific Decision Support */}
+            {selected && showZoneDetails && (
+              <div className="panel p-4 space-y-4 border-l-4 border-l-primary animate-in fade-in duration-200">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                  <div>
+                    <span className="label-caps">{t("dashboard.zone_overview", "Selected Zone Operational Brief")}</span>
+                    <h3 className="text-xl font-bold text-foreground font-display mt-0.5">
+                      {selected.zone_name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {selected.district} district · {selected.state} ·{" "}
+                      {selected.population.toLocaleString("en-IN")} residents ·{" "}
+                      {selected.mean_slope_deg}° mean slope
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <FreshnessBadge
+                        ageHours={selectedMl?.data_freshness?.weather_age_hours}
+                        status={selected.soil_moisture_status as any}
+                      />
+                      {selectedMl && (
+                        <span className="font-mono text-xs text-primary font-medium">
+                          ML Risk: {(selectedMl.probability !== null ? (selectedMl.probability * 100).toFixed(1) + "%" : "Unavailable")} ({selectedMl.risk_level})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <RiskBadge
+                      level={selectedMl?.risk_level ?? selected.current_risk_level}
+                      score={selectedMl?.risk_score ?? selected.risk_score}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowZoneDetails(false)}
+                      className="rounded border border-border p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2 space-y-3">
+                    <ExplanationCard explanation={selected.explanation} />
+
+                    {selectedMl?.factor_attribution && (
+                      <MLAttributionCard
+                        topCategories={selectedMl.factor_attribution.top_categories}
+                        topFeatures={selectedMl.factor_attribution.top_features}
+                      />
+                    )}
+
+                    {/* Weather Forecast Preview */}
+                    {selectedForecast && selectedForecast.forecastStatus === "AVAILABLE" && selectedForecast.forecastWindows && (
+                      <div className="rounded border border-border bg-secondary/20 p-3">
+                        <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                          <span className="label-caps">{t("weather_forecast.section_title", "Forward Rainfall Risk Projection")}</span>
+                          <span className="text-[0.65rem] text-muted-foreground italic">
+                            {t("weather_forecast.disclaimer", "Open-Meteo Short-Range Ingestion")}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 mt-2">
+                          <div className="rounded border border-border p-2 text-center bg-surface">
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">24 Hours</div>
+                            <div className="my-1 flex justify-center">
+                              <ForecastRiskBadge
+                                level={selectedForecast.forecastWindows["24h"].projectedRiskLevel}
+                                leadHours={24}
+                                trend={selectedForecast.forecastWindows["24h"].trend}
+                              />
+                            </div>
+                            <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["24h"].forecastRainfallMm.toFixed(1)} mm</div>
+                          </div>
+                          <div className="rounded border border-border p-2 text-center bg-surface">
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">48 Hours</div>
+                            <div className="my-1 flex justify-center">
+                              <ForecastRiskBadge
+                                level={selectedForecast.forecastWindows["48h"].projectedRiskLevel}
+                                leadHours={48}
+                                trend={selectedForecast.forecastWindows["48h"].trend}
+                              />
+                            </div>
+                            <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["48h"].forecastRainfallMm.toFixed(1)} mm</div>
+                          </div>
+                          <div className="rounded border border-border p-2 text-center bg-surface">
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">72 Hours</div>
+                            <div className="my-1 flex justify-center">
+                              <ForecastRiskBadge
+                                level={selectedForecast.forecastWindows["72h"].projectedRiskLevel}
+                                leadHours={72}
+                                trend={selectedForecast.forecastWindows["72h"].trend}
+                              />
+                            </div>
+                            <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["72h"].forecastRainfallMm.toFixed(1)} mm</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons & Links */}
+                  <div className="space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <Link
+                        to="/zones/$id"
+                        params={{ id: String(selected.id) }}
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded border border-primary bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-colors font-display uppercase tracking-wider"
+                      >
+                        <span>{t("dashboard.view_zone_brief", "View Detailed Zone Brief →")}</span>
+                      </Link>
+
+                      <FieldObservationDialog
+                        initialZoneId={selected.id}
+                        trigger={
+                          <button
+                            type="button"
+                            className="w-full rounded border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                          >
+                            + Report Observation for {selected.zone_name}
+                          </button>
+                        }
+                        onSuccess={() => qc.invalidateQueries()}
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={runIngest}
+                        disabled={busy}
+                        className="flex-1 text-[0.7rem] font-mono"
+                      >
+                        {t("dashboard.ingest_weather", "Ingest Weather")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={runRecompute}
+                        disabled={busy}
+                        className="flex-1 text-[0.7rem] font-mono"
+                      >
+                        {t("dashboard.recompute", "Recompute")}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* RIGHT: Region Overview + Quick Actions */}
-          <div className="flex flex-col gap-6 justify-between">
-            {/* Card 1: Region Overview */}
+          {/* RIGHT: Region Overview + Response Priority + Quick Actions + Regional Observations */}
+          <div className="space-y-4">
+            {/* 1. Region Overview */}
             <div className="panel p-4 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-border pb-2.5">
@@ -416,23 +593,103 @@ function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setShowZoneDetails(!showZoneDetails)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-900 dark:text-red-300 hover:underline shrink-0 font-sans"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-900 dark:text-red-300 hover:underline shrink-0 font-sans cursor-pointer"
                 >
                   <span>{t("overview.view_details", "View details →")}</span>
                 </button>
               </div>
             </div>
 
-            {/* Card 2: Quick Actions */}
+            {/* 2. Response Priority (Multi-factor Urgency Ranking) */}
+            <div className="panel p-4">
+              <div className="flex items-center justify-between border-b border-border pb-2.5">
+                <div>
+                  <h2 className="text-base font-bold text-foreground font-display">
+                    {t("response_prioritization.section_title", "Response Priority")}
+                  </h2>
+                  <p className="text-[0.68rem] text-muted-foreground">
+                    {t("response_prioritization.decision_support", "Multi-factor operational urgency ranking for decision support")}
+                  </p>
+                </div>
+                <span className="text-[0.65rem] font-mono text-muted-foreground">
+                  {t("response_prioritization.weights_summary", "40% Risk · 25% Pop · 20% Road · 15% Obs")}
+                </span>
+              </div>
+
+              <div className="mt-2.5 overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse font-sans">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/30 text-muted-foreground font-medium">
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("response_prioritization.rank", "Rank")}</th>
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("response_prioritization.zone", "Zone")}</th>
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("response_prioritization.score", "Score")}</th>
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("response_prioritization.road_cutoff", "Roads")}</th>
+                      <th className="py-2 px-2.5 text-right">{t("common.action", "Action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {(prioritizationData?.rankedZones ?? []).slice(0, 4).map((item) => (
+                      <tr key={item.zoneId} className="hover:bg-secondary/20 transition-colors">
+                        <td className="py-2.5 px-2.5 font-display font-bold text-foreground text-center">
+                          #{item.rank}
+                        </td>
+                        <td className="py-2.5 px-2.5">
+                          <span className="font-semibold text-foreground block font-display">
+                            {item.zoneName}
+                          </span>
+                          <span className="text-[0.65rem] text-muted-foreground">
+                            {item.district}, {item.state}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2.5 whitespace-nowrap">
+                          <PrioritizationScoreBadge score={item.priorityScore} />
+                        </td>
+                        <td className="py-2.5 px-2.5 whitespace-nowrap">
+                          <RoadBadge status={item.worstRoadStatus} />
+                        </td>
+                        <td className="py-2.5 px-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedId(item.zoneId);
+                              setShowZoneDetails(true);
+                              const el = document.getElementById("risk-map");
+                              if (el) el.scrollIntoView({ behavior: "smooth" });
+                            }}
+                            className="text-xs text-primary font-medium hover:underline cursor-pointer"
+                          >
+                            {t("road_network.view_zone", "View Zone →")}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {(!prioritizationData?.rankedZones || prioritizationData.rankedZones.length === 0) && (
+                      <tr>
+                        <td colSpan={5} className="py-4 text-center text-muted-foreground">
+                          {t("response_prioritization.no_zones", "No prioritised zones available.")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 3. Quick Actions */}
             <div className="panel p-4">
               <h2 className="text-base font-bold text-foreground font-display mb-3">
                 {t("quick_actions.title", "Quick Actions")}
               </h2>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3">
-                {/* 1. View Risk Map */}
+              <div className="grid grid-cols-2 gap-3">
                 <a
                   href="#risk-map"
+                  onClick={(e) => {
+                    const el = document.getElementById("risk-map");
+                    if (el) {
+                      e.preventDefault();
+                      el.scrollIntoView({ behavior: "smooth" });
+                    }
+                  }}
                   className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 group"
                 >
                   <MapIcon className="h-5 w-5 text-primary shrink-0" />
@@ -444,12 +701,11 @@ function Dashboard() {
                   </span>
                 </a>
 
-                {/* 2. Report Observation */}
                 <FieldObservationDialog
                   trigger={
                     <button
                       type="button"
-                      className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 text-left w-full group"
+                      className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 text-left w-full group cursor-pointer"
                     >
                       <FilePlus className="h-5 w-5 text-primary shrink-0" />
                       <span className="font-display font-bold text-xs text-foreground group-hover:text-primary transition-colors">
@@ -463,7 +719,6 @@ function Dashboard() {
                   onSuccess={() => qc.invalidateQueries()}
                 />
 
-                {/* 3. View Alerts */}
                 <Link
                   to="/alerts"
                   className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 group"
@@ -477,183 +732,181 @@ function Dashboard() {
                   </span>
                 </Link>
 
-                {/* 4. Check Roads */}
-                <a
-                  href="#road-connectivity"
-                  className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 group"
+                <button
+                  type="button"
+                  onClick={() => setRoadDialogOpen(true)}
+                  className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 text-left group cursor-pointer"
                 >
                   <RouteIcon className="h-5 w-5 text-primary shrink-0" />
                   <span className="font-display font-bold text-xs text-foreground group-hover:text-primary transition-colors">
-                    {t("quick_actions.check_roads", "Check Roads")}
+                    {t("quick_actions.check_roads", "Check Road Connections")}
                   </span>
                   <span className="text-[0.68rem] text-muted-foreground leading-tight">
                     {t("quick_actions.critical_links", "Critical and vulnerable links")}
                   </span>
-                </a>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. Regional Observations (with See Details) */}
+            <div id="recent-observations" className="panel p-4 flex flex-col">
+              <div className="flex items-center justify-between border-b border-border pb-2.5">
+                <h2 className="text-base font-bold text-foreground font-display">
+                  {t("operational_tables.recent_observations_title", "Regional Observations")}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedObsId(null);
+                    setObsDialogOpen(true);
+                  }}
+                  className="text-xs font-medium text-primary hover:underline font-sans cursor-pointer"
+                >
+                  {t("operational_tables.view_all_observations", "View all observations →")}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-left text-xs border-collapse font-sans">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/30 text-muted-foreground font-medium">
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_time", "Time (IST)")}</th>
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_location", "Location")}</th>
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_type", "Type")}</th>
+                      <th className="py-2 px-2.5 text-right">{t("common.action", "Action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {observationsList.map((obs: any) => {
+                      const z = data.zones.find((x: ZoneRow) => x.id === obs.zone_id);
+                      const loc = z ? `${z.zone_name}, ${z.state}` : `Zone ${obs.zone_id}`;
+                      const typeLabel =
+                        obs.visual_signs ||
+                        (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
+                      return (
+                        <tr key={obs.id} className="hover:bg-secondary/20 transition-colors">
+                          <td className="py-2.5 px-2.5 font-mono text-[0.7rem] whitespace-nowrap text-muted-foreground">
+                            {new Date(obs.observed_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                          </td>
+                          <td className="py-2.5 px-2.5 font-semibold text-foreground whitespace-nowrap">
+                            {loc}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-muted-foreground text-[0.72rem] truncate max-w-[120px]">
+                            {typeLabel}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedObsId(obs.id);
+                                setObsDialogOpen(true);
+                              }}
+                              className="text-xs text-primary font-bold hover:underline cursor-pointer"
+                            >
+                              {t("observations.see_details", "See Details →")}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {observationsList.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                          {t("observations.no_records", "No observations found matching the search filter.")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Expandable Zone Operational Drawer & Scientific Decision Support */}
-        {selected && showZoneDetails && (
-          <section className="panel p-4 space-y-4 border-l-4 border-l-primary animate-in fade-in duration-200">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
-              <div>
-                <span className="label-caps">{t("dashboard.zone_overview", "Selected Zone Operational Brief")}</span>
-                <h3 className="text-xl font-bold text-foreground font-display mt-0.5">
-                  {selected.zone_name}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {selected.district} district · {selected.state} ·{" "}
-                  {selected.population.toLocaleString("en-IN")} residents ·{" "}
-                  {selected.mean_slope_deg}° mean slope
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <FreshnessBadge
-                    ageHours={selectedMl?.data_freshness?.weather_age_hours}
-                    status={selected.soil_moisture_status as any}
-                  />
-                  {selectedMl && (
-                    <span className="font-mono text-xs text-primary font-medium">
-                      ML Risk: {(selectedMl.probability !== null ? (selectedMl.probability * 100).toFixed(1) + "%" : "Unavailable")} ({selectedMl.risk_level})
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <RiskBadge
-                  level={selectedMl?.risk_level ?? selected.current_risk_level}
-                  score={selectedMl?.risk_score ?? selected.risk_score}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowZoneDetails(false)}
-                  className="rounded border border-border p-1 text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2 space-y-3">
-                <ExplanationCard explanation={selected.explanation} />
-
-                {selectedMl?.factor_attribution && (
-                  <MLAttributionCard
-                    topCategories={selectedMl.factor_attribution.top_categories}
-                    topFeatures={selectedMl.factor_attribution.top_features}
-                  />
-                )}
-
-                {/* Weather Forecast Preview */}
-                {selectedForecast && selectedForecast.forecastStatus === "AVAILABLE" && selectedForecast.forecastWindows && (
-                  <div className="rounded border border-border bg-secondary/20 p-3">
-                    <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                      <span className="label-caps">{t("weather_forecast.section_title", "Forward Rainfall Risk Projection")}</span>
-                      <span className="text-[0.65rem] text-muted-foreground italic">
-                        {t("weather_forecast.disclaimer", "Open-Meteo Short-Range Ingestion")}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      <div className="rounded border border-border p-2 text-center bg-surface">
-                        <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">24 Hours</div>
-                        <div className="my-1 flex justify-center">
-                          <ForecastRiskBadge
-                            level={selectedForecast.forecastWindows["24h"].projectedRiskLevel}
-                            leadHours={24}
-                            trend={selectedForecast.forecastWindows["24h"].trend}
-                          />
-                        </div>
-                        <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["24h"].forecastRainfallMm.toFixed(1)} mm</div>
-                      </div>
-                      <div className="rounded border border-border p-2 text-center bg-surface">
-                        <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">48 Hours</div>
-                        <div className="my-1 flex justify-center">
-                          <ForecastRiskBadge
-                            level={selectedForecast.forecastWindows["48h"].projectedRiskLevel}
-                            leadHours={48}
-                            trend={selectedForecast.forecastWindows["48h"].trend}
-                          />
-                        </div>
-                        <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["48h"].forecastRainfallMm.toFixed(1)} mm</div>
-                      </div>
-                      <div className="rounded border border-border p-2 text-center bg-surface">
-                        <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">72 Hours</div>
-                        <div className="my-1 flex justify-center">
-                          <ForecastRiskBadge
-                            level={selectedForecast.forecastWindows["72h"].projectedRiskLevel}
-                            leadHours={72}
-                            trend={selectedForecast.forecastWindows["72h"].trend}
-                          />
-                        </div>
-                        <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["72h"].forecastRainfallMm.toFixed(1)} mm</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons & Links */}
-              <div className="space-y-3 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <Link
-                    to="/zones/$id"
-                    params={{ id: String(selected.id) }}
-                    className="w-full inline-flex items-center justify-center gap-1.5 rounded border border-primary bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-colors font-display uppercase tracking-wider"
-                  >
-                    <span>{t("dashboard.view_zone_brief", "View Detailed Zone Brief →")}</span>
-                  </Link>
-
-                  <FieldObservationDialog
-                    initialZoneId={selected.id}
-                    trigger={
-                      <button
-                        type="button"
-                        className="w-full rounded border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
-                      >
-                        + Report Observation for {selected.zone_name}
-                      </button>
-                    }
-                    onSuccess={() => qc.invalidateQueries()}
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={runIngest}
-                    disabled={busy}
-                    className="flex-1 text-[0.7rem] font-mono"
-                  >
-                    {t("dashboard.ingest_weather", "Ingest Weather")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={runRecompute}
-                    disabled={busy}
-                    className="flex-1 text-[0.7rem] font-mono"
-                  >
-                    {t("dashboard.recompute", "Recompute")}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* BOTTOM THREE-COLUMN SECTION: Latest Alerts (40%), Road Connectivity (30%), Recent Observations (30%) */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-6 items-stretch">
-          {/* COLUMN 1: Latest Alerts */}
-          <div className="panel flex flex-col h-full overflow-hidden">
+        {/* BOTTOM SECTION: Road Connectivity (50%) & Alert Console (50%) */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          {/* Left: Road Connectivity */}
+          <div id="road-connectivity" className="panel flex flex-col h-full overflow-hidden">
             <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface shrink-0">
-              <h2 className="text-base font-bold text-foreground font-display">
-                {t("operational_tables.latest_alerts_title", "Latest Alerts")}
-              </h2>
+              <div>
+                <h2 className="text-base font-bold text-foreground font-display">
+                  {t("operational_tables.road_connectivity_title", "Road Connectivity")}
+                </h2>
+                <p className="text-[0.68rem] text-muted-foreground">
+                  {t("road_network.arterial_subtitle", "Critical transport links and passability status")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoadDialogOpen(true)}
+                className="text-xs font-medium text-primary hover:underline font-sans cursor-pointer"
+              >
+                {t("operational_tables.view_all_roads", "See All Roads →")}
+              </button>
+            </div>
+
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left text-xs border-collapse font-sans">
+                <thead>
+                  <tr className="border-b border-border bg-secondary/30 text-muted-foreground font-medium">
+                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_road_link", "Road / Link")}</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_district_state", "District / State")}</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_status", "Status")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {[...data.roads]
+                    .sort((a, b) => (a.status === "blocked" ? -1 : a.status === "restricted" ? 0 : 1))
+                    .slice(0, 6)
+                    .map((r) => {
+                      const z = data.zones.find((x: ZoneRow) => x.id === r.zone_id);
+                      return (
+                        <tr key={r.id} className="hover:bg-secondary/20 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <span className="font-semibold text-foreground block whitespace-nowrap font-display">
+                              {r.road_name}
+                            </span>
+                            <span className="text-[0.68rem] text-muted-foreground block font-mono">
+                              {r.segment_label}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                            <span className="font-medium text-foreground block">
+                              {z ? z.district : r.segment_label}
+                            </span>
+                            <span className="text-[0.68rem] text-muted-foreground">
+                              {z ? z.state : ""}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <RoadBadge status={r.status} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {data.roads.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-6 text-center text-muted-foreground">
+                        {t("dashboard.no_roads", "No road segments mapped yet.")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right: Alert Console */}
+          <div id="alert-console" className="panel flex flex-col h-full overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface shrink-0">
+              <div>
+                <h2 className="text-base font-bold text-foreground font-display">
+                  {t("operational_tables.alert_console_title", "Alert Console")}
+                </h2>
+                <p className="text-[0.68rem] text-muted-foreground">
+                  {t("operational_tables.alert_console_subtitle", "Active emergency warnings and broadcast advisories")}
+                </p>
+              </div>
               <Link
                 to="/alerts"
                 className="text-xs font-medium text-primary hover:underline font-sans"
@@ -673,8 +926,8 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {data.alerts.slice(0, 5).map((a) => {
-                    const z = data.zones.find((x) => x.id === a.zone_id);
+                  {data.alerts.slice(0, 6).map((a: any) => {
+                    const z = data.zones.find((x: ZoneRow) => x.id === a.zone_id);
                     const location = z ? `${z.zone_name}, ${z.state}` : `Zone ${a.zone_id}`;
                     return (
                       <tr key={a.id} className="hover:bg-secondary/20 transition-colors">
@@ -683,19 +936,10 @@ function Dashboard() {
                           {new Date(a.dispatched_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}
                         </td>
                         <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded border font-display text-[0.65rem] font-semibold ${
-                              a.risk_level === "Severe"
-                                ? "bg-risk-severe/15 text-risk-severe border-risk-severe/40"
-                                : a.risk_level === "High"
-                                  ? "bg-risk-high/15 text-risk-high border-risk-high/40"
-                                  : a.risk_level === "Moderate"
-                                    ? "bg-risk-moderate/15 text-risk-moderate border-risk-moderate/40"
-                                    : "bg-risk-low/15 text-risk-low border-risk-low/40"
-                            }`}
-                          >
-                            {a.risk_level}
-                          </span>
+                          <RiskBadge
+                            level={a.risk_level}
+                            score={a.risk_level === "Severe" ? 90 : a.risk_level === "High" ? 70 : 45}
+                          />
                         </td>
                         <td className="py-2.5 px-3 font-semibold text-foreground whitespace-nowrap">
                           {location}
@@ -717,159 +961,36 @@ function Dashboard() {
               </table>
             </div>
           </div>
-
-          {/* COLUMN 2: Road Connectivity */}
-          <div id="road-connectivity" className="panel flex flex-col h-full overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface shrink-0">
-              <h2 className="text-base font-bold text-foreground font-display">
-                {t("operational_tables.road_connectivity_title", "Road Connectivity")}
-              </h2>
-              <a
-                href="#road-connectivity"
-                className="text-xs font-medium text-primary hover:underline font-sans"
-              >
-                {t("operational_tables.view_all_roads", "View all roads →")}
-              </a>
-            </div>
-
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left text-xs border-collapse font-sans">
-                <thead>
-                  <tr className="border-b border-border bg-secondary/30 text-muted-foreground font-medium">
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_road_link", "Road / Link")}</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_district_state", "District / State")}</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_status", "Status")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {[...data.roads]
-                    .sort((a, b) => (a.status === "blocked" ? -1 : 1))
-                    .slice(0, 5)
-                    .map((r) => {
-                      const z = data.zones.find((x) => x.id === r.zone_id);
-                      return (
-                        <tr key={r.id} className="hover:bg-secondary/20 transition-colors">
-                          <td className="py-2.5 px-3">
-                            <span className="font-semibold text-foreground block whitespace-nowrap">
-                              {r.road_name}
-                            </span>
-                            <span className="text-[0.68rem] text-muted-foreground block">
-                              {r.segment_label}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                            {z ? `${z.district}, ${z.state}` : r.segment_label}
-                          </td>
-                          <td className="py-2.5 px-3 whitespace-nowrap">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded border font-display text-[0.65rem] font-semibold ${
-                                r.status === "blocked"
-                                  ? "bg-risk-severe/15 text-risk-severe border-risk-severe/40"
-                                  : r.status === "restricted"
-                                    ? "bg-risk-moderate/15 text-risk-moderate border-risk-moderate/40"
-                                    : "bg-risk-low/15 text-risk-low border-risk-low/40"
-                              }`}
-                            >
-                              {r.status}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  {data.roads.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="py-6 text-center text-muted-foreground">
-                        {t("dashboard.no_roads", "No road segments mapped yet.")}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* COLUMN 3: Recent Observations */}
-          <div id="recent-observations" className="panel flex flex-col h-full overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface shrink-0">
-              <h2 className="text-base font-bold text-foreground font-display">
-                {t("operational_tables.recent_observations_title", "Recent Observations")}
-              </h2>
-              <FieldObservationDialog
-                trigger={
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-primary hover:underline font-sans"
-                  >
-                    {t("operational_tables.view_all_observations", "View all observations →")}
-                  </button>
-                }
-                onSuccess={() => qc.invalidateQueries()}
-              />
-            </div>
-
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left text-xs border-collapse font-sans">
-                <thead>
-                  <tr className="border-b border-border bg-secondary/30 text-muted-foreground font-medium">
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_time", "Time (IST)")}</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_location", "Location")}</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_type", "Type")}</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">{t("operational_tables.col_status", "Status")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {observationsList.map((obs: any) => {
-                    const z = data.zones.find((x) => x.id === obs.zone_id);
-                    const loc = z ? `${z.zone_name}, ${z.state}` : `Zone ${obs.zone_id}`;
-                    const typeLabel =
-                      obs.visual_signs ||
-                      (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
-                    const statusLabel =
-                      obs.status === "OFFICIAL_VERIFIED"
-                        ? "Verified"
-                        : obs.status === "REJECTED"
-                          ? "Rejected"
-                          : "Pending";
-                    return (
-                      <tr key={obs.id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2.5 px-3 font-mono text-[0.7rem] whitespace-nowrap text-muted-foreground">
-                          {new Date(obs.observed_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}{" "}
-                          {new Date(obs.observed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-foreground whitespace-nowrap">
-                          {loc}
-                        </td>
-                        <td className="py-2.5 px-3 text-muted-foreground text-[0.72rem] whitespace-nowrap">
-                          {typeLabel}
-                        </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded border font-display text-[0.65rem] font-semibold ${
-                              statusLabel === "Verified"
-                                ? "bg-risk-low/15 text-risk-low border-risk-low/40"
-                                : statusLabel === "Rejected"
-                                  ? "bg-secondary/50 text-muted-foreground border-border"
-                                  : "bg-risk-moderate/15 text-risk-moderate border-risk-moderate/40"
-                            }`}
-                          >
-                            {statusLabel}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {observationsList.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="py-6 text-center text-muted-foreground">
-                        No field observations reported yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </section>
+
+        {/* Dialogs */}
+        <RoadNetworkDialog
+          roads={data.roads}
+          zones={data.zones}
+          open={roadDialogOpen}
+          onOpenChange={setRoadDialogOpen}
+          onSelectZone={(zoneId) => {
+            setSelectedId(zoneId);
+            setShowZoneDetails(true);
+            const el = document.getElementById("risk-map");
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
+
+        <ObservationDetailsDialog
+          observations={(data as any).observations || []}
+          zones={data.zones}
+          selectedObservationId={selectedObsId}
+          open={obsDialogOpen}
+          onOpenChange={setObsDialogOpen}
+          onSelectZone={(zoneId) => {
+            setSelectedId(zoneId);
+            setShowZoneDetails(true);
+            const el = document.getElementById("risk-map");
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }}
+          onSuccess={() => qc.invalidateQueries()}
+        />
       </main>
 
       {/* Institutional Government Footer */}

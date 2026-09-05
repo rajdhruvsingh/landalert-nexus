@@ -7,7 +7,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 import { AccessibilityDialog } from "./AccessibilityDialog";
 import { AboutDialog } from "./AboutDialog";
 import { ReportsDialog } from "./ReportsDialog";
-import { SystemHealthDialog } from "./SystemHealthDialog";
+import { EmergencyHelpDialog } from "./EmergencyHelpDialog";
 import { FieldObservationDialog } from "./FieldObservationDialog";
 import { AuthDialog } from "./AuthDialog";
 import { OfflineBanner } from "./OfflineBanner";
@@ -82,8 +82,8 @@ export function ConsoleNav() {
 
           {/* Right Utility Navigation */}
           <div className="flex items-center gap-2 sm:gap-3 text-xs">
-            {/* System Health / Help */}
-            <SystemHealthDialog
+            {/* Emergency Help Interface */}
+            <EmergencyHelpDialog
               trigger={
                 <button
                   type="button"
@@ -167,35 +167,43 @@ export function ConsoleNav() {
             <NavLink to="/" label={t("nav.home", "Home")} exact />
             <a
               href="#risk-map"
+              onClick={(e) => {
+                const el = document.getElementById("risk-map");
+                if (el) {
+                  e.preventDefault();
+                  el.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
               className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
             >
               {t("nav.risk_map", "Risk Map")}
             </a>
-            <FieldObservationDialog
-              trigger={
-                <button
-                  type="button"
-                  className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
-                >
-                  {t("nav.observations", "Observations")}
-                </button>
-              }
-            />
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("landalert-open-observations"));
+                }
+              }}
+              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+            >
+              {t("nav.observations", "Observations")}
+            </button>
             <NavLink to="/alerts" label={t("nav.alerts", "Alerts")} />
-            <a
-              href="#road-connectivity"
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("landalert-open-roads"));
+                  const el = document.getElementById("road-connectivity");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
             >
               {t("nav.road_network", "Road Network")}
-            </a>
+            </button>
             <ReportsDialog />
-            <a
-              href="/api/sync/package"
-              download
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
-            >
-              {t("nav.data", "Data")}
-            </a>
             <AboutDialog />
           </div>
 

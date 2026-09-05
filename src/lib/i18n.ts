@@ -19,17 +19,29 @@ import en from "@/locales/en.json";
 import as from "@/locales/as.json";
 import bn from "@/locales/bn.json";
 import ne from "@/locales/ne.json";
+import hi from "@/locales/hi.json";
+import mni from "@/locales/mni.json";
+import lus from "@/locales/lus.json";
+import kha from "@/locales/kha.json";
+import grt from "@/locales/grt.json";
 
 export const SUPPORTED_LANGUAGES = [
   { code: "en", name: "English", nativeName: "English" },
-  { code: "as", name: "Assamese", nativeName: "অসমীয়া" },
+  { code: "hi", name: "Hindi", nativeName: "हिन्दी" },
   { code: "bn", name: "Bengali", nativeName: "বাংলা" },
+  { code: "as", name: "Assamese", nativeName: "অসমীয়া" },
   { code: "ne", name: "Nepali", nativeName: "नेपाली" },
+  { code: "mni", name: "Manipuri", nativeName: "মৈতৈলোন্" },
+  { code: "lus", name: "Mizo", nativeName: "Mizo ṭawng" },
+  { code: "kha", name: "Khasi", nativeName: "Khasi" },
+  { code: "grt", name: "Garo", nativeName: "A·chik" },
 ] as const;
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]["code"];
 
 const STORAGE_KEY = "landalert_ui_language";
+
+const VALID_CODES = new Set(SUPPORTED_LANGUAGES.map((l) => l.code));
 
 function getStorage(): Storage | null {
   if (typeof window !== "undefined" && window.localStorage) {
@@ -47,9 +59,9 @@ function getStorage(): Storage | null {
 function getInitialLanguage(): SupportedLanguage {
   const storage = getStorage();
   if (storage) {
-    const saved = storage.getItem(STORAGE_KEY);
-    if (saved && ["en", "as", "bn", "ne"].includes(saved)) {
-      return saved as SupportedLanguage;
+    const saved = storage.getItem(STORAGE_KEY) as SupportedLanguage | null;
+    if (saved && VALID_CODES.has(saved)) {
+      return saved;
     }
   }
   return "en";
@@ -59,9 +71,14 @@ if (!i18n.isInitialized) {
   i18n.use(initReactI18next).init({
     resources: {
       en: { translation: en },
+      hi: { translation: hi },
       as: { translation: as },
       bn: { translation: bn },
       ne: { translation: ne },
+      mni: { translation: mni },
+      lus: { translation: lus },
+      kha: { translation: kha },
+      grt: { translation: grt },
     },
     lng: getInitialLanguage(),
     fallbackLng: "en",
