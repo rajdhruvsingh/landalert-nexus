@@ -429,7 +429,8 @@
     "col_district_state": "District / State",
     "col_status": "Status",
     "col_type": "Type",
-    "alert_console_title": "Alert Console"
+    "alert_console_title": "Alert Console",
+    "alert_console_subtitle": "Active emergency warnings and broadcast advisories"
   },
   "theme": {
     "system": "System",
@@ -517,7 +518,8 @@
     "search_placeholder": "Filter by road, district, state...",
     "view_zone": "View Zone →",
     "no_results": "No road links match your search filter.",
-    "footer_info": "Showing {{count}} monitored arterial road segments"
+    "footer_info": "Showing {{count}} monitored arterial road segments",
+    "arterial_subtitle": "Critical transport links and passability status"
   },
   "observations": {
     "details_title": "Field Observation Report Details",

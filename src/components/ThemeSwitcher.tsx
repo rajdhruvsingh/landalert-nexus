@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getStoredTheme, setTheme, initThemeListener, type ThemeMode } from "@/lib/theme";
+import { getStoredTheme, setTheme, initThemeListener, applyTheme, type ThemeMode } from "@/lib/theme";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import { Sun, Moon, Monitor } from "lucide-react";
 
 export function ThemeSwitcher() {
@@ -16,7 +16,9 @@ export function ThemeSwitcher() {
 
   useEffect(() => {
     setMounted(true);
-    setCurrentTheme(getStoredTheme());
+    const stored = getStoredTheme();
+    setCurrentTheme(stored);
+    applyTheme(stored);
     const cleanup = initThemeListener();
     return cleanup;
   }, []);
@@ -28,60 +30,59 @@ export function ThemeSwitcher() {
 
   if (!mounted) {
     return (
-      <button
-        type="button"
-        aria-label="Theme selector"
-        className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground rounded transition-colors"
-      >
-        <Monitor className="h-3.5 w-3.5" />
-        <span className="capitalize">{t("theme.system", "System")}</span>
-      </button>
+      <div className="flex items-center gap-1">
+        <Monitor className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+        <div className="h-8 border border-border bg-secondary/30 rounded px-2.5 flex items-center text-xs text-muted-foreground">
+          {t("theme.system", "System")}
+        </div>
+      </div>
     );
   }
 
   const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
+    <div className="flex items-center gap-1">
+      <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+      <Select
+        value={theme}
+        onValueChange={(val) => {
+          if (val) handleSelect(val as ThemeMode);
+        }}
+      >
+        <SelectTrigger
           aria-label={t("theme.select_theme", "Select color theme")}
-          className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60 rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          className="h-8 border-border bg-secondary/30 font-sans text-xs px-2.5 min-w-[88px] flex items-center justify-between"
         >
-          <Icon className="h-3.5 w-3.5 text-primary" />
-          <span className="capitalize">
+          <span className="capitalize font-medium">
             {theme === "system"
               ? t("theme.system", "System")
               : theme === "light"
                 ? t("theme.light", "Light")
                 : t("theme.dark", "Dark")}
           </span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36 z-[150] bg-surface text-foreground border-border">
-        <DropdownMenuItem
-          onClick={() => handleSelect("system")}
-          className={`flex items-center gap-2 text-xs cursor-pointer ${theme === "system" ? "font-semibold text-primary" : ""}`}
-        >
-          <Monitor className="h-3.5 w-3.5" />
-          <span>{t("theme.system", "System")}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => handleSelect("light")}
-          className={`flex items-center gap-2 text-xs cursor-pointer ${theme === "light" ? "font-semibold text-primary" : ""}`}
-        >
-          <Sun className="h-3.5 w-3.5" />
-          <span>{t("theme.light", "Light")}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => handleSelect("dark")}
-          className={`flex items-center gap-2 text-xs cursor-pointer ${theme === "dark" ? "font-semibold text-primary" : ""}`}
-        >
-          <Moon className="h-3.5 w-3.5" />
-          <span>{t("theme.dark", "Dark")}</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </SelectTrigger>
+        <SelectContent className="border-border bg-surface z-[150]">
+          <SelectItem value="system" className="text-xs cursor-pointer">
+            <span className="flex items-center gap-2">
+              <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{t("theme.system", "System")}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="light" className="text-xs cursor-pointer">
+            <span className="flex items-center gap-2">
+              <Sun className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{t("theme.light", "Light")}</span>
+            </span>
+          </SelectItem>
+          <SelectItem value="dark" className="text-xs cursor-pointer">
+            <span className="flex items-center gap-2">
+              <Moon className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{t("theme.dark", "Dark")}</span>
+            </span>
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

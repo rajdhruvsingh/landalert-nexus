@@ -38,16 +38,27 @@ export function ConsoleNav() {
 
   const authState = getUserAuthorizationState(user);
 
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: val.trim().toLowerCase() } }));
+    }
+  };
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (typeof window !== "undefined") {
       const q = searchQuery.trim().toLowerCase();
       window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q } }));
+      const mapEl = document.getElementById("risk-map");
+      if (mapEl) {
+        mapEl.scrollIntoView({ behavior: "smooth" });
+      }
     }
   };
 
   return (
-    <header className="sticky top-0 z-[1000] w-full bg-surface shadow-xs">
+    <header className="sticky top-0 z-40 w-full bg-surface shadow-xs">
       {/* Upper Government Branding & Utility Bar */}
       <div className="border-b border-border bg-surface">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:py-2.5 lg:px-8">
@@ -212,10 +223,31 @@ export function ConsoleNav() {
             <input
               type="search"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder={t("nav.search_placeholder", "Search location, district or keyword...")}
               aria-label={t("nav.search_placeholder", "Search location, district or keyword...")}
               className="h-8 w-56 lg:w-72 rounded border border-border bg-background px-3 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+            />
+            <button
+              type="submit"
+              aria-label="Search"
+              className="absolute right-2.5 text-muted-foreground hover:text-foreground"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </div>
+
+        {/* Mobile Search Input */}
+        <div className="md:hidden border-t border-border px-4 py-2 bg-surface">
+          <form onSubmit={handleSearchSubmit} className="flex items-center relative w-full">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder={t("nav.search_placeholder", "Search location, district or keyword...")}
+              aria-label={t("nav.search_placeholder", "Search location, district or keyword...")}
+              className="h-8 w-full rounded border border-border bg-background px-3 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
             />
             <button
               type="submit"

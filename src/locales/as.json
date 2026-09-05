@@ -429,7 +429,8 @@
     "col_district_state": "জিলা / ৰাজ্য",
     "col_status": "স্থিতি",
     "col_type": "প্ৰকাৰ",
-    "alert_console_title": "সতৰ্কবাৰ্তা কনচোল"
+    "alert_console_title": "সতৰ্কবাৰ্তা কনচোল",
+    "alert_console_subtitle": "সক্ৰিয় জৰুৰীকালীন সতৰ্কবাণী আৰু সম্প্ৰচাৰ পৰামৰ্শ"
   },
   "theme": {
     "system": "চিষ্টেম",
@@ -517,7 +518,8 @@
     "search_placeholder": "পথ, জিলা, ৰাজ্য সন্ধান কৰক...",
     "view_zone": "অঞ্চল চাওক →",
     "no_results": "কোনো পথ পোৱা নগ’ল।",
-    "footer_info": "{{count}}টা নিৰীক্ষিত পথ খণ্ড দেখুওৱা হৈছে"
+    "footer_info": "{{count}}টা নিৰীক্ষিত পথ খণ্ড দেখুওৱা হৈছে",
+    "arterial_subtitle": "গুৰুত্বপূৰ্ণ পৰিবহণ সংযোগ আৰু যাতায়াতৰ অৱস্থা"
   },
   "observations": {
     "details_title": "ক্ষেত্ৰ পৰ্যবেক্ষণ প্ৰতিবেদনৰ বিৱৰণ",

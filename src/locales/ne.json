@@ -429,7 +429,8 @@
     "col_district_state": "जिल्ला / राज्य",
     "col_status": "स्थिति",
     "col_type": "प्रकार",
-    "alert_console_title": "चेतावनी कन्सोल"
+    "alert_console_title": "चेतावनी कन्सोल",
+    "alert_console_subtitle": "सक्रिय आपतकालीन चेतावनी र प्रसारण सल्लाह"
   },
   "theme": {
     "system": "प्रणाली",
@@ -517,7 +518,8 @@
     "search_placeholder": "सडक वा जिल्ला खोज्नुहोस्...",
     "view_zone": "क्षेत्र हेर्नुहोस् →",
     "no_results": "कुनै सडक फेला परेन।",
-    "footer_info": "{{count}} सडक खण्डहरू देखाइँदै"
+    "footer_info": "{{count}} सडक खण्डहरू देखाइँदै",
+    "arterial_subtitle": "महत्वपूर्ण यातायात सम्पर्क र पारगम्यता अवस्था"
   },
   "observations": {
     "details_title": "फिल्ड निरीक्षण प्रतिवेदन विवरण",

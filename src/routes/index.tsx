@@ -124,16 +124,32 @@ function Dashboard() {
   );
 
   const filteredZones = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q && stateFilter === "All") return data.zones;
+
+    const matchingRoadZoneIds = new Set(
+      q
+        ? data.roads
+            .filter(
+              (r) =>
+                r.road_name.toLowerCase().includes(q) ||
+                r.segment_label.toLowerCase().includes(q),
+            )
+            .map((r) => r.zone_id)
+        : [],
+    );
+
     return data.zones.filter((z: ZoneRow) => {
       const matchesState = stateFilter === "All" || z.state === stateFilter;
       const matchesQuery =
-        !searchQuery ||
-        z.zone_name.toLowerCase().includes(searchQuery) ||
-        z.district.toLowerCase().includes(searchQuery) ||
-        z.state.toLowerCase().includes(searchQuery);
+        !q ||
+        z.zone_name.toLowerCase().includes(q) ||
+        z.district.toLowerCase().includes(q) ||
+        z.state.toLowerCase().includes(q) ||
+        matchingRoadZoneIds.has(z.id);
       return matchesState && matchesQuery;
     });
-  }, [data.zones, stateFilter, searchQuery]);
+  }, [data.zones, data.roads, stateFilter, searchQuery]);
 
   const selected: ZoneRow | null =
     data.zones.find((z: ZoneRow) => z.id === selectedId) ?? filteredZones[0] ?? data.zones[0] ?? null;
@@ -371,7 +387,7 @@ function Dashboard() {
 
             {/* Expandable Zone Operational Drawer & Scientific Decision Support */}
             {selected && showZoneDetails && (
-              <div className="panel p-4 space-y-4 border-l-4 border-l-primary animate-in fade-in duration-200">
+              <div id="zone-details-brief" className="panel p-4 space-y-4 border-l-4 border-l-primary animate-in fade-in duration-200">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
                   <div>
                     <span className="label-caps">{t("dashboard.zone_overview", "Selected Zone Operational Brief")}</span>
@@ -592,7 +608,13 @@ function Dashboard() {
 
                 <button
                   type="button"
-                  onClick={() => setShowZoneDetails(!showZoneDetails)}
+                  onClick={() => {
+                    setShowZoneDetails(true);
+                    setTimeout(() => {
+                      const el = document.getElementById("zone-details-brief") || document.getElementById("risk-map");
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 50);
+                  }}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-red-900 dark:text-red-300 hover:underline shrink-0 font-sans cursor-pointer"
                 >
                   <span>{t("overview.view_details", "View details →")}</span>
@@ -734,12 +756,16 @@ function Dashboard() {
 
                 <button
                   type="button"
-                  onClick={() => setRoadDialogOpen(true)}
+                  onClick={() => {
+                    setRoadDialogOpen(true);
+                    const el = document.getElementById("road-connectivity");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
                   className="rounded border border-border bg-surface p-3 hover:bg-secondary/40 transition-colors flex flex-col items-start gap-1 text-left group cursor-pointer"
                 >
                   <RouteIcon className="h-5 w-5 text-primary shrink-0" />
                   <span className="font-display font-bold text-xs text-foreground group-hover:text-primary transition-colors">
-                    {t("quick_actions.check_roads", "Check Road Connections")}
+                    {t("quick_actions.check_roads", "Check Roads")}
                   </span>
                   <span className="text-[0.68rem] text-muted-foreground leading-tight">
                     {t("quick_actions.critical_links", "Critical and vulnerable links")}

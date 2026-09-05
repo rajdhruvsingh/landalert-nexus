@@ -429,7 +429,8 @@
     "col_district_state": "জেলা / রাজ্য",
     "col_status": "স্থিতি",
     "col_type": "ধরন",
-    "alert_console_title": "সতর্কবার্তা কনসোল"
+    "alert_console_title": "সতর্কবার্তা কনসোল",
+    "alert_console_subtitle": "সক্রিয় জরুরি সতর্কতা এবং সম্প্রচার পরামর্শ"
   },
   "theme": {
     "system": "সিস্টেম",
@@ -517,7 +518,8 @@
     "search_placeholder": "সড়ক, জেলা বা রাজ্য খুঁজুন...",
     "view_zone": "অঞ্চল দেখুন →",
     "no_results": "কোনো সড়ক সংযোগ পাওয়া যায়নি।",
-    "footer_info": "{{count}}টি পর্যবেক্ষণাধীন সড়ক অংশ দেখানো হচ্ছে"
+    "footer_info": "{{count}}টি পর্যবেক্ষণাধীন সড়ক অংশ দেখানো হচ্ছে",
+    "arterial_subtitle": "গুরুত্বপূর্ণ পরিবহন সংযোগ এবং গম্যতার অবস্থা"
   },
   "observations": {
     "details_title": "মাঠ পর্যায়ের পর্যবেক্ষণ প্রতিবেদন",
