@@ -28,6 +28,46 @@ export function RiskBadge({
   );
 }
 
+export function ForecastRiskBadge({
+  level,
+  leadHours,
+  confidence,
+  trend,
+  className,
+}: {
+  level: string;
+  leadHours: 24 | 48 | 72;
+  confidence?: "high" | "medium" | "low";
+  trend?: "improving" | "stable" | "elevating" | "critical";
+  className?: string;
+}) {
+  const trendArrow =
+    trend === "critical" || trend === "elevating"
+      ? "▲"
+      : trend === "improving"
+        ? "▼"
+        : "•";
+
+  const opacityClass =
+    leadHours === 72 ? "opacity-75 border-dashed" : leadHours === 48 ? "opacity-90 border-dashed" : "border-dashed";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-display text-xs uppercase tracking-wider",
+        riskBadgeClass(level),
+        opacityClass,
+        className,
+      )}
+      title={`+${leadHours}h weather forecast projection (${confidence ?? "medium"} confidence). Advisory only; does not overwrite current risk.`}
+    >
+      <span className="font-mono text-[0.65rem] opacity-75">+{leadHours}h</span>
+      <span>{level}</span>
+      {trend && <span className="text-[0.65rem] font-mono">{trendArrow}</span>}
+    </span>
+  );
+}
+
 export function RoadBadge({ status }: { status: string }) {
   return (
     <span

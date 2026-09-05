@@ -131,5 +131,22 @@
     "sync_queue": "Sync Queue",
     "download_bundle": "Download 24h Bundle",
     "cached_bundle": "Offline bundle cached."
+  },
+  "weather_forecast": {
+    "section_title": "Weather-Linked Risk Forecast",
+    "section_desc": "Short-range precipitation forecast (Open-Meteo) evaluated against regional intensity-duration threshold equations. Projections are forward guidance and do not overwrite authoritative current risk levels.",
+    "current_level": "Current Level",
+    "projected_24h": "+24h Projection",
+    "projected_48h": "+48h Projection",
+    "projected_72h": "+72h Projection",
+    "forecast_unavailable": "Forecast unavailable for this zone",
+    "skill_high": "Confidence: High (±15% uncertainty)",
+    "skill_medium": "Confidence: Medium (±30% uncertainty)",
+    "skill_low": "Confidence: Low (±50% uncertainty, mountain terrain)",
+    "trend_stable": "Stable",
+    "trend_elevating": "Elevating Risk",
+    "trend_critical": "Critical Surge",
+    "trend_improving": "Easing",
+    "disclaimer": "Advisory forecast guidance only. Operational alerts require authoritative current computation."
   }
 }

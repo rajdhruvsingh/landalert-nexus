@@ -133,3 +133,23 @@ The following architectural decisions cannot be assumed or hardcoded by automate
   - Submitter trust tiers remain governed by institutional domain verification (`PUBLIC_USER` vs `VERIFIED_OFFICIAL`), preserving public media quarantine workflows.
   - Direct SELECT on `storage.objects` is denied to `anon`; all public viewing is mediated exclusively via temporary time-bounded signed URLs (`createSignedUrl`).
 
+---
+
+## 8. Open-Meteo Short-Range NWP Forecast Skill & Lead-Time Degradation
+
+### Code Status
+- **Service**: `src/lib/forecast.service.ts`
+- **Endpoints**: `GET /api/forecast/projections` and `getZoneWeatherRiskForecastServerFn`
+- **Methodology**: Evaluates Open-Meteo numerical precipitation forecasts against Monga & Ganguli (2024/2026) moisture thresholds and Das et al. (2018) intensity-duration thresholds for 24h, 48h, and 72h lead windows.
+- **Architectural Guard**: Forecast projections are strictly forward-looking guidance ("projected to reach X by [time]"). They are structurally separated from authoritative current risk and never overwrite ground-truth telemetry.
+
+### Physical & Real-World Limitations
+1. **Orographic NWP Skill Degradation in Mountain Terrain**:
+   - In steep Himalayan topography (Sikkim, Meghalaya, Arunachal), numerical weather model skill drops significantly beyond 24 hours due to localized convective microclimates and cloud-burst dynamics not fully resolved at 10km grid scale.
+   - 24h forecast carries High Confidence (±15% uncertainty).
+   - 48h forecast carries Medium Confidence (±30% uncertainty).
+   - 72h forecast carries Low Confidence (±50% uncertainty) and is rendered with dashed borders and reduced visual weight to reflect degraded reliability.
+2. **Authoritative IMD In-Situ Calibration**:
+   - Operational disaster alerts require bilateral IMD Doppler Weather Radar (DWR) integration to calibrate satellite-NWP precipitation estimates.
+
+

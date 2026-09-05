@@ -817,5 +817,100 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
     checkDir(path.resolve(process.cwd(), "src"));
     checkDir(path.resolve(process.cwd(), "public"));
   });
+
+  describe("TASK 1 — Weather-Linked Risk Forecast Engine", () => {
+    it("applies physically-grounded threshold equations to forecast rainfall without overwriting current risk", async () => {
+      const { projectZoneRiskForecast } = await import("./forecast.service");
+
+      const projection = projectZoneRiskForecast({
+        zoneId: 1,
+        zoneName: "Gangtok Ridge",
+        district: "East Sikkim",
+        state: "Sikkim",
+        currentRiskLevel: "Moderate",
+        currentRiskScore: 45.0,
+        forecast_24h_mm: 120,
+        forecast_48h_mm: 180,
+        forecast_72h_mm: 220,
+      });
+
+      expect(projection.forecastStatus).toBe("AVAILABLE");
+      // Authoritative current state remains Moderate (not overwritten)
+      expect(projection.currentRiskLevel).toBe("Moderate");
+      expect(projection.currentRiskScore).toBe(45.0);
+
+      // Projections are nested in forecastWindows, structurally distinct
+      expect(projection.forecastWindows).toBeDefined();
+      expect(projection.forecastWindows!["24h"].leadHours).toBe(24);
+      expect(projection.forecastWindows!["24h"].forecastRainfallMm).toBe(120);
+      expect(projection.forecastWindows!["24h"].projectedRiskLevel).toMatch(/High|Severe/);
+      expect(projection.forecastWindows!["24h"].trend).toMatch(/elevating|critical/);
+      expect(projection.forecastWindows!["24h"].narrative).toMatch(/projected to reach/i);
+
+      // Verify skill degradation
+      expect(projection.forecastWindows!["24h"].confidence).toBe("high");
+      expect(projection.forecastWindows!["48h"].confidence).toBe("medium");
+      expect(projection.forecastWindows!["72h"].confidence).toBe("low");
+    });
+
+    it("explicitly returns UNAVAILABLE when forecast data is missing or empty", async () => {
+      const { projectZoneRiskForecast } = await import("./forecast.service");
+
+      const unavailable = projectZoneRiskForecast({
+        zoneId: 2,
+        zoneName: "Mangan North",
+        district: "North Sikkim",
+        state: "Sikkim",
+        currentRiskLevel: "High",
+        currentRiskScore: 65.0,
+        forecast_24h_mm: null,
+        forecast_48h_mm: null,
+        forecast_72h_mm: null,
+      });
+
+      expect(unavailable.forecastStatus).toBe("UNAVAILABLE");
+      expect(unavailable.forecastWindows).toBeNull();
+      expect(unavailable.explanation).toMatch(/forecast unavailable/i);
+      // Authoritative current level is still preserved
+      expect(unavailable.currentRiskLevel).toBe("High");
+    });
+
+    it("verifies forecast projections REST API endpoint structurally separates forecast from current risk", async () => {
+      const { setMockForecastOverrideForTesting, clearForecastCacheForTesting } = await import(
+        "./forecast.service"
+      );
+
+      setMockForecastOverrideForTesting(
+        new Map([
+          [
+            1,
+            {
+              zoneId: 1,
+              forecast_24h_mm: 15,
+              forecast_48h_mm: 25,
+              forecast_72h_mm: 35,
+            },
+          ],
+        ]),
+      );
+
+      try {
+        const req = new Request("http://localhost/api/forecast/projections?zoneId=1", {
+          method: "GET",
+        });
+        const res = await handleApiRequest(req);
+        expect(res.status).toBe(200);
+
+        const data = await res.json();
+        expect(data.zoneId).toBe(1);
+        expect(data.currentRiskLevel).toBeDefined();
+        expect(data.forecastWindows).toBeDefined();
+        expect(data.forecastWindows["24h"].leadHours).toBe(24);
+      } finally {
+        clearForecastCacheForTesting();
+      }
+    });
+  });
 });
+
 

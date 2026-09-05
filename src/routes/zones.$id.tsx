@@ -19,6 +19,7 @@ import {
   getZoneDetail,
   getRiskPredictionServerFn,
   dispatchAlertServerFn,
+  getZoneWeatherRiskForecastServerFn,
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
 import {
@@ -29,6 +30,7 @@ import {
   FreshnessBadge,
   MLAttributionCard,
   ScientificLimitationBadge,
+  ForecastRiskBadge,
 } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
@@ -101,6 +103,11 @@ function ZonePage() {
   const { data: mlPrediction, isLoading: mlLoading } = useQuery({
     queryKey: ["risk-prediction", Number(id)],
     queryFn: () => getRiskPredictionServerFn({ data: { zoneId: Number(id) } }),
+  });
+
+  const { data: forecastData, isLoading: forecastLoading } = useQuery({
+    queryKey: ["weather-forecast", Number(id)],
+    queryFn: () => getZoneWeatherRiskForecastServerFn({ data: { zoneId: Number(id) } }),
   });
 
   const [alertOpen, setAlertOpen] = useState(false);
@@ -414,6 +421,139 @@ function ZonePage() {
           value={data.slides.length}
           hint="Synthetic fixture — illustrative only, not from GSI Bhukosh"
         />
+      </section>
+
+      {/* Weather-Linked Risk Forecast Section */}
+      <section className="mt-4 panel p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="label-caps">{t("weather_forecast.section_title")}</span>
+              <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.65rem] text-primary">
+                Open-Meteo Guidance
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("weather_forecast.section_desc")}
+            </p>
+          </div>
+          <span className="text-[0.68rem] text-muted-foreground italic">
+            {t("weather_forecast.disclaimer")}
+          </span>
+        </div>
+
+        {forecastLoading ? (
+          <div className="py-6 text-center text-xs text-muted-foreground font-mono">
+            Loading forecast projections…
+          </div>
+        ) : !forecastData || forecastData.status === "UNAVAILABLE" ? (
+          <div className="mt-3 rounded border border-border/80 bg-secondary/30 p-4 text-center">
+            <p className="font-mono text-xs text-muted-foreground">
+              ⚠ {t("weather_forecast.forecast_unavailable")}
+            </p>
+            {forecastData?.unavailableReason && (
+              <p className="mt-1 text-[0.7rem] text-muted-foreground/80">
+                {forecastData.unavailableReason}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Current Authoritative Level Card */}
+            <div className="rounded border border-border/80 bg-card p-3 shadow-sm">
+              <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("weather_forecast.current_level")}
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <RiskBadge
+                  level={forecastData.currentRiskLevel}
+                  score={forecastData.currentRiskScore}
+                />
+              </div>
+              <p className="mt-2 text-[0.72rem] text-muted-foreground">
+                Authoritative current state derived from ground telemetry.
+              </p>
+            </div>
+
+            {/* +24h Window Card */}
+            <div className="rounded border border-primary/30 bg-primary/5 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[0.68rem] font-semibold uppercase tracking-wider text-primary">
+                  {t("weather_forecast.projected_24h")}
+                </span>
+                <span className="text-[0.62rem] text-emerald-400 font-mono">
+                  {t("weather_forecast.skill_high")}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <ForecastRiskBadge
+                  level={forecastData.windows.w24.projectedRiskLevel}
+                  leadHours={24}
+                  trend={forecastData.windows.w24.trend}
+                  confidence={forecastData.windows.w24.confidence}
+                />
+                <span className="font-mono text-xs text-foreground font-semibold">
+                  {forecastData.windows.w24.forecastPrecipMm.toFixed(1)} mm
+                </span>
+              </div>
+              <p className="mt-2 text-[0.72rem] text-muted-foreground">
+                {forecastData.windows.w24.narrative}
+              </p>
+            </div>
+
+            {/* +48h Window Card */}
+            <div className="rounded border border-border/80 bg-card/60 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("weather_forecast.projected_48h")}
+                </span>
+                <span className="text-[0.62rem] text-amber-400 font-mono">
+                  {t("weather_forecast.skill_medium")}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <ForecastRiskBadge
+                  level={forecastData.windows.w48.projectedRiskLevel}
+                  leadHours={48}
+                  trend={forecastData.windows.w48.trend}
+                  confidence={forecastData.windows.w48.confidence}
+                />
+                <span className="font-mono text-xs text-foreground font-semibold">
+                  {forecastData.windows.w48.forecastPrecipMm.toFixed(1)} mm
+                </span>
+              </div>
+              <p className="mt-2 text-[0.72rem] text-muted-foreground">
+                {forecastData.windows.w48.narrative}
+              </p>
+            </div>
+
+            {/* +72h Window Card */}
+            <div className="rounded border border-dashed border-border/60 bg-card/30 p-3 opacity-90">
+              <div className="flex items-center justify-between">
+                <span className="text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("weather_forecast.projected_72h")}
+                </span>
+                <span className="text-[0.62rem] text-slate-400 font-mono">
+                  {t("weather_forecast.skill_low")}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <ForecastRiskBadge
+                  level={forecastData.windows.w72.projectedRiskLevel}
+                  leadHours={72}
+                  trend={forecastData.windows.w72.trend}
+                  confidence={forecastData.windows.w72.confidence}
+                />
+                <span className="font-mono text-xs text-foreground font-semibold">
+                  {forecastData.windows.w72.forecastPrecipMm.toFixed(1)} mm
+                </span>
+              </div>
+              <p className="mt-2 text-[0.72rem] text-muted-foreground">
+                {forecastData.windows.w72.narrative}
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">

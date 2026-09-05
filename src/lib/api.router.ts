@@ -579,6 +579,43 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       }
     }
 
+    // 16. Weather-Linked Risk Forecast Projections (24h / 48h / 72h forward guidance)
+    if (pathname === "/api/forecast/projections" && request.method === "GET") {
+      const {
+        getZoneWeatherForecastProjection,
+        getAllWeatherForecastProjections,
+      } = await import("./forecast.service");
+
+      const zoneParam = url.searchParams.get("zoneId");
+      if (zoneParam !== null) {
+        const parsedId = Number(zoneParam);
+        if (!Number.isInteger(parsedId) || parsedId < 1 || parsedId > 15) {
+          return errorResponse(
+            "zoneId must be an integer between 1 and 15",
+            "INVALID_ZONE_ID",
+            400,
+            cors,
+          );
+        }
+        const projection = await getZoneWeatherForecastProjection(parsedId);
+        return jsonResponse(projection, 200, cors);
+      }
+
+      const projections = await getAllWeatherForecastProjections();
+      return jsonResponse(
+        {
+          status: "success",
+          evaluated_at: new Date().toISOString(),
+          disclaimer:
+            "Weather-linked forecast projections represent forward-looking guidance based on Open-Meteo numerical weather prediction. " +
+            "Forecast skill degrades with lead time. Projections do NOT alter authoritative current risk levels.",
+          zones: projections,
+        },
+        200,
+        cors,
+      );
+    }
+
     return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404, cors);
   } catch (error) {
     console.error(`[API Router] Unhandled error on ${pathname}:`, error);

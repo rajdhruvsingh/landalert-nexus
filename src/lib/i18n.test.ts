@@ -59,14 +59,18 @@ describe("Multilingual UI (i18n) Support", () => {
     expect(i18n.language).toBe("en");
   });
 
-  it("maintains complete key parity and non-empty translations for alerts and zone_detail across all 4 languages", () => {
+  it("maintains complete key parity and non-empty translations across all 4 languages", () => {
     const languages = [
       { code: "as", bundle: as },
       { code: "bn", bundle: bn },
       { code: "ne", bundle: ne },
     ];
 
-    const sections = ["alerts", "zone_detail"] as const;
+    const sections = [
+      "alerts",
+      "zone_detail",
+      "weather_forecast",
+    ] as const;
 
     for (const section of sections) {
       const enKeys = Object.keys(en[section]);

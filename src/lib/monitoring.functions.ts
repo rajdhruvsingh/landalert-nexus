@@ -222,11 +222,11 @@ export async function ingestLiveRainfallImpl() {
     const lats = zones.map((z) => z.centroid_lat).join(",");
     const lngs = zones.map((z) => z.centroid_lng).join(",");
 
-    // ── Fetch 1: daily rainfall (keyless Open-Meteo) ──────────────────────────
+    // ── Fetch 1: daily rainfall (keyless Open-Meteo with 4-day short-range forecast) ──
     const rainfallUrl =
       "https://api.open-meteo.com/v1/forecast" +
       `?latitude=${lats}&longitude=${lngs}` +
-      "&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=UTC";
+      "&daily=precipitation_sum&past_days=7&forecast_days=4&timezone=UTC";
 
     // ── Fetch 2: hourly soil moisture — ERA5-Land 0-1cm and 1-3cm ──────────
     const soilMoistureUrl =
@@ -277,18 +277,22 @@ export async function ingestLiveRainfallImpl() {
     }> = [];
 
     const FIELD_CAPACITY_M3_M3 = 0.4;
+    const todayIso = new Date().toISOString().slice(0, 10);
 
     zones.forEach((zone, i) => {
       const daily = rainfallSeries[i]?.daily;
       if (daily) {
         daily.time.forEach((day, d) => {
-          rainfallRows.push({
-            zone_id: zone.id,
-            station_id: `OM-${zone.id}`,
-            reading_time: `${day}T00:00:00+00:00`,
-            rainfall_mm: Math.max(0, Math.min(1200, daily.precipitation_sum[d] ?? 0)),
-            source: "Open-Meteo observed daily precipitation",
-          });
+          // Strict temporal boundary: Only historical/observed days (<= today) are written to weather_readings
+          if (day <= todayIso) {
+            rainfallRows.push({
+              zone_id: zone.id,
+              station_id: `OM-${zone.id}`,
+              reading_time: `${day}T00:00:00+00:00`,
+              rainfall_mm: Math.max(0, Math.min(1200, daily.precipitation_sum[d] ?? 0)),
+              source: "Open-Meteo observed daily precipitation",
+            });
+          }
         });
       }
 
@@ -357,6 +361,20 @@ export async function ingestLiveRainfallImpl() {
 export const ingestLiveRainfall = createServerFn({ method: "POST" }).handler(async () =>
   ingestLiveRainfallImpl(),
 );
+
+export const getWeatherRiskForecastsServerFn = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { getAllWeatherForecastProjections } = await import("./forecast.service");
+    return getAllWeatherForecastProjections();
+  },
+);
+
+export const getZoneWeatherRiskForecastServerFn = createServerFn({ method: "GET" })
+  .validator((data: { zoneId: number }) => ({ zoneId: Number(data.zoneId) }))
+  .handler(async ({ data }) => {
+    const { getZoneWeatherForecastProjection } = await import("./forecast.service");
+    return getZoneWeatherForecastProjection(data.zoneId);
+  });
 
 export const getRiskPredictionServerFn = createServerFn({ method: "GET" })
   .validator((data: { zoneId: number; asOfDate?: string }) => ({

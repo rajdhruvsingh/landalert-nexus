@@ -8,6 +8,7 @@ import {
   recomputeAll,
   ingestLiveRainfall,
   getRiskPredictionServerFn,
+  getZoneWeatherRiskForecastServerFn,
   type ZoneRow,
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
@@ -19,6 +20,7 @@ import {
   FreshnessBadge,
   MLAttributionCard,
   ScientificLimitationBadge,
+  ForecastRiskBadge,
 } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
@@ -80,6 +82,13 @@ function Dashboard() {
   const { data: selectedMl } = useQuery({
     queryKey: ["risk-prediction", selected?.id],
     queryFn: () => (selected ? getRiskPredictionServerFn({ data: { zoneId: selected.id } }) : null),
+    enabled: !!selected,
+  });
+
+  const { data: selectedForecast } = useQuery({
+    queryKey: ["weather-forecast", selected?.id],
+    queryFn: () =>
+      selected ? getZoneWeatherRiskForecastServerFn({ data: { zoneId: selected.id } }) : null,
     enabled: !!selected,
   });
 
@@ -318,6 +327,89 @@ function Dashboard() {
                   topFeatures={selectedMl.factor_attribution.top_features}
                 />
               )}
+
+              {/* Weather-Linked Risk Forecast Preview */}
+              <div className="rounded border border-border/70 bg-card/50 p-3">
+                <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="label-caps">{t("weather_forecast.section_title")}</span>
+                    <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-mono text-[0.62rem] text-primary">
+                      Forecast Guidance
+                    </span>
+                  </div>
+                  <span className="text-[0.65rem] text-muted-foreground italic">
+                    {t("weather_forecast.disclaimer")}
+                  </span>
+                </div>
+
+                {!selectedForecast || selectedForecast.status === "UNAVAILABLE" ? (
+                  <p className="pt-2 text-center font-mono text-xs text-muted-foreground">
+                    ⚠ {t("weather_forecast.forecast_unavailable")}
+                  </p>
+                ) : (
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div className="rounded border border-primary/30 bg-primary/5 p-2 text-center">
+                      <div className="text-[0.62rem] font-semibold uppercase text-primary">
+                        {t("weather_forecast.projected_24h")}
+                      </div>
+                      <div className="my-1 flex justify-center">
+                        <ForecastRiskBadge
+                          level={selectedForecast.windows.w24.projectedRiskLevel}
+                          leadHours={24}
+                          trend={selectedForecast.windows.w24.trend}
+                          confidence={selectedForecast.windows.w24.confidence}
+                        />
+                      </div>
+                      <div className="font-mono text-[0.68rem] text-foreground font-semibold">
+                        {selectedForecast.windows.w24.forecastPrecipMm.toFixed(1)} mm
+                      </div>
+                      <div className="mt-0.5 text-[0.58rem] text-emerald-400 font-mono">
+                        {t("weather_forecast.skill_high")}
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-border/80 bg-card/60 p-2 text-center">
+                      <div className="text-[0.62rem] font-semibold uppercase text-muted-foreground">
+                        {t("weather_forecast.projected_48h")}
+                      </div>
+                      <div className="my-1 flex justify-center">
+                        <ForecastRiskBadge
+                          level={selectedForecast.windows.w48.projectedRiskLevel}
+                          leadHours={48}
+                          trend={selectedForecast.windows.w48.trend}
+                          confidence={selectedForecast.windows.w48.confidence}
+                        />
+                      </div>
+                      <div className="font-mono text-[0.68rem] text-foreground font-semibold">
+                        {selectedForecast.windows.w48.forecastPrecipMm.toFixed(1)} mm
+                      </div>
+                      <div className="mt-0.5 text-[0.58rem] text-amber-400 font-mono">
+                        {t("weather_forecast.skill_medium")}
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-dashed border-border/60 bg-card/30 p-2 text-center opacity-90">
+                      <div className="text-[0.62rem] font-semibold uppercase text-muted-foreground">
+                        {t("weather_forecast.projected_72h")}
+                      </div>
+                      <div className="my-1 flex justify-center">
+                        <ForecastRiskBadge
+                          level={selectedForecast.windows.w72.projectedRiskLevel}
+                          leadHours={72}
+                          trend={selectedForecast.windows.w72.trend}
+                          confidence={selectedForecast.windows.w72.confidence}
+                        />
+                      </div>
+                      <div className="font-mono text-[0.68rem] text-foreground font-semibold">
+                        {selectedForecast.windows.w72.forecastPrecipMm.toFixed(1)} mm
+                      </div>
+                      <div className="mt-0.5 text-[0.58rem] text-slate-400 font-mono">
+                        {t("weather_forecast.skill_low")}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center justify-between border-t border-border/60 pt-2">
                 <FieldObservationDialog
