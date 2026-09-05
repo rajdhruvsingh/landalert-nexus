@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -10,8 +10,21 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { ZoneRow, ObservationRow } from "@/lib/monitoring.functions";
-import { Eye, FilePlus, Search, MapPin, Calendar, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
+import {
+  Eye,
+  FilePlus,
+  Search,
+  MapPin,
+  Calendar,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowLeft,
+  Image as ImageIcon,
+  Video as VideoIcon,
+} from "lucide-react";
 import { FieldObservationDialog } from "./FieldObservationDialog";
+import { sanitizeObservationRecord, sanitizeObservationList } from "@/lib/observation-sanitizer";
+import { getOfflineMedia } from "@/lib/offline-media-store";
 
 interface Props {
   observations: ObservationRow[];
@@ -39,6 +52,7 @@ export function ObservationDetailsDialog({
   const [activeObsId, setActiveObsId] = useState<number | string | null>(selectedObservationId ?? null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [resolvedOfflineUrls, setResolvedOfflineUrls] = useState<Record<string, string>>({});
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -50,15 +64,58 @@ export function ObservationDetailsDialog({
     return map;
   }, [zones]);
 
+  const sanitizedObservations = useMemo(() => {
+    return sanitizeObservationList(observations);
+  }, [observations]);
+
   // Sync selectedObservationId if changed externally
   const activeObs = useMemo(() => {
     const targetId = activeObsId ?? selectedObservationId;
     if (!targetId) return null;
-    return observations.find((o) => String(o.id) === String(targetId)) ?? null;
-  }, [activeObsId, selectedObservationId, observations]);
+    const found = sanitizedObservations.find((o) => String(o.id) === String(targetId)) ?? null;
+    return found ? sanitizeObservationRecord(found) : null;
+  }, [activeObsId, selectedObservationId, sanitizedObservations]);
+
+  // Resolve offline IndexedDB media for active observation
+  useEffect(() => {
+    if (!activeObs?.media_metadata || !Array.isArray(activeObs.media_metadata)) {
+      return;
+    }
+
+    let isMounted = true;
+    const createdBlobUrls: string[] = [];
+
+    const loadBlobs = async () => {
+      const urls: Record<string, string> = {};
+      for (const meta of activeObs.media_metadata!) {
+        if (meta.id && !meta.url) {
+          try {
+            const stored = await getOfflineMedia(meta.id);
+            if (stored && stored.blob) {
+              const objUrl = URL.createObjectURL(stored.blob);
+              createdBlobUrls.push(objUrl);
+              urls[meta.id] = objUrl;
+            }
+          } catch {
+            // Ignore offline fetch errors
+          }
+        }
+      }
+      if (isMounted) {
+        setResolvedOfflineUrls(urls);
+      }
+    };
+
+    loadBlobs();
+
+    return () => {
+      isMounted = false;
+      createdBlobUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [activeObs]);
 
   const filteredObservations = useMemo(() => {
-    return observations.filter((obs) => {
+    return sanitizedObservations.filter((obs) => {
       const z = zoneMap.get(obs.zone_id);
       const q = searchQuery.trim().toLowerCase();
       const matchesQuery =
@@ -248,31 +305,112 @@ export function ObservationDetailsDialog({
                 </div>
               </div>
 
-              {/* Media items if present */}
-              {activeObs.media_urls && activeObs.media_urls.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-border">
-                  <div className="text-[0.68rem] text-muted-foreground uppercase font-semibold">
-                    {t("observations.evidence_photos", "Attached Evidence Photos")} ({(activeObs.media_urls.length)})
+              {/* Attached Evidence Media (URLs, Offline Blobs, or Metadata) */}
+              {(() => {
+                const mediaUrls = activeObs.media_urls || [];
+                const mediaMeta = activeObs.media_metadata || [];
+                const hasAnyMedia = mediaUrls.length > 0 || mediaMeta.length > 0;
+
+                if (!hasAnyMedia) return null;
+
+                const items: Array<{
+                  key: string;
+                  url?: string;
+                  name?: string;
+                  size?: number;
+                  mimeType?: string;
+                  isOffline?: boolean;
+                }> = [];
+
+                mediaUrls.forEach((url, i) => {
+                  items.push({
+                    key: `url-${i}`,
+                    url,
+                    name: `Evidence Photo ${i + 1}`,
+                  });
+                });
+
+                mediaMeta.forEach((m: any, i: number) => {
+                  const resolvedUrl = m.id ? resolvedOfflineUrls[m.id] : undefined;
+                  const itemUrl = m.url || resolvedUrl;
+                  // Avoid duplicate if already represented in items
+                  if (itemUrl && items.some((it) => it.url === itemUrl)) return;
+                  items.push({
+                    key: m.id || `meta-${i}`,
+                    url: itemUrl,
+                    name: m.name || `Evidence File ${i + 1}`,
+                    size: m.size,
+                    mimeType: m.mimeType,
+                    isOffline: Boolean(!itemUrl || m.id?.startsWith("offline_")),
+                  });
+                });
+
+                if (items.length === 0) return null;
+
+                return (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <div className="text-[0.68rem] text-muted-foreground uppercase font-semibold">
+                      {t("observations.evidence_photos", "Attached Evidence Photos & Media")} ({items.length})
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {items.map((item) => {
+                        const isVideo =
+                          item.mimeType?.startsWith("video/") ||
+                          item.name?.endsWith(".mp4") ||
+                          item.name?.endsWith(".mov");
+
+                        if (item.url) {
+                          if (isVideo) {
+                            return (
+                              <div key={item.key} className="rounded border border-border bg-black/40 overflow-hidden">
+                                <video src={item.url} controls className="h-32 w-full object-contain" />
+                                <div className="p-1.5 text-[0.65rem] text-muted-foreground truncate">{item.name}</div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <a
+                              key={item.key}
+                              href={item.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block rounded border border-border overflow-hidden group hover:opacity-90 bg-secondary/10"
+                            >
+                              <img
+                                src={item.url}
+                                alt={item.name}
+                                className="h-32 w-full object-cover group-hover:scale-102 transition-transform"
+                              />
+                              <div className="p-1.5 text-[0.65rem] text-muted-foreground truncate font-mono">
+                                {item.name}
+                              </div>
+                            </a>
+                          );
+                        }
+
+                        // Staged offline evidence card
+                        return (
+                          <div
+                            key={item.key}
+                            className="rounded border border-border/80 bg-secondary/30 p-2.5 flex items-center gap-2.5"
+                          >
+                            <div className="p-2 rounded bg-primary/10 text-primary shrink-0">
+                              {isVideo ? <VideoIcon className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-semibold text-foreground truncate">{item.name}</div>
+                              <div className="text-[0.65rem] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                                <span>{item.size ? `${(item.size / 1024 / 1024).toFixed(2)} MB` : "Field File"}</span>
+                                <span className="text-primary font-medium">• Staged Evidence</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {activeObs.media_urls.map((url, i) => (
-                      <a
-                        key={i}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block rounded border border-border overflow-hidden group hover:opacity-90"
-                      >
-                        <img
-                          src={url}
-                          alt={`Observation ${activeObs.id} media ${i + 1}`}
-                          className="h-28 w-full object-cover"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             <div className="flex items-center justify-between pt-2">

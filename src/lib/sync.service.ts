@@ -344,6 +344,11 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     }
 
     const strippedMetadata: Record<string, Record<string, any>> = {};
+    const baseVisualSignsMap = new Map<string, string>();
+    currentRows.forEach((r, idx) => {
+      const key = r.idempotency_key || String(idx);
+      baseVisualSignsMap.set(key, r.visual_signs || "");
+    });
     let usePlainInsert = false;
 
     for (let attempt = 0; attempt < 12; attempt++) {
@@ -384,9 +389,9 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
             const copy = { ...row };
             delete copy[missingCol];
 
-            // Embed stripped metadata into visual_signs so no evidence/consent is lost
+            // Embed stripped metadata into visual_signs safely without corrupting base signs
             const metaJson = JSON.stringify(strippedMetadata[key]);
-            const baseSigns = (copy.visual_signs || "").replace(/\s*\[EVIDENCE_META:[^\]]+\]/, "");
+            const baseSigns = baseVisualSignsMap.get(key) || "";
             copy.visual_signs = baseSigns
               ? `${baseSigns} [EVIDENCE_META:${metaJson}]`
               : `[EVIDENCE_META:${metaJson}]`;

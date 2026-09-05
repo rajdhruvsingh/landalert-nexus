@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { sanitizeObservationList } from "./observation-sanitizer";
 
 function publicClient() {
   const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
@@ -70,7 +71,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
         alerts: alerts.data ?? [],
         activeModel: modelConfig.data ?? null,
         candidateModel: candidateConfig?.data ?? null,
-        observations: observations?.data ?? [],
+        observations: sanitizeObservationList(observations?.data ?? []),
       };
     }
   } catch {
@@ -97,7 +98,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
         alerts: aRes.rows || [],
         activeModel: mRes.rows[0] || null,
         candidateModel: cRes.rows[0] || null,
-        observations: oRes.rows || [],
+        observations: sanitizeObservationList(oRes.rows || []),
       };
     } catch (pgErr) {
       console.error("[getOverview] Postgres fallback query error:", pgErr);
@@ -152,7 +153,7 @@ export const getZoneDetail = createServerFn({ method: "GET" })
       slides: slides.data ?? [],
       alerts: alerts.data ?? [],
       activeModel: modelConfig.data ?? null,
-      observations: observations.data ?? [],
+      observations: sanitizeObservationList(observations.data ?? []),
     };
   });
 
@@ -477,7 +478,7 @@ export const getResponsePrioritizationServerFn = createServerFn({ method: "GET" 
 
     const zones = zonesRes.data ?? [];
     const roads = roadsRes.data ?? [];
-    const observations = obsRes.data ?? [];
+    const observations = sanitizeObservationList(obsRes.data ?? []);
 
     const zoneInputs = zones.map((z) => ({
       zoneId: z.id,

@@ -27,6 +27,7 @@ import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
 import { RoadNetworkDialog } from "@/components/RoadNetworkDialog";
 import { ObservationDetailsDialog } from "@/components/ObservationDetailsDialog";
+import { sanitizeObservationRecord } from "@/lib/observation-sanitizer";
 import { riskColor, RISK_LEVELS } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
 import { HimalayaSilhouette } from "@/components/HimalayaSilhouette";
@@ -954,11 +955,12 @@ function Dashboard() {
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {observationsList.map((obs: any) => {
-                      const z = data.zones.find((x: ZoneRow) => x.id === obs.zone_id);
-                      const loc = z ? `${z.zone_name}, ${z.state}` : `Zone ${obs.zone_id}`;
+                      const cleanObs = sanitizeObservationRecord(obs);
+                      const z = data.zones.find((x: ZoneRow) => x.id === cleanObs.zone_id);
+                      const loc = z ? `${z.zone_name}, ${z.state}` : `Zone ${cleanObs.zone_id}`;
                       const typeLabel =
-                        obs.visual_signs ||
-                        (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
+                        cleanObs.visual_signs ||
+                        (cleanObs.road_status && cleanObs.road_status !== "open" ? `Road ${cleanObs.road_status}` : "Slope Movement");
                       return (
                         <tr key={obs.id} className="hover:bg-secondary/20 transition-colors">
                           <td className="py-2.5 px-2.5 font-mono text-[0.7rem] whitespace-nowrap text-muted-foreground">
