@@ -15,11 +15,13 @@ const DATA_CACHE = "landalert-data-v1";
 
 const APP_SHELL_URLS = [
   "/manifest.json",
+  "/emblem-of-india.svg",
   "/favicon.svg",
   "/favicon.ico",
   "/apple-touch-icon.png",
   "/icon-192.png",
   "/icon-512.png",
+  "/himalaya-hero.png",
 ];
 
 self.addEventListener("install", (event) => {

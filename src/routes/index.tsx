@@ -225,58 +225,41 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
       {/* Hero Section */}
-      <section className="relative border-b border-border bg-surface overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-60 pointer-events-none hidden md:block text-muted-foreground">
-          <HimalayaSilhouette />
-        </div>
+      <section className="relative border-b border-border bg-white dark:bg-card overflow-hidden">
+        <div className="relative mx-auto max-w-[1600px] px-4 py-7 sm:py-8 lg:px-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 min-h-[160px]">
+          {/* Mountain artwork in center/right background */}
+          <div className="absolute inset-y-0 right-0 sm:right-12 lg:right-72 flex items-end justify-end pointer-events-none overflow-hidden select-none z-0">
+            <img
+              src="/himalaya-hero-trans.png"
+              alt=""
+              aria-hidden="true"
+              className="h-full max-h-[160px] lg:max-h-[180px] w-auto object-contain opacity-85 dark:opacity-35"
+              loading="eager"
+            />
+          </div>
 
-        <div className="relative mx-auto max-w-[1600px] px-4 py-8 lg:px-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="max-w-2xl">
-            <span className="font-display text-xs uppercase tracking-widest font-bold text-primary">
+          <div className="max-w-2xl relative z-10">
+            <span className="text-[0.7rem] sm:text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground font-sans">
               {t("hero.region_tag", "NORTH EASTERN REGION")}
             </span>
-            <h1 className="mt-1 text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-foreground font-display">
+            <h1 className="mt-1 text-2xl sm:text-3xl lg:text-[2.25rem] font-bold tracking-tight text-foreground font-display leading-tight">
               {t("hero.title", "Landslide Early Warning System")}
             </h1>
-            <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-xl">
               {t("hero.subtitle", "Real-time risk assessment, field observations and decision support for safer communities in North East India.")}
             </p>
-
-            {/* Scientific & Model Notice Chips */}
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              {data.activeModel && (
-                <span className="rounded border border-border bg-secondary/40 px-2 py-0.5 font-mono text-[0.68rem] text-foreground">
-                  {t("dashboard.model_active", "Active Model")}: {data.activeModel.model_version}
-                </span>
-              )}
-              <ScientificLimitationBadge />
-              {data.candidateModel && (
-                <span
-                  data-testid="candidate-model-notice"
-                  className="inline-flex items-center gap-1.5 rounded border border-border bg-secondary/40 px-2 py-0.5 font-sans text-[0.68rem] text-muted-foreground"
-                  title={`${data.candidateModel.model_version} (${data.candidateModel.status})`}
-                >
-                  <span>
-                    {t("dashboard.candidate_pending_notice", {
-                      version: data.candidateModel.model_version.replace("-lr-trained", ""),
-                      events: data.candidateModel.positive_count ?? 15,
-                    })}
-                  </span>
-                </span>
-              )}
-            </div>
           </div>
 
           {/* Pillars on Right */}
-          <div className="hidden lg:flex items-center gap-4 text-left font-display">
-            <div className="space-y-0.5 text-xs text-foreground/90 font-medium">
+          <div className="hidden lg:flex items-center gap-5 text-left shrink-0 relative z-10">
+            <div className="space-y-1 text-xs sm:text-[13px] text-foreground/90 font-medium">
               <div>{t("hero.observe", "Observe")}</div>
               <div>{t("hero.assess", "Assess")}</div>
               <div>{t("hero.respond", "Respond")}</div>
               <div>{t("hero.protect", "Protect")}</div>
             </div>
-            <div className="h-12 w-px bg-border mx-1" aria-hidden="true" />
-            <div className="space-y-0.5 text-[0.65rem] text-muted-foreground uppercase tracking-widest font-semibold">
+            <div className="w-5 h-px bg-muted-foreground/50 self-center" aria-hidden="true" />
+            <div className="space-y-1.5 text-[0.65rem] text-muted-foreground uppercase tracking-[0.18em] font-semibold">
               <div>{t("hero.people", "PEOPLE")}</div>
               <div>{t("hero.infrastructure", "INFRASTRUCTURE")}</div>
               <div>{t("hero.communities", "COMMUNITIES")}</div>
@@ -407,6 +390,26 @@ function Dashboard() {
                       {selectedMl && (
                         <span className="font-mono text-xs text-primary font-medium">
                           ML Risk: {(selectedMl.probability !== null ? (selectedMl.probability * 100).toFixed(1) + "%" : "Unavailable")} ({selectedMl.risk_level})
+                        </span>
+                      )}
+                      {data.activeModel && (
+                        <span className="rounded border border-border bg-secondary/40 px-2 py-0.5 font-mono text-[0.68rem] text-foreground">
+                          {t("dashboard.model_active", "Active Model")}: {data.activeModel.model_version}
+                        </span>
+                      )}
+                      <ScientificLimitationBadge />
+                      {data.candidateModel && (
+                        <span
+                          data-testid="candidate-model-notice"
+                          className="inline-flex items-center gap-1.5 rounded border border-border bg-secondary/40 px-2 py-0.5 font-sans text-[0.68rem] text-muted-foreground"
+                          title={`${data.candidateModel.model_version} (${data.candidateModel.status})`}
+                        >
+                          <span>
+                            {t("dashboard.candidate_pending_notice", {
+                              version: data.candidateModel.model_version.replace("-lr-trained", ""),
+                              events: data.candidateModel.positive_count ?? 15,
+                            })}
+                          </span>
                         </span>
                       )}
                     </div>
