@@ -9,6 +9,7 @@ import {
   ingestLiveRainfall,
   getRiskPredictionServerFn,
   getZoneWeatherRiskForecastServerFn,
+  getResponsePrioritizationServerFn,
   type ZoneRow,
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
@@ -21,6 +22,7 @@ import {
   MLAttributionCard,
   ScientificLimitationBadge,
   ForecastRiskBadge,
+  PrioritizationScoreBadge,
 } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
@@ -90,6 +92,11 @@ function Dashboard() {
     queryFn: () =>
       selected ? getZoneWeatherRiskForecastServerFn({ data: { zoneId: selected.id } }) : null,
     enabled: !!selected,
+  });
+
+  const { data: prioritizationData } = useQuery({
+    queryKey: ["response-prioritization"],
+    queryFn: () => getResponsePrioritizationServerFn(),
   });
 
   const counts = RISK_LEVELS.map((lvl) => ({
@@ -435,29 +442,108 @@ function Dashboard() {
             </div>
           )}
 
+          {/* Emergency Response Prioritisation Panel */}
           <div className="panel">
-            <div className="border-b border-border px-4 py-3 label-caps">Response priority</div>
-            <div className="max-h-[300px] overflow-y-auto">
-              {zones.map((z) => (
-                <button
-                  key={z.id}
-                  onClick={() => setSelectedId(z.id)}
-                  className={`flex w-full items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5 text-left transition-colors hover:bg-secondary/60 ${
-                    selected?.id === z.id ? "bg-secondary/70" : ""
-                  }`}
-                >
-                  <span>
-                    <span className="block text-sm">{z.zone_name}</span>
-                    <span className="block font-mono text-[0.68rem] text-muted-foreground">
-                      {z.state} · {z.population.toLocaleString("en-IN")} residents
-                    </span>
-                  </span>
-                  <RiskBadge level={z.current_risk_level} score={z.risk_score} />
-                </button>
-              ))}
-              {zones.length === 0 && (
+            <div className="border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="label-caps">{t("response_prioritization.section_title")}</span>
+                <span className="rounded border border-border bg-secondary/60 px-2 py-0.5 font-mono text-[0.65rem] text-muted-foreground">
+                  Decision Support
+                </span>
+              </div>
+              <p className="mt-1 text-[0.68rem] text-muted-foreground leading-relaxed">
+                {t("response_prioritization.section_caption")}
+              </p>
+            </div>
+
+            <div className="max-h-[380px] overflow-y-auto">
+              {/* Ranked Zones */}
+              {prioritizationData?.ranked
+                ?.filter((r) => stateFilter === "All" || r.state === stateFilter)
+                .map((r) => (
+                  <button
+                    key={r.zoneId}
+                    onClick={() => setSelectedId(r.zoneId)}
+                    className={`flex w-full flex-col gap-1.5 border-b border-border/60 px-4 py-3 text-left transition-colors hover:bg-secondary/60 ${
+                      selected?.id === r.zoneId ? "bg-secondary/70" : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 font-mono text-xs font-bold text-primary">
+                          #{r.rank}
+                        </span>
+                        <span className="text-sm font-semibold">{r.zoneName}</span>
+                        <span className="font-mono text-[0.68rem] text-muted-foreground">
+                          {r.district}, {r.state}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RiskBadge level={r.currentRiskLevel} />
+                        <PrioritizationScoreBadge score={r.compositeUrgencyScore} />
+                      </div>
+                    </div>
+
+                    {/* Drivers Breakdown Chips */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[0.65rem] font-mono">
+                      <span className="rounded bg-secondary/80 px-1.5 py-0.5 text-foreground/90 border border-border/50">
+                        {r.driverBreakdown.severity}
+                      </span>
+                      <span className="rounded bg-secondary/80 px-1.5 py-0.5 text-foreground/90 border border-border/50">
+                        {r.driverBreakdown.population}
+                      </span>
+                      <span className="rounded bg-secondary/80 px-1.5 py-0.5 text-foreground/90 border border-border/50">
+                        {r.driverBreakdown.roads}
+                      </span>
+                      {r.driverBreakdown.observations && (
+                        <span className="rounded bg-amber-500/10 text-amber-300 px-1.5 py-0.5 border border-amber-500/30">
+                          {r.driverBreakdown.observations}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+
+              {/* Unranked Zones (Status Unknown) */}
+              {prioritizationData?.unranked && prioritizationData.unranked.length > 0 && (
+                <div className="border-t-2 border-border/80 bg-secondary/20 p-3">
+                  <div className="flex items-center gap-1.5 text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <span>⚠</span>
+                    <span>{t("response_prioritization.unranked_title")}</span>
+                  </div>
+                  <p className="mt-0.5 text-[0.65rem] text-muted-foreground leading-relaxed">
+                    {t("response_prioritization.unranked_desc")}
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {prioritizationData.unranked
+                      .filter((u) => stateFilter === "All" || u.state === stateFilter)
+                      .map((u) => (
+                        <button
+                          key={u.zoneId}
+                          onClick={() => setSelectedId(u.zoneId)}
+                          className={`flex w-full items-center justify-between rounded border border-border/60 p-2 text-left text-xs hover:bg-secondary/60 ${
+                            selected?.id === u.zoneId ? "bg-secondary/70" : ""
+                          }`}
+                        >
+                          <div>
+                            <span className="font-semibold">{u.zoneName}</span>
+                            <span className="ml-1 text-[0.68rem] text-muted-foreground">
+                              ({u.district}, {u.state})
+                            </span>
+                            <span className="block text-[0.62rem] text-muted-foreground/80 mt-0.5">
+                              {u.reason}
+                            </span>
+                          </div>
+                          <RiskBadge level={u.currentRiskLevel} />
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {(!prioritizationData?.ranked || prioritizationData.ranked.length === 0) && (
                 <p className="p-4 text-sm text-muted-foreground">
-                  No monitored zones in {stateFilter}.
+                  No prioritised zones available.
                 </p>
               )}
             </div>

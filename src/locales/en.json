@@ -148,5 +148,16 @@
     "trend_critical": "Critical Surge",
     "trend_improving": "Easing",
     "disclaimer": "Advisory forecast guidance only. Operational alerts require authoritative current computation."
+  },
+  "response_prioritization": {
+    "section_title": "Emergency Response Prioritisation",
+    "section_caption": "Advisory decision-support ranking for disaster response teams. Combines risk severity (40%), population exposure (25%), road cutoffs (20%), and ground field reports (15%). Does NOT trigger automated dispatches.",
+    "rank": "Rank",
+    "zone": "Zone",
+    "score": "Urgency Score",
+    "drivers": "Contributing Factors",
+    "road_cutoff": "Road Status",
+    "unranked_title": "Unranked Zones (Awaiting Telemetry)",
+    "unranked_desc": "Excluded from numerical ranking because risk severity is UNKNOWN due to telemetry outage. Requires ground assessment."
   }
 }

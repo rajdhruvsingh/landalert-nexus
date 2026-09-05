@@ -616,6 +616,59 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       );
     }
 
+    // 17. Emergency Response Prioritization Ranking (Decision-Support Only)
+    if (pathname === "/api/response/prioritization" && request.method === "GET") {
+      const { evaluateEmergencyPrioritization } = await import("./prioritization.service");
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+      const [zonesRes, roadsRes, obsRes] = await Promise.all([
+        supabaseAdmin.from("risk_zones").select("*").order("id"),
+        supabaseAdmin.from("road_segments").select("*").order("id"),
+        supabaseAdmin
+          .from("field_observations")
+          .select("*")
+          .order("observed_at", { ascending: false })
+          .limit(50),
+      ]);
+
+      if (zonesRes.error) {
+        return errorResponse(zonesRes.error.message, "DATABASE_ERROR", 500, cors);
+      }
+
+      const zones = zonesRes.data ?? [];
+      const roads = roadsRes.data ?? [];
+      const observations = obsRes.data ?? [];
+
+      const zoneInputs = zones.map((z) => ({
+        zoneId: z.id,
+        zoneName: z.zone_name,
+        district: z.district,
+        state: z.state,
+        currentRiskLevel: z.current_risk_level,
+        population: z.population,
+        roadSegments: roads
+          .filter((r) => r.zone_id === z.id)
+          .map((r) => ({
+            id: r.id,
+            roadName: r.road_name,
+            segmentLabel: r.segment_label,
+            status: r.status,
+          })),
+        fieldObservations: observations
+          .filter((o) => o.zone_id === z.id)
+          .map((o) => ({
+            id: o.id,
+            reviewStatus: o.review_status ?? undefined,
+            roadStatus: o.road_status ?? undefined,
+            visualSigns: o.visual_signs ?? undefined,
+            rainfallMm: o.rainfall_mm ?? undefined,
+          })),
+      }));
+
+      const ranking = evaluateEmergencyPrioritization(zoneInputs);
+      return jsonResponse(ranking, 200, cors);
+    }
+
     return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404, cors);
   } catch (error) {
     console.error(`[API Router] Unhandled error on ${pathname}:`, error);

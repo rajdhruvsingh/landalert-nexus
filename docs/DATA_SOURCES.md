@@ -270,4 +270,14 @@ Integration: download daily HDF5/NetCDF → sample at zone centroids → upsert 
 Whenever the layer is displayed, the following license attribution is rendered per ESA/Copernicus terms:
 `© Copernicus Sentinel data 2026 / Sentinel Hub | Supplementary Visual Context Only`
 
+---
+
+## Emergency Response Prioritization Schema
+
+- **Document**: Full formulation, weights, and physical rationale are documented in [docs/RESPONSE_PRIORITIZATION.md](file:///Users/dhruvrajsingh/Downloads/landalert-nexus/docs/RESPONSE_PRIORITIZATION.md).
+- **Formula**: $S_{\text{priority}} = 0.40 \times C_{\text{severity}} + 0.25 \times C_{\text{population}} + 0.20 \times C_{\text{road}} + 0.15 \times C_{\text{observation}}$.
+- **Exclusion of UNKNOWN**: Zones where telemetry is lost or degraded (`severityRank === null`) are strictly excluded from numerical ranking into an unranked list. They are never assigned a zero or low-risk rank.
+- **Decision Support**: Informs incident commanders; strictly does NOT trigger automatic dispatches.
+
+
 

@@ -70,6 +70,7 @@ describe("Multilingual UI (i18n) Support", () => {
       "alerts",
       "zone_detail",
       "weather_forecast",
+      "response_prioritization",
     ] as const;
 
     for (const section of sections) {

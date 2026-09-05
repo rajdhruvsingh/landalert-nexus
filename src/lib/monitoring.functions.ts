@@ -376,6 +376,56 @@ export const getZoneWeatherRiskForecastServerFn = createServerFn({ method: "GET"
     return getZoneWeatherForecastProjection(data.zoneId);
   });
 
+export const getResponsePrioritizationServerFn = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const sb = publicClient();
+    const [zonesRes, roadsRes, obsRes] = await Promise.all([
+      sb.from("risk_zones").select("*").order("id"),
+      sb.from("road_segments").select("*").order("id"),
+      sb
+        .from("field_observations")
+        .select("*")
+        .order("observed_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    if (zonesRes.error) throw new Error(zonesRes.error.message);
+
+    const zones = zonesRes.data ?? [];
+    const roads = roadsRes.data ?? [];
+    const observations = obsRes.data ?? [];
+
+    const zoneInputs = zones.map((z) => ({
+      zoneId: z.id,
+      zoneName: z.zone_name,
+      district: z.district,
+      state: z.state,
+      currentRiskLevel: z.current_risk_level,
+      population: z.population,
+      roadSegments: roads
+        .filter((r) => r.zone_id === z.id)
+        .map((r) => ({
+          id: r.id,
+          roadName: r.road_name,
+          segmentLabel: r.segment_label,
+          status: r.status,
+        })),
+      fieldObservations: observations
+        .filter((o) => o.zone_id === z.id)
+        .map((o) => ({
+          id: o.id,
+          reviewStatus: o.review_status ?? undefined,
+          roadStatus: o.road_status ?? undefined,
+          visualSigns: o.visual_signs ?? undefined,
+          rainfallMm: o.rainfall_mm ?? undefined,
+        })),
+    }));
+
+    const { evaluateEmergencyPrioritization } = await import("./prioritization.service");
+    return evaluateEmergencyPrioritization(zoneInputs);
+  },
+);
+
 export const getRiskPredictionServerFn = createServerFn({ method: "GET" })
   .validator((data: { zoneId: number; asOfDate?: string }) => ({
     zoneId: Number(data.zoneId),

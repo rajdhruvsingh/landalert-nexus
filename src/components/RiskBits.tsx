@@ -68,6 +68,38 @@ export function ForecastRiskBadge({
   );
 }
 
+export function PrioritizationScoreBadge({
+  score,
+  className,
+}: {
+  score: number;
+  className?: string;
+}) {
+  let colorClass = "border-border text-muted-foreground bg-secondary/50";
+  if (score >= 70) {
+    colorClass = "border-risk-severe/50 bg-risk-severe/15 text-risk-severe font-bold";
+  } else if (score >= 50) {
+    colorClass = "border-risk-high/50 bg-risk-high/15 text-risk-high font-semibold";
+  } else if (score >= 30) {
+    colorClass = "border-risk-moderate/50 bg-risk-moderate/15 text-risk-moderate";
+  } else {
+    colorClass = "border-risk-low/50 bg-risk-low/15 text-risk-low";
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded border px-2 py-0.5 font-mono text-xs",
+        colorClass,
+        className,
+      )}
+    >
+      <span>{score.toFixed(1)}</span>
+      <span className="text-[0.6rem] opacity-70">/100</span>
+    </span>
+  );
+}
+
 export function RoadBadge({ status }: { status: string }) {
   return (
     <span

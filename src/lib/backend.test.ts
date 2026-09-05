@@ -911,6 +911,148 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       }
     });
   });
+
+  describe("TASK 2 — Emergency Response Prioritisation Engine", () => {
+    it("strictly excludes UNKNOWN-risk zones from numeric ranking", async () => {
+      const { scoreZonePrioritization, evaluateEmergencyPrioritization } = await import(
+        "./prioritization.service"
+      );
+
+      const unknownZone = {
+        zoneId: 99,
+        zoneName: "Telemeterless Ridge",
+        district: "East",
+        state: "Sikkim",
+        currentRiskLevel: "UNKNOWN",
+        population: 50000,
+        roadSegments: [{ id: 1, roadName: "NH-10", segmentLabel: "A", status: "blocked" as const }],
+        fieldObservations: [{ id: 1, visualSigns: "tension_cracks", reviewStatus: "PENDING_REVIEW" }],
+      };
+
+      // Direct scoring returns null for UNKNOWN (never coerced to numeric score)
+      const score = scoreZonePrioritization(unknownZone);
+      expect(score).toBeNull();
+
+      // evaluateEmergencyPrioritization segregates it to unrankedZones
+      const evaluated = evaluateEmergencyPrioritization([unknownZone]);
+      expect(evaluated.rankedZones.length).toBe(0);
+      expect(evaluated.unrankedZones.length).toBe(1);
+      expect(evaluated.unrankedZones[0].zoneId).toBe(99);
+      expect(evaluated.unrankedZones[0].reason).toContain("UNKNOWN");
+    });
+
+    it("verifies ranking order responds correctly to changes in each input factor according to documented weights", async () => {
+      const { scoreZonePrioritization, evaluateEmergencyPrioritization } = await import(
+        "./prioritization.service"
+      );
+
+      // Base zone: Low risk, 5,000 pop, open road, 0 observations
+      const baseZone = {
+        zoneId: 1,
+        zoneName: "Base Valley",
+        district: "D1",
+        state: "Sikkim",
+        currentRiskLevel: "Low" as const,
+        population: 5000,
+        roadSegments: [{ id: 1, roadName: "R1", segmentLabel: "A", status: "open" as const }],
+        fieldObservations: [],
+      };
+
+      const baseScore = scoreZonePrioritization(baseZone)!.score;
+
+      // 1. Severity change: Low -> Severe
+      const severeZone = { ...baseZone, zoneId: 2, currentRiskLevel: "Severe" as const };
+      const severeScore = scoreZonePrioritization(severeZone)!.score;
+      expect(severeScore).toBeGreaterThan(baseScore);
+
+      // 2. Population change: 5,000 -> 80,000
+      const populatedZone = { ...baseZone, zoneId: 3, population: 80000 };
+      const populatedScore = scoreZonePrioritization(populatedZone)!.score;
+      expect(populatedScore).toBeGreaterThan(baseScore);
+
+      // 3. Road status change: open -> blocked
+      const blockedRoadZone = {
+        ...baseZone,
+        zoneId: 4,
+        roadSegments: [{ id: 2, roadName: "R1", segmentLabel: "A", status: "blocked" as const }],
+      };
+      const blockedRoadScore = scoreZonePrioritization(blockedRoadZone)!.score;
+      expect(blockedRoadScore).toBeGreaterThan(baseScore);
+
+      // 4. Observations change: 0 -> 2 distress reports
+      const distressedZone = {
+        ...baseZone,
+        zoneId: 5,
+        fieldObservations: [
+          { id: 1, visualSigns: "subsidence", reviewStatus: "PENDING_REVIEW" },
+          { id: 2, visualSigns: "tension_cracks", reviewStatus: "PENDING_REVIEW" },
+        ],
+      };
+      const distressedScore = scoreZonePrioritization(distressedZone)!.score;
+      expect(distressedScore).toBeGreaterThan(baseScore);
+
+      // Verify overall ranking sorts descending by priorityScore
+      const rankedResult = evaluateEmergencyPrioritization([
+        baseZone,
+        severeZone,
+        populatedZone,
+        blockedRoadZone,
+        distressedZone,
+      ]);
+
+      expect(rankedResult.rankedZones.length).toBe(5);
+      expect(rankedResult.rankedZones[0].rank).toBe(1);
+      for (let i = 0; i < rankedResult.rankedZones.length - 1; i++) {
+        expect(rankedResult.rankedZones[i].priorityScore).toBeGreaterThanOrEqual(
+          rankedResult.rankedZones[i + 1].priorityScore,
+        );
+      }
+    });
+
+    it("verifies mathematical formula matches 40% severity, 25% population, 20% road, 15% observation specification", async () => {
+      const { scoreZonePrioritization } = await import("./prioritization.service");
+
+      // Controlled test zone with known parameters:
+      // High risk = severityRank 3/4 * 40 = 30.0 pts
+      // Population 50,000 / 100,000 * 25 = 12.5 pts
+      // Blocked road = 1.0 * 20 = 20.0 pts
+      // 2 distress / 4 cap = 0.5 * 15 = 7.5 pts
+      // Total = 30.0 + 12.5 + 20.0 + 7.5 = 70.0
+      const zone = {
+        zoneId: 10,
+        zoneName: "Math Test Ridge",
+        district: "Gangtok",
+        state: "Sikkim",
+        currentRiskLevel: "High" as const,
+        population: 50000,
+        roadSegments: [{ id: 1, roadName: "NH-10", segmentLabel: "A", status: "blocked" as const }],
+        fieldObservations: [
+          { id: 1, visualSigns: "tension_cracks", reviewStatus: "PENDING_REVIEW" },
+          { id: 2, visualSigns: "rockfall", reviewStatus: "PENDING_REVIEW" },
+        ],
+      };
+
+      const evaluated = scoreZonePrioritization(zone)!;
+      expect(evaluated.breakdown.severityPoints).toBe(30.0);
+      expect(evaluated.breakdown.populationPoints).toBe(12.5);
+      expect(evaluated.breakdown.roadPoints).toBe(20.0);
+      expect(evaluated.breakdown.observationPoints).toBe(7.5);
+      expect(evaluated.score).toBe(70.0);
+    });
+
+    it("verifies prioritization REST API returns decision-support envelope with unranked zones segregated", async () => {
+      const req = new Request("http://localhost/api/response/prioritization", { method: "GET" });
+      const res = await handleApiRequest(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(Array.isArray(json.rankedZones)).toBe(true);
+      expect(Array.isArray(json.unrankedZones)).toBe(true);
+      expect(json.weights).toBeDefined();
+      expect(json.weights.severityWeight).toBe(0.4);
+      expect(json.disclaimer).toMatch(/decision-support/i);
+    });
+  });
 });
 
 
