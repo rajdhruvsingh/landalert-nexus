@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { getUserAuthorizationState } from "@/lib/official-auth.service";
 import {
   Area,
@@ -91,6 +92,7 @@ export const Route = createFileRoute("/zones/$id")({
 });
 
 function ZonePage() {
+  const { t } = useTranslation();
   const { id } = Route.useParams();
   const { data } = useSuspenseQuery(zoneQuery(Number(id)));
   const qc = useQueryClient();
@@ -167,14 +169,14 @@ function ZonePage() {
           to="/"
           className="font-display text-xs uppercase tracking-widest text-primary hover:underline"
         >
-          ← Back to console
+          {t("zone_detail.back_to_console")}
         </Link>
         <div className="flex items-center gap-2">
           <FieldObservationDialog
             initialZoneId={zone.id}
             trigger={
               <Button variant="outline" size="sm" className="font-mono text-xs uppercase">
-                Report Field Reading
+                {t("nav.report_field_reading")}
               </Button>
             }
             onSuccess={() => qc.invalidateQueries()}
@@ -188,22 +190,22 @@ function ZonePage() {
                 size="sm"
                 className="font-mono text-xs uppercase tracking-wider"
               >
-                Dispatch Alert
+                {t("alerts.dispatch_alert")}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[480px] bg-surface text-foreground border-border">
               <DialogHeader>
                 <DialogTitle className="text-xl font-display uppercase tracking-wide">
-                  Emergency Alert Dispatch: {zone.zone_name}
+                  {t("alerts.dispatch_alert")}: {zone.zone_name}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Explicit dispatcher decision required. Triggers SMS and push notifications to district disaster control rooms and logs an immutable audit trail.
+                  {t("alerts.dispatcher_decision_notice")}
                 </DialogDescription>
               </DialogHeader>
 
               <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[0.7rem] font-mono text-muted-foreground">
-                <span className="font-semibold text-primary uppercase tracking-wide">Authority Notice: </span>
-                Emergency dispatch requires verified <strong>DISPATCHER</strong> or <strong>ADMIN</strong> credentials.
+                <span className="font-semibold text-primary uppercase tracking-wide">{t("alerts.authority_notice")}: </span>
+                {t("alerts.authority_notice_body")}
               </div>
 
               {dispatchStatus && (
@@ -215,11 +217,11 @@ function ZonePage() {
               <div className="space-y-4 pt-1">
                 <div className="flex items-center justify-between rounded border border-border bg-secondary/30 p-3">
                   <div>
-                    <div className="label-caps text-[0.68rem]">Authoritative Risk Level</div>
+                    <div className="label-caps text-[0.68rem]">{t("zone_detail.authoritative_risk_level")}</div>
                     <div className="mt-1 flex items-center gap-2">
                       <RiskBadge level={zone.current_risk_level} score={zone.risk_score} />
                       <span className="font-mono text-xs text-muted-foreground">
-                        ML Probability:{" "}
+                        {t("zone_detail.ml_probability")}:{" "}
                         {mlPrediction
                           ? `${(mlPrediction.probability * 100).toFixed(1)}%`
                           : "Loading…"}
@@ -231,7 +233,7 @@ function ZonePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <label className="text-xs font-mono uppercase text-muted-foreground">
-                      Language
+                      {t("alerts.language")}
                     </label>
                     <Select
                       value={alertLang}
@@ -251,7 +253,7 @@ function ZonePage() {
 
                   <div className="grid gap-2">
                     <label className="text-xs font-mono uppercase text-muted-foreground">
-                      Channel
+                      {t("alerts.channel")}
                     </label>
                     <Select
                       value={alertChannel}
@@ -261,9 +263,9 @@ function ZonePage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-surface border-border">
-                        <SelectItem value="both">Both (SMS + Push)</SelectItem>
-                        <SelectItem value="sms">SMS Gateway only</SelectItem>
-                        <SelectItem value="push">Mobile Push only</SelectItem>
+                        <SelectItem value="both">{t("alerts.channel_both")}</SelectItem>
+                        <SelectItem value="sms">{t("alerts.channel_sms")}</SelectItem>
+                        <SelectItem value="push">{t("alerts.channel_push")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -271,7 +273,7 @@ function ZonePage() {
 
                 <div className="grid gap-2">
                   <label className="text-xs font-mono uppercase text-muted-foreground">
-                    Operational Justification (Required)
+                    {t("alerts.justification_required")}
                   </label>
                   <Input
                     type="text"
@@ -285,12 +287,12 @@ function ZonePage() {
                 </div>
 
                 <div className="rounded border border-border/80 bg-secondary/20 p-3 font-mono text-xs space-y-1">
-                  <div className="label-caps text-[0.65rem]">Recipient Group</div>
+                  <div className="label-caps text-[0.65rem]">{t("zone_detail.recipient_group")}</div>
                   <div className="text-foreground">
-                    District Authorities, Village Councils & Emergency Responders
+                    {t("zone_detail.recipients_desc")}
                   </div>
                   <div className="text-[0.68rem] text-muted-foreground">
-                    Estimated population in coverage: {zone.population.toLocaleString("en-IN")}
+                    {t("zone_detail.population_in_coverage")}: {zone.population.toLocaleString("en-IN")}
                   </div>
                 </div>
               </div>
@@ -303,7 +305,7 @@ function ZonePage() {
                   disabled={dispatching}
                   className="font-mono text-xs"
                 >
-                  Cancel
+                  {t("alerts.cancel")}
                 </Button>
                 <Button
                   size="sm"
@@ -312,7 +314,7 @@ function ZonePage() {
                   disabled={dispatching || justification.trim().length < 8}
                   className="font-mono text-xs uppercase"
                 >
-                  {dispatching ? "Authorizing…" : "Authorize & Dispatch"}
+                  {dispatching ? t("alerts.authorizing") : t("alerts.authorize_dispatch")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -322,16 +324,16 @@ function ZonePage() {
 
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="label-caps">Zone brief</div>
+          <div className="label-caps">{t("zone_detail.zone_brief")}</div>
           <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">{zone.zone_name}</h1>
           <p className="text-sm text-muted-foreground">
             {zone.district} district · {zone.state} · {zone.population.toLocaleString("en-IN")}{" "}
-            residents
+            {t("zone_detail.residents")}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             {data.activeModel && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary">
-                Model: {data.activeModel.model_version}
+                {t("zone_detail.model")}: {data.activeModel.model_version}
               </span>
             )}
             <ScientificLimitationBadge />
@@ -349,7 +351,7 @@ function ZonePage() {
           />
           {mlPrediction && (
             <span className="font-mono text-[0.7rem] text-muted-foreground">
-              ML Probability: {(mlPrediction.probability * 100).toFixed(1)}%
+              {t("zone_detail.ml_probability")}: {(mlPrediction.probability * 100).toFixed(1)}%
             </span>
           )}
         </div>
@@ -357,30 +359,30 @@ function ZonePage() {
 
       <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat
-          label="72-hr rainfall"
+          label={t("zone_detail.stat_rainfall_72h")}
           value={`${r72.toFixed(0)} mm`}
           hint={`Intensity ${(r72 / 3).toFixed(1)} vs ${iThr.toFixed(1)} mm/day threshold`}
           tone={r72 / 3 > iThr ? riskColor("Severe") : undefined}
         />
         <Stat
-          label="30-day antecedent"
+          label={t("zone_detail.stat_antecedent_30d")}
           value={`${r30.toFixed(0)} mm`}
           hint={`Moisture threshold ${eThr.toFixed(0)} mm`}
           tone={r30 > eThr ? riskColor("High") : undefined}
         />
         <Stat
-          label="ML Inferred Probability"
+          label={t("zone_detail.stat_ml_inferred")}
           value={mlPrediction ? `${(mlPrediction.probability * 100).toFixed(1)}%` : "…"}
           hint="Logistic Regression v2 (19 features)"
           tone={mlPrediction && mlPrediction.probability >= 0.65 ? riskColor("Severe") : undefined}
         />
         <Stat
-          label="Mean slope"
+          label={t("zone_detail.stat_mean_slope")}
           value={`${zone.mean_slope_deg}°`}
           hint="Slope source in zone data; see docs/DATA_SOURCES.md"
         />
         <Stat
-          label="Historical slides"
+          label={t("zone_detail.stat_historical_slides")}
           value={data.slides.length}
           hint="Synthetic fixture — illustrative only, not from GSI Bhukosh"
         />
@@ -388,7 +390,7 @@ function ZonePage() {
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="panel p-4">
-          <div className="label-caps">Rainfall vs threshold · 30 days</div>
+          <div className="label-caps">{t("zone_detail.chart_rainfall_title")}</div>
           <div className="mt-3 h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={daily}>
@@ -402,37 +404,37 @@ function ZonePage() {
                     fontSize: 12,
                   }}
                 />
-                <Bar dataKey="rain" fill={riskColor("Moderate")} name="Rainfall (mm)" />
+                <Bar dataKey="rain" fill={riskColor("Moderate")} name={t("zone_detail.chart_rainfall_series")} />
                 <Line
                   type="monotone"
                   dataKey="threshold"
                   stroke={riskColor("Severe")}
                   strokeDasharray="4 4"
                   dot={false}
-                  name="I-D threshold"
+                  name={t("zone_detail.chart_threshold_series")}
                 />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-4 flex items-center justify-between">
-            <span className="label-caps">Soil moisture (%)</span>
+            <span className="label-caps">{t("zone_detail.chart_soil_title")}</span>
             {zone.soil_moisture_status === "fallback" ? (
               <span
                 className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-amber-400"
                 title="ERA5-Land historical soil moisture was unavailable for this region; fallback proxy 50% used."
               >
-                ⚠ Fallback proxy (50%)
+                {t("zone_detail.soil_fallback_badge")}
               </span>
             ) : zone.soil_moisture_status === "measured" ? (
               <span
                 className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-emerald-400"
                 title="ERA5-Land 0-3cm normalized to 0.40 m³/m³ field capacity"
               >
-                ✓ Observed ERA5-Land
+                {t("zone_detail.soil_observed_badge")}
               </span>
             ) : zone.soil_moisture_status === "stale" ? (
               <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-amber-400">
-                ⚠ Stale reading
+                {t("zone_detail.soil_stale_badge")}
               </span>
             ) : null}
           </div>
@@ -464,7 +466,7 @@ function ZonePage() {
         <div className="flex flex-col gap-4">
           <div className="panel overflow-hidden">
             <div className="border-b border-border px-4 py-3 label-caps">
-              Zone footprint & slide history
+              {t("zone_detail.zone_footprint")}
             </div>
             <div className="h-[240px]">
               <MapCanvas
@@ -485,7 +487,7 @@ function ZonePage() {
           />
 
           <div className="panel">
-            <div className="border-b border-border px-4 py-3 label-caps">Road segments</div>
+            <div className="border-b border-border px-4 py-3 label-caps">{t("zone_detail.road_segments")}</div>
             {data.roads.map((r) => (
               <div
                 key={r.id}
@@ -501,7 +503,7 @@ function ZonePage() {
               </div>
             ))}
             {data.roads.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">No mapped segments.</p>
+              <p className="p-4 text-sm text-muted-foreground">{t("zone_detail.no_road_segments")}</p>
             )}
           </div>
         </div>
@@ -511,13 +513,13 @@ function ZonePage() {
         <div className="panel">
           <div className="border-b border-border px-4 py-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="label-caps">Historical landslide inventory</span>
+              <span className="label-caps">{t("zone_detail.historical_inventory")}</span>
               {/* Gap 3: Clearly mark synthetic data so judges/teammates cannot mistake it for real GSI Bhukosh records */}
               <span
                 className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-amber-400"
                 title="These events were generated programmatically for demonstration purposes. They do not represent real GSI Bhukosh records. See docs/DATA_SOURCES.md for how to replace them with real inventory data."
               >
-                ⚠ Synthetic data — not sourced from GSI Bhukosh
+                {t("zone_detail.synthetic_badge")}
               </span>
             </div>
           </div>
@@ -538,14 +540,14 @@ function ZonePage() {
               </div>
             ))}
             {data.slides.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">No recorded events for this zone.</p>
+              <p className="p-4 text-sm text-muted-foreground">{t("zone_detail.no_historical_slides")}</p>
             )}
           </div>
         </div>
 
         <div className="panel">
           <div className="border-b border-border px-4 py-3 label-caps">
-            Alerts issued for this zone
+            {t("zone_detail.alerts_issued")}
           </div>
           <div className="max-h-[240px] space-y-3 overflow-y-auto p-4">
             {data.alerts.map((a) => (
@@ -560,7 +562,7 @@ function ZonePage() {
               </div>
             ))}
             {data.alerts.length === 0 && (
-              <p className="text-sm text-muted-foreground">No alerts dispatched for this zone.</p>
+              <p className="text-sm text-muted-foreground">{t("zone_detail.no_alerts_issued")}</p>
             )}
           </div>
         </div>
@@ -569,18 +571,18 @@ function ZonePage() {
       <section className="mt-4 panel">
         <div className="border-b border-border px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="label-caps">Field Observations & Geo-tagged Media</span>
+            <span className="label-caps">{t("zone_detail.field_observations_title")}</span>
             <span className="font-mono text-xs text-muted-foreground">
-              ({data.observations?.length || 0} reports)
+              ({data.observations?.length || 0} {t("zone_detail.reports")})
             </span>
           </div>
           <span className="font-mono text-[0.68rem] text-muted-foreground">
-            Official approval required for public media display
+            {t("zone_detail.official_approval_notice")}
           </span>
         </div>
         <div className="p-4 space-y-4">
           {(!data.observations || data.observations.length === 0) && (
-            <p className="text-sm text-muted-foreground py-2">No field observations recorded for this zone yet.</p>
+            <p className="text-sm text-muted-foreground py-2">{t("zone_detail.no_observations")}</p>
           )}
           {data.observations?.map((obs: any) => {
             const isApproved = obs.review_status === "APPROVED" || obs.status === "OFFICIAL_VERIFIED";
@@ -602,11 +604,11 @@ function ZonePage() {
                   <div className="flex items-center gap-2">
                     {isApproved ? (
                       <span className="inline-flex items-center rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-emerald-400 border border-emerald-500/30">
-                        ✓ Verified Official
+                        {t("zone_detail.verified_official")}
                       </span>
                     ) : (
                       <span className="inline-flex items-center rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-400 border border-amber-500/30">
-                        ⏳ Unverified (Pending Review)
+                        {t("zone_detail.unverified_pending")}
                       </span>
                     )}
                     {obs.road_status && <RoadBadge status={obs.road_status} />}
@@ -615,17 +617,17 @@ function ZonePage() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono mb-3 text-muted-foreground">
                   {obs.rainfall_mm !== null && obs.rainfall_mm !== undefined && (
-                    <div>Rainfall: <span className="text-foreground">{obs.rainfall_mm} mm/h</span></div>
+                    <div>{t("zone_detail.label_rainfall")} <span className="text-foreground">{obs.rainfall_mm} mm/h</span></div>
                   )}
                   {obs.soil_condition && (
-                    <div>Soil: <span className="text-foreground">{obs.soil_condition}</span></div>
+                    <div>{t("zone_detail.label_soil")} <span className="text-foreground">{obs.soil_condition}</span></div>
                   )}
                   {obs.visual_signs && (
-                    <div className="col-span-2">Signs: <span className="text-amber-300">{obs.visual_signs}</span></div>
+                    <div className="col-span-2">{t("zone_detail.label_signs")} <span className="text-amber-300">{obs.visual_signs}</span></div>
                   )}
                   {obs.geo_lat && obs.geo_lng && (
                     <div className="col-span-2 text-primary">
-                      GPS: {obs.geo_lat.toFixed(4)}°N, {obs.geo_lng.toFixed(4)}°E (±{Math.round(obs.geo_accuracy_m || 0)}m)
+                      {t("zone_detail.label_gps")} {obs.geo_lat.toFixed(4)}°N, {obs.geo_lng.toFixed(4)}°E (±{Math.round(obs.geo_accuracy_m || 0)}m)
                     </div>
                   )}
                 </div>
@@ -651,7 +653,7 @@ function ZonePage() {
                       </div>
                     ) : (
                       <div className="rounded bg-secondary/30 p-2 text-xs font-mono text-muted-foreground border border-border/50 mt-2">
-                        🔒 Media quarantined pending dispatcher verification.
+                        {t("zone_detail.media_quarantined")}
                       </div>
                     )}
                   </div>

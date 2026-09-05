@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getOverview, dispatchAlertServerFn } from "@/lib/monitoring.functions";
 import { RiskBadge } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
@@ -79,6 +80,7 @@ export const Route = createFileRoute("/alerts")({
 });
 
 function AlertsPage() {
+  const { t } = useTranslation();
   const { data } = useSuspenseQuery(overviewQuery);
   const qc = useQueryClient();
   const [lang, setLang] = useState("en");
@@ -140,11 +142,10 @@ function AlertsPage() {
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="label-caps">Dispatch log & early warning</div>
-          <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">Alert Console</h1>
+          <div className="label-caps">{t("alerts.console_tag")}</div>
+          <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide">{t("alerts.console_title")}</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Authoritative alerts dispatched when zones cross into High or Severe risk. Every alert
-            carries verified threshold arithmetic and multilingual SMS broadcast text.
+            {t("alerts.console_desc")}
           </p>
         </div>
 
@@ -155,22 +156,22 @@ function AlertsPage() {
               size="sm"
               className="font-mono text-xs uppercase tracking-wider"
             >
-              + Dispatch Emergency Alert
+              {t("alerts.dispatch_emergency_alert")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[480px] bg-surface text-foreground border-border">
             <DialogHeader>
               <DialogTitle className="text-xl font-display uppercase tracking-wide">
-                Issue Emergency Landslide Alert
+                {t("alerts.issue_alert_title")}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Explicit dispatcher decision required. Evaluates threshold conditions and logs an immutable audit trail.
+                {t("alerts.issue_alert_desc")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[0.7rem] font-mono text-muted-foreground">
               <span className="font-semibold text-primary uppercase tracking-wide">Authority Notice: </span>
-              Requires authorized <strong>DISPATCHER</strong> or <strong>ADMIN</strong> credentials. Unverified users cannot dispatch emergency broadcasts.
+              {t("alerts.authority_notice")}
             </div>
 
             {dispatchResult && (
@@ -182,7 +183,7 @@ function AlertsPage() {
             <form onSubmit={handleManualDispatch} className="space-y-4 pt-1">
               <div className="grid gap-2">
                 <label className="text-xs font-mono uppercase text-muted-foreground">
-                  Target Zone
+                  {t("alerts.target_zone")}
                 </label>
                 <Select
                   value={String(targetZoneId)}
@@ -204,7 +205,7 @@ function AlertsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <label className="text-xs font-mono uppercase text-muted-foreground">
-                    Language
+                    {t("alerts.select_language")}
                   </label>
                   <Select
                     value={targetLang}
@@ -224,7 +225,7 @@ function AlertsPage() {
 
                 <div className="grid gap-2">
                   <label className="text-xs font-mono uppercase text-muted-foreground">
-                    Channel
+                    {t("alerts.select_channel")}
                   </label>
                   <Select
                     value={targetChannel}
@@ -234,9 +235,9 @@ function AlertsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-surface border-border">
-                      <SelectItem value="both">Both (SMS + Push)</SelectItem>
-                      <SelectItem value="sms">SMS Gateway</SelectItem>
-                      <SelectItem value="push">Mobile Push</SelectItem>
+                      <SelectItem value="both">{t("alerts.channel_both")}</SelectItem>
+                      <SelectItem value="sms">{t("alerts.channel_sms")}</SelectItem>
+                      <SelectItem value="push">{t("alerts.channel_push")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -244,7 +245,7 @@ function AlertsPage() {
 
               <div className="grid gap-2">
                 <label className="text-xs font-mono uppercase text-muted-foreground">
-                  Operational Justification (Required)
+                  {t("alerts.justification_required")}
                 </label>
                 <Input
                   type="text"
@@ -266,7 +267,7 @@ function AlertsPage() {
                   disabled={dispatching}
                   className="font-mono text-xs"
                 >
-                  Cancel
+                  {t("alerts.cancel")}
                 </Button>
                 <Button
                   type="submit"
@@ -275,13 +276,14 @@ function AlertsPage() {
                   disabled={dispatching || justification.trim().length < 8}
                   className="font-mono text-xs uppercase"
                 >
-                  {dispatching ? "Authorizing…" : "Authorize & Dispatch"}
+                  {dispatching ? t("alerts.authorizing") : t("alerts.authorize_dispatch")}
                 </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
       </div>
+
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-y border-border/60 py-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -295,17 +297,17 @@ function AlertsPage() {
                   : "border-border text-muted-foreground hover:bg-secondary"
               }`}
             >
-              {l}
+              {l === "All" ? t("alerts.filter_all") : t(`risk_levels.${l}`)}
             </button>
           ))}
           <span className="mx-1 h-5 w-px bg-border" />
           <Select value={selectedZoneFilter} onValueChange={setSelectedZoneFilter}>
             <SelectTrigger className="h-8 w-44 bg-secondary/30 border-border font-mono text-xs">
-              <SelectValue placeholder="All Zones" />
+              <SelectValue placeholder={t("alerts.all_zones")} />
             </SelectTrigger>
             <SelectContent className="bg-surface border-border max-h-56">
               <SelectItem value="All" className="text-xs font-mono">
-                All Zones
+                {t("alerts.all_zones")}
               </SelectItem>
               {data.zones.map((z) => (
                 <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
@@ -317,7 +319,7 @@ function AlertsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {Object.entries(TEMPLATES).map(([code, t]) => (
+          {Object.entries(TEMPLATES).map(([code, tItem]) => (
             <button
               key={code}
               onClick={() => setLang(code)}
@@ -327,7 +329,7 @@ function AlertsPage() {
                   : "border-border text-muted-foreground hover:bg-secondary"
               }`}
             >
-              {t.label}
+              {tItem.label}
             </button>
           ))}
         </div>
@@ -372,14 +374,14 @@ function AlertsPage() {
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <div className="rounded border border-border bg-surface-raised p-3">
                   <div className="label-caps">
-                    Multilingual SMS Preview ({TEMPLATES[lang]!.label})
+                    {t("alerts.sms_preview")} ({TEMPLATES[lang]!.label})
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-foreground/95">
                     {TEMPLATES[lang]!.render(zoneName, a.risk_level)}
                   </p>
                 </div>
                 <div className="rounded border border-primary/35 bg-primary/5 p-3">
-                  <div className="label-caps text-primary">Hydrological Reasoning</div>
+                  <div className="label-caps text-primary">{t("alerts.hydrological_reasoning")}</div>
                   <p className="mt-2 font-mono text-[0.75rem] leading-relaxed text-foreground/90">
                     {a.explanation}
                   </p>
@@ -390,7 +392,7 @@ function AlertsPage() {
         })}
         {alerts.length === 0 && (
           <div className="panel p-8 text-center">
-            <p className="text-sm text-muted-foreground">No alerts match the selected criteria.</p>
+            <p className="text-sm text-muted-foreground">{t("alerts.no_matching_alerts")}</p>
           </div>
         )}
       </div>

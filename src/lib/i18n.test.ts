@@ -58,4 +58,40 @@ describe("Multilingual UI (i18n) Support", () => {
     setAppLanguage("en");
     expect(i18n.language).toBe("en");
   });
+
+  it("maintains complete key parity and non-empty translations for alerts and zone_detail across all 4 languages", () => {
+    const languages = [
+      { code: "as", bundle: as },
+      { code: "bn", bundle: bn },
+      { code: "ne", bundle: ne },
+    ];
+
+    const sections = ["alerts", "zone_detail"] as const;
+
+    for (const section of sections) {
+      const enKeys = Object.keys(en[section]);
+      expect(enKeys.length, `en.${section} should have translation keys`).toBeGreaterThan(0);
+
+      for (const key of enKeys) {
+        const enValue = (en[section] as Record<string, string>)[key];
+        expect(enValue && enValue.trim().length > 0, `en.${section}.${key} is empty`).toBe(true);
+
+        for (const { code, bundle } of languages) {
+          const sectionBundle = (bundle as any)[section];
+          expect(sectionBundle, `${code} missing entire section ${section}`).toBeDefined();
+
+          const localizedValue = sectionBundle[key];
+          expect(
+            localizedValue !== undefined,
+            `Language ${code} missing key "${section}.${key}"`,
+          ).toBe(true);
+          expect(
+            typeof localizedValue === "string" && localizedValue.trim().length > 0,
+            `Language ${code} has empty translation for "${section}.${key}"`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
 });
+
