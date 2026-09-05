@@ -57,7 +57,7 @@ class LandslideRiskInferenceEngine:
         """
         close_conn = False
         if conn is None:
-            conn = psycopg2.connect(DATABASE_URL)
+            conn = psycopg2.connect(DATABASE_URL, connect_timeout=3)
             close_conn = True
 
         as_of = pd.Timestamp.now(tz=timezone.utc) if as_of_date is None else pd.Timestamp(as_of_date)
@@ -187,7 +187,7 @@ class LandslideRiskInferenceEngine:
         close_conn = False
         if conn is None:
             try:
-                conn = psycopg2.connect(DATABASE_URL)
+                conn = psycopg2.connect(DATABASE_URL, connect_timeout=3)
                 close_conn = True
             except Exception:
                 return False

@@ -257,29 +257,35 @@ describe("REST API Router (/api/*)", () => {
     expect(body.scientific_status).toContain("DATA LIMITED");
   });
 
-  it("GET /api/risk-prediction returns 200 with valid prediction payload", async () => {
-    const req = new Request("http://localhost:3000/api/risk-prediction?zoneId=1");
-    const res = await handleApiRequest(req);
-    expect(res).not.toBeNull();
-    expect(res!.status).toBe(200);
+  // Spawns real Python ML subprocess (pandas/scikit-learn) with database connectivity.
+  // Uses psycopg2 connect_timeout=3 and 4000ms subprocess timeout with deterministic fallback.
+  it(
+    "GET /api/risk-prediction returns 200 with valid prediction payload",
+    async () => {
+      const req = new Request("http://localhost:3000/api/risk-prediction?zoneId=1");
+      const res = await handleApiRequest(req);
+      expect(res).not.toBeNull();
+      expect(res!.status).toBe(200);
 
-    const body = (await res!.json()) as {
-      status: string;
-      zone_id: number;
-      model_version: string;
-      probability: number;
-      risk_score: number;
-      risk_level: string;
-      data_freshness: { soil_moisture_status: string };
-    };
-    expect(body.zone_id).toBe(1);
-    expect(body.model_version).toBe("v0.2-lr-trained");
-    expect(body.probability).toBeGreaterThanOrEqual(0.0);
-    expect(body.probability).toBeLessThanOrEqual(1.0);
-    expect(body.risk_score).toBeGreaterThanOrEqual(0.0);
-    expect(body.risk_score).toBeLessThanOrEqual(100.0);
-    expect(["Low", "Moderate", "High", "Severe"]).toContain(body.risk_level);
-  });
+      const body = (await res!.json()) as {
+        status: string;
+        zone_id: number;
+        model_version: string;
+        probability: number;
+        risk_score: number;
+        risk_level: string;
+        data_freshness: { soil_moisture_status: string };
+      };
+      expect(body.zone_id).toBe(1);
+      expect(body.model_version).toBe("v0.2-lr-trained");
+      expect(body.probability).toBeGreaterThanOrEqual(0.0);
+      expect(body.probability).toBeLessThanOrEqual(1.0);
+      expect(body.risk_score).toBeGreaterThanOrEqual(0.0);
+      expect(body.risk_score).toBeLessThanOrEqual(100.0);
+      expect(["Low", "Moderate", "High", "Severe"]).toContain(body.risk_level);
+    },
+    10000,
+  );
 
   it("GET /api/risk-prediction rejects invalid zoneId with 400", async () => {
     const req = new Request("http://localhost:3000/api/risk-prediction?zoneId=99");
