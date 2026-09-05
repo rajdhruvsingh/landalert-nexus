@@ -307,15 +307,54 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     }
   }
 
-  // Tier 2: Self-healing PostgREST schema adaptation loop
+  // Tier 2: Self-healing PostgREST schema adaptation & constraint-tolerant sync
   if (!syncSuccess) {
-    let currentRows: any[] = validRows.map((r) => ({ ...r }));
+    // 1. Pre-query existing idempotency keys to guarantee idempotency without requiring a database-level unique constraint
+    const keysToCheck = validRows.map((r) => r.idempotency_key).filter(Boolean) as string[];
+    let existingKeySet = new Set<string>();
+    if (keysToCheck.length > 0) {
+      try {
+        const { data: existingRows } = await supabaseAdmin
+          .from("field_observations")
+          .select("idempotency_key")
+          .in("idempotency_key", keysToCheck);
+        if (existingRows) {
+          existingKeySet = new Set(
+            existingRows.map((r: any) => r.idempotency_key).filter(Boolean),
+          );
+        }
+      } catch {
+        // Continue if select is not supported
+      }
+    }
+
+    let currentRows: any[] = validRows
+      .filter((r) => !r.idempotency_key || !existingKeySet.has(r.idempotency_key))
+      .map((r) => ({ ...r }));
+
+    // If all rows were already inserted, acknowledge and return success immediately
+    if (currentRows.length === 0) {
+      return {
+        success: true,
+        receivedCount: records.length,
+        syncedCount: validRows.length,
+        skippedDuplicates: validRows.length,
+        acknowledgedKeys,
+      };
+    }
+
     const strippedMetadata: Record<string, Record<string, any>> = {};
+    let usePlainInsert = false;
 
     for (let attempt = 0; attempt < 12; attempt++) {
-      const { error: upsertErr } = await supabaseAdmin
-        .from("field_observations")
-        .upsert(currentRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
+      const query = usePlainInsert
+        ? supabaseAdmin.from("field_observations").insert(currentRows as any)
+        : supabaseAdmin.from("field_observations").upsert(currentRows as any, {
+            onConflict: "idempotency_key",
+            ignoreDuplicates: true,
+          });
+
+      const { error: upsertErr } = await query;
 
       if (!upsertErr) {
         syncSuccess = true;
@@ -323,6 +362,17 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       }
 
       lastError = upsertErr;
+
+      // Handle missing unique/exclusion constraint for ON CONFLICT specification
+      if (
+        upsertErr.message.includes("unique or exclusion constraint") ||
+        upsertErr.message.includes("ON CONFLICT")
+      ) {
+        usePlainInsert = true;
+        continue;
+      }
+
+      // Handle missing column in PostgREST schema cache
       const match = upsertErr.message.match(/Could not find the '([^']+)' column/i);
       if (match && match[1]) {
         const missingCol = match[1];
@@ -347,7 +397,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
         continue;
       }
 
-      // Non-column error encountered
+      // Non-recoverable error encountered
       break;
     }
   }

@@ -32,12 +32,24 @@ vi.mock("@/integrations/supabase/client.server", () => {
             }
             return { data: rows, error: null };
           },
-          select: () => ({
+          insert: async (rows: any[]) => {
+            let inserted = 0;
+            for (const r of rows) {
+              MOCK_DB_RECORDS.push({ ...r, id: `obs-${Date.now()}-${inserted}` });
+              inserted++;
+            }
+            return { data: rows, error: null };
+          },
+          select: (cols?: string) => ({
             eq: () => ({
               maybeSingle: async () => ({ data: null, error: null }),
             }),
             order: () => ({
               limit: async () => ({ data: [], error: null }),
+            }),
+            in: async (col: string, values: string[]) => ({
+              data: MOCK_DB_RECORDS.filter((item) => values.includes(item[col])),
+              error: null,
             }),
           }),
         };
@@ -511,5 +523,38 @@ describe("Authoritative End-to-End Real Sync, Media, and DB Schema Pipeline Test
     expect(res.syncedCount).toBe(1);
     mockUpsertError = null;
   });
+
+  // 25: Resilient recovery when ON CONFLICT unique constraint is missing in database
+  it("25: syncFieldObservations recovers when ON CONFLICT unique constraint is missing", async () => {
+    const { syncFieldObservations } = await import("./sync.service");
+
+    let upsertAttempts = 0;
+    mockUpsertError = ((rows: any[]) => {
+      upsertAttempts++;
+      return {
+        message: "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      };
+    }) as any;
+
+    const testRecord = {
+      zone_id: 2,
+      observed_at: new Date().toISOString(),
+      client_timestamp: new Date().toISOString(),
+      rainfall_mm: 12.0,
+      visual_signs: "Water seeping through retaining wall",
+      road_status: "open" as const,
+      observer_id: "observer_conflict_test",
+      idempotency_key: `CONFLICT_TEST_${Date.now()}`,
+      consent_given: true,
+      review_status: "PENDING_REVIEW" as const,
+    };
+
+    const res = await syncFieldObservations([testRecord]);
+    expect(res.success).toBe(true);
+    expect(res.syncedCount).toBe(1);
+    expect(upsertAttempts).toBeGreaterThanOrEqual(1);
+    mockUpsertError = null;
+  });
 });
+
 

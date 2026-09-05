@@ -114,11 +114,21 @@ export async function ensureFieldObservationsSchema(): Promise<boolean> {
       });
     }
 
-    // 3. Unique index for idempotency
+    // 3. Unique index and constraint for idempotency
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_field_observations_idempotency_key
         ON public.field_observations (idempotency_key)
         WHERE idempotency_key IS NOT NULL;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'uq_field_observations_idempotency_key'
+        ) THEN
+          ALTER TABLE public.field_observations
+            ADD CONSTRAINT uq_field_observations_idempotency_key UNIQUE (idempotency_key);
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
     `).catch(() => {});
 
     // 4. Permissions
