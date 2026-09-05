@@ -35,4 +35,5 @@ dist-ssr
 *.sw?
 __pycache__/
 *.pyc
+public/uploads/
 

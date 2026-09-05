@@ -158,8 +158,29 @@ async function uploadQueuedMediaItem(dataUrl: string, filename: string, zoneId: 
     fd.append("file", blob, filename);
     fd.append("zoneId", String(zoneId));
 
+    let authHeader = "";
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      let session = (await supabase.auth.getSession()).data.session;
+      if (!session) {
+        const anon = await supabase.auth.signInAnonymously();
+        session = anon.data.session;
+      }
+      if (session?.access_token) {
+        authHeader = `Bearer ${session.access_token}`;
+      }
+    } catch {
+      // Continue if auth unavailable
+    }
+
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch("/api/field-observations/upload", {
       method: "POST",
+      headers,
       body: fd,
     });
     if (res.ok) {

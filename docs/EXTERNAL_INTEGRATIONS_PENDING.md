@@ -118,3 +118,18 @@ The following architectural decisions cannot be assumed or hardcoded by automate
 | **Field Media Retention Period** | State Disaster Management Authorities & Legal Counsel | (A) 90-day retention with automatic archival to save storage quotas; (B) Permanent 5-year retention for forensic/judicial landslide disaster inquiries. | **Open Decision** |
 | **Primary Cloud Infrastructure** | Ministry of Electronics & IT (MeitY) | (A) Supabase Managed Cloud with Render backend; (B) Migration to National Informatics Centre (NIC) MeghRaj Sovereign Government Cloud. | **Evaluated for Production Deploy** |
 | **Public vs Restricted Media Display** | DDMA Incident Commanders | Observation photos from public citizens remain quarantined until verified by an official DISPATCHER/ADMIN. | **Implemented & Enforced in Code** |
+
+---
+
+## 7. Storage Row Level Security (RLS) & Submitter Authentication
+
+### Code Status
+- **Database Migration**: `supabase/migrations/20260905042000_fix_storage_rls_authenticated_only.sql`
+- **Client Implementation**: `src/components/FieldObservationDialog.tsx` via `ensureAuthenticatedSession()`
+- **Backend Enpoints**: `/api/field-observations/upload` and `/api/field-observations/status`
+- **Behavior**:
+  - Direct INSERT to `storage.objects` for bucket `field-observation-media` is restricted to `authenticated` sessions only; `anon` direct insertion policy has been revoked.
+  - Citizen submitters without prior credentials automatically obtain an anonymous Supabase session (`auth.signInAnonymously()`), ensuring an authenticated session token accompanies every media upload.
+  - Submitter trust tiers remain governed by institutional domain verification (`PUBLIC_USER` vs `VERIFIED_OFFICIAL`), preserving public media quarantine workflows.
+  - Direct SELECT on `storage.objects` is denied to `anon`; all public viewing is mediated exclusively via temporary time-bounded signed URLs (`createSignedUrl`).
+

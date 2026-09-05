@@ -9,8 +9,10 @@ This document specifies the authoritative REST API contracts, authentication mec
 | Authentication Scheme    | Mechanism                                           | Scope                                                                                 |
 | :----------------------- | :-------------------------------------------------- | :------------------------------------------------------------------------------------ |
 | **Public / Anonymous**   | No credentials required (read-only)                 | Health, risk predictions, GIS layers, offline sync packages                           |
-| **Cron / Automated Job** | `Authorization: Bearer <CRON_SECRET>`       | Live weather ingestion (`/api/ingest-weather`), risk recomputation (`/api/recompute`) |
+| **Authenticated Session**| `Authorization: Bearer <SUPABASE_AUTH_TOKEN>`       | Field observation media upload (`/api/field-observations/upload`), storage.objects INSERT |
+| **Cron / Automated Job** | `Authorization: Bearer <CRON_SECRET>`               | Live weather ingestion (`/api/ingest-weather`), risk recomputation (`/api/recompute`) |
 | **Service Role / Admin** | `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` | Direct database mutations, model activation, registry rollback                        |
+
 
 All requests are protected by:
 
@@ -315,6 +317,19 @@ To deliver real, live SMS alerts to citizens and emergency authorities in India:
 - **Method**: `GET`
 - **Path**: `/api/satellite/status` and `/api/satellite/tiles?layer=[TRUE-COLOR|NDVI]&z={z}&x={x}&y={y}`
 - **Description**: Status endpoint returns credential configuration state. Tile proxy retrieves Sentinel-2 tiles with 24-hour server-side TTL caching. Gracefully disabled when `SENTINEL_HUB_INSTANCE_ID` is unconfigured.
+
+### 2.12 Field Observation Media Upload & Capability Status
+
+- **Status Check**: `GET /api/field-observations/status`
+  - **Authentication**: Public
+  - **Description**: Returns `{ "mediaUploadEnabled": boolean }` reflecting the `MEDIA_UPLOAD_ENABLED` environment toggle.
+- **Media Upload**: `POST /api/field-observations/upload`
+  - **Authentication**: `Authorization: Bearer <SUPABASE_AUTH_TOKEN>` (Session required; citizen submitters authenticate anonymously via `supabase.auth.signInAnonymously()` or institutional SSO).
+  - **Feature Gate**: Rejects with `403 MEDIA_UPLOAD_DISABLED` if `MEDIA_UPLOAD_ENABLED !== "true"`.
+  - **Storage Row Level Security (RLS)**: Direct INSERT to `storage.objects` for bucket `field-observation-media` requires `authenticated` role; direct `anon` insertion is rejected. SELECT is restricted to `authenticated` and `service_role`. All media reads are served via time-bounded signed URLs (`createSignedUrl`).
+  - **Payload**: Multipart form-data (`file`, `zoneId`). Maximum 10MB for photos, 50MB for video.
+  - **Response**: `{ "success": true, "url": string, "storagePath": string, "name": string, "size": number, "mimeType": string }`
+
 
 ---
 
