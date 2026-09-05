@@ -250,116 +250,118 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     };
   }
 
-  // Ensure schema is up to date if database connection is available
+  // Resilient multi-tier sync: PostgreSQL direct -> Self-healing PostgREST schema adaptation
   const { ensureFieldObservationsSchema, getPostgresPool, getDatabaseUrl, isProductionEnvironment } =
     await import("./db.server");
-  await ensureFieldObservationsSchema().catch(() => {});
+  const pool = getPostgresPool();
 
-  // Insert valid rows with ON CONFLICT (idempotency_key) DO NOTHING via Supabase
-  const { error: insErr } = await supabaseAdmin
-    .from("field_observations")
-    .upsert(validRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
+  let syncSuccess = false;
+  let lastError: { message: string } | null = null;
 
-  if (insErr) {
-    const isSchemaCacheErr =
-      insErr.message?.includes("schema cache") ||
-      insErr.message?.includes("column") ||
-      insErr.message?.includes("consent_given");
-
-    const pool = getPostgresPool();
-    let directPgSucceeded = false;
-
-    if (pool) {
-      let client = null;
-      try {
-        await ensureFieldObservationsSchema();
-        client = await pool.connect();
-        await client.query("BEGIN");
-        for (const r of validRows) {
-          await client.query(
-            `
-            INSERT INTO public.field_observations 
-            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-            ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-          `,
-            [
-              r.zone_id,
-              r.observer_id,
-              r.observed_at,
-              r.client_timestamp,
-              r.rainfall_mm,
-              r.soil_condition,
-              r.visual_signs,
-              r.road_status,
-              r.idempotency_key,
-              r.status,
-              r.is_training_eligible,
-              r.source,
-              r.media_urls,
-              JSON.stringify(r.media_metadata),
-              r.geo_lat,
-              r.geo_lng,
-              r.geo_accuracy_m,
-              r.geo_captured_at,
-              r.consent_given,
-              r.review_status,
-            ],
-          );
-        }
-        await client.query("COMMIT");
-        directPgSucceeded = true;
-      } catch (pgErr: any) {
-        if (client) await client.query("ROLLBACK").catch(() => {});
-        console.warn("[PostgreSQL Sync Notice]", pgErr?.message || pgErr);
-      } finally {
-        if (client) client.release();
+  // Tier 1: Direct PostgreSQL insert if pool connection is available
+  if (pool) {
+    let client = null;
+    try {
+      await ensureFieldObservationsSchema();
+      client = await pool.connect();
+      await client.query("BEGIN");
+      for (const r of validRows) {
+        await client.query(
+          `
+          INSERT INTO public.field_observations 
+          (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
+        `,
+          [
+            r.zone_id,
+            r.observer_id,
+            r.observed_at,
+            r.client_timestamp,
+            r.rainfall_mm,
+            r.soil_condition,
+            r.visual_signs,
+            r.road_status,
+            r.idempotency_key,
+            r.status,
+            r.is_training_eligible,
+            r.source,
+            r.media_urls,
+            JSON.stringify(r.media_metadata),
+            r.geo_lat,
+            r.geo_lng,
+            r.geo_accuracy_m,
+            r.geo_captured_at,
+            r.consent_given,
+            r.review_status,
+          ],
+        );
       }
+      await client.query("COMMIT");
+      syncSuccess = true;
+    } catch (pgErr: any) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.warn("[PostgreSQL Direct Sync Notice]", pgErr?.message || pgErr);
+    } finally {
+      if (client) client.release();
     }
+  }
 
-    if (!directPgSucceeded) {
-      // Tier 3: If PostgREST schema cache is missing newly added columns (like consent_given),
-      // preserve all data inside evidence_summary JSON and retry via PostgREST so the observation is safely stored!
-      if (isSchemaCacheErr) {
-        const sanitizedRows = validRows.map((r) => {
-          const rowCopy: Record<string, any> = { ...r };
-          rowCopy.evidence_summary = {
-            consent_given: r.consent_given,
-            review_status: r.review_status,
-            media_urls: r.media_urls,
-            media_metadata: r.media_metadata,
-            geo_accuracy_m: r.geo_accuracy_m,
-            geo_captured_at: r.geo_captured_at,
-          };
-          delete rowCopy.consent_given;
-          delete rowCopy.review_status;
-          delete rowCopy.media_urls;
-          delete rowCopy.media_metadata;
-          delete rowCopy.geo_accuracy_m;
-          delete rowCopy.geo_captured_at;
-          return rowCopy;
+  // Tier 2: Self-healing PostgREST schema adaptation loop
+  if (!syncSuccess) {
+    let currentRows: any[] = validRows.map((r) => ({ ...r }));
+    const strippedMetadata: Record<string, Record<string, any>> = {};
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const { error: upsertErr } = await supabaseAdmin
+        .from("field_observations")
+        .upsert(currentRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
+
+      if (!upsertErr) {
+        syncSuccess = true;
+        break;
+      }
+
+      lastError = upsertErr;
+      const match = upsertErr.message.match(/Could not find the '([^']+)' column/i);
+      if (match && match[1]) {
+        const missingCol = match[1];
+        currentRows = currentRows.map((row, idx) => {
+          const key = row.idempotency_key || String(idx);
+          if (!strippedMetadata[key]) strippedMetadata[key] = {};
+          if (missingCol in row) {
+            strippedMetadata[key][missingCol] = row[missingCol];
+            const copy = { ...row };
+            delete copy[missingCol];
+
+            // Embed stripped metadata into visual_signs so no evidence/consent is lost
+            const metaJson = JSON.stringify(strippedMetadata[key]);
+            const baseSigns = (copy.visual_signs || "").replace(/\s*\[EVIDENCE_META:[^\]]+\]/, "");
+            copy.visual_signs = baseSigns
+              ? `${baseSigns} [EVIDENCE_META:${metaJson}]`
+              : `[EVIDENCE_META:${metaJson}]`;
+            return copy;
+          }
+          return row;
         });
-
-        const { error: retryErr } = await supabaseAdmin
-          .from("field_observations")
-          .upsert(sanitizedRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
-
-        if (!retryErr) {
-          directPgSucceeded = true;
-        }
+        continue;
       }
 
-      if (!directPgSucceeded) {
-        const dbUrl = getDatabaseUrl();
-        const isProd = isProductionEnvironment();
-        if (!dbUrl && isProd) {
-          throw new Error(
-            `Failed to sync field observations: ${insErr.message} (Production DATABASE_URL is not configured)`,
-          );
-        }
-        throw new Error(`Failed to sync field observations: ${insErr.message}`);
-      }
+      // Non-column error encountered
+      break;
     }
+  }
+
+  if (!syncSuccess) {
+    const isProd = isProductionEnvironment();
+    const dbUrl = getDatabaseUrl();
+    const errMessage = lastError?.message || "Failed to sync field observations";
+    if (!dbUrl && isProd) {
+      throw new Error(
+        `Failed to sync field observations: ${errMessage} (Production DATABASE_URL is not configured)`,
+      );
+    }
+    throw new Error(`Failed to sync field observations: ${errMessage}`);
   }
 
   return {
