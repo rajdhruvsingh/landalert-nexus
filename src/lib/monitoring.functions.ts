@@ -549,3 +549,29 @@ export const submitFieldObservationsServerFn = createServerFn({ method: "POST" }
     const { syncFieldObservations } = await import("./sync.service");
     return syncFieldObservations(data.observations);
   });
+
+export const retractAlertServerFn = createServerFn({ method: "POST" })
+  .validator((data: { alertId: number; reason: string; authToken?: string }) => ({
+    alertId: Number(data.alertId),
+    reason: String(data.reason || "").trim(),
+    authToken: data.authToken,
+  }))
+  .handler(async ({ data }) => {
+    const { getSessionProfile } = await import("./official-auth.service");
+    const profile = await getSessionProfile(data.authToken);
+
+    const isAuthorized =
+      profile &&
+      (profile.role === "DISPATCHER" || profile.role === "ADMIN" || profile.dispatch_authorized);
+
+    if (!isAuthorized) {
+      throw new Error("Emergency alert retraction requires authorized DISPATCHER or ADMIN role.");
+    }
+
+    const { retractAlert } = await import("./alert.service");
+    return retractAlert({
+      alertId: data.alertId,
+      reason: data.reason,
+      retractedBy: profile.email || profile.id,
+    });
+  });

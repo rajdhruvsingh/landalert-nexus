@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getOverview, dispatchAlertServerFn } from "@/lib/monitoring.functions";
+import { getOverview, dispatchAlertServerFn, retractAlertServerFn } from "@/lib/monitoring.functions";
 import { RiskBadge } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { Button } from "@/components/ui/button";
@@ -135,6 +135,40 @@ function AlertsPage() {
       setDispatchResult(`Dispatch rejected: ${err instanceof Error ? err.message : "Unauthorized"}`);
     } finally {
       setDispatching(false);
+    }
+  // Alert retraction modal state
+  const [retractDialogOpen, setRetractDialogOpen] = useState(false);
+  const [selectedAlertToRetract, setSelectedAlertToRetract] = useState<number | null>(null);
+  const [retractionReason, setRetractionReason] = useState("");
+  const [retracting, setRetracting] = useState(false);
+  const [retractResult, setRetractResult] = useState<string | null>(null);
+
+  async function handleRetractAlert(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedAlertToRetract) return;
+    setRetracting(true);
+    setRetractResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await retractAlertServerFn({
+        data: {
+          alertId: selectedAlertToRetract,
+          reason: retractionReason.trim(),
+          authToken: session?.access_token,
+        },
+      });
+      setRetractResult(t("alerts.retracted_success"));
+      await qc.invalidateQueries();
+      setTimeout(() => {
+        setRetractDialogOpen(false);
+        setRetractResult(null);
+        setRetractionReason("");
+        setSelectedAlertToRetract(null);
+      }, 1500);
+    } catch (err: any) {
+      setRetractResult(`Retraction rejected: ${err?.message || "Unauthorized"}`);
+    } finally {
+      setRetracting(false);
     }
   }
 
@@ -347,6 +381,8 @@ function AlertsPage() {
           const zoneName = zone ? `${zone.zone_name}, ${zone.state}` : `Zone ${a.zone_id}`;
           const isDelivered = (a as { delivery_status?: string }).delivery_status === "delivered";
 
+          const isRetracted = Boolean((a as any).is_retracted || (a as any).status === "retracted");
+
           return (
             <article key={a.id} className="panel p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -359,23 +395,56 @@ function AlertsPage() {
                   >
                     {zoneName}
                   </Link>
+                  {isRetracted && (
+                    <span className="rounded bg-amber-500/20 border border-amber-500/50 px-2 py-0.5 text-[0.65rem] font-mono font-bold text-amber-300">
+                      {t("alerts.retracted_badge")}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 font-mono text-[0.7rem] text-muted-foreground">
                   <span
                     className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[0.65rem] uppercase ${
-                      isDelivered
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                        : "border-blue-500/40 bg-blue-500/10 text-blue-400"
+                      isRetracted
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                        : isDelivered
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                          : "border-blue-500/40 bg-blue-500/10 text-blue-400"
                     }`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    {(a as { delivery_status?: string }).delivery_status ?? "Dispatched"}
+                    {isRetracted
+                      ? t("alerts.retracted_badge")
+                      : (a as { delivery_status?: string }).delivery_status ?? "Dispatched"}
                   </span>
                   <span>
                     {new Date(a.dispatched_at).toLocaleString()} · {a.channel} · {a.dispatched_by}
                   </span>
+                  {!isRetracted && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedAlertToRetract(a.id);
+                        setRetractDialogOpen(true);
+                      }}
+                      className="h-6 px-2 text-[0.65rem] font-mono text-amber-400 border-amber-500/40 hover:bg-amber-500/10"
+                    >
+                      {t("alerts.retract_alert")}
+                    </Button>
+                  )}
                 </div>
               </div>
+
+              {isRetracted && (
+                <div className="mt-2.5 rounded border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs font-mono text-amber-300">
+                  <div className="font-semibold">
+                    ⚠ {t("alerts.retracted_badge")}: {(a as any).retraction_reason}
+                  </div>
+                  <div className="mt-1 text-[0.68rem] text-muted-foreground">
+                    {t("alerts.retracted_by")}: {(a as any).retracted_by} · {t("alerts.retracted_at")}: {new Date((a as any).retracted_at).toLocaleString()}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <div className="rounded border border-border bg-surface-raised p-3">
@@ -402,6 +471,71 @@ function AlertsPage() {
           </div>
         )}
       </div>
+
+      {/* Retract Alert Dialog */}
+      <Dialog open={retractDialogOpen} onOpenChange={setRetractDialogOpen}>
+        <DialogContent className="sm:max-w-[480px] bg-surface text-foreground border-border">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-display uppercase tracking-wide text-amber-400">
+              {t("alerts.retract_alert_title")}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {t("alerts.retract_alert_desc")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {retractResult && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-mono text-amber-300"
+            >
+              {retractResult}
+            </div>
+          )}
+
+          <form onSubmit={handleRetractAlert} className="space-y-4 pt-1">
+            <div className="grid gap-2">
+              <label htmlFor="retraction-reason-input" className="text-xs font-mono uppercase text-muted-foreground">
+                {t("alerts.retraction_reason")}
+              </label>
+              <Input
+                id="retraction-reason-input"
+                type="text"
+                placeholder={t("alerts.retraction_reason_placeholder")}
+                value={retractionReason}
+                onChange={(e) => setRetractionReason(e.target.value)}
+                minLength={5}
+                required
+                aria-required="true"
+                className="bg-secondary/40 border-border font-mono text-xs"
+              />
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRetractDialogOpen(false)}
+                disabled={retracting}
+                className="font-mono text-xs"
+              >
+                {t("alerts.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                variant="destructive"
+                disabled={retracting || retractionReason.trim().length < 5}
+                className="font-mono text-xs uppercase tracking-wider"
+              >
+                {retracting ? t("alerts.retracting") : t("alerts.retract_confirm")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

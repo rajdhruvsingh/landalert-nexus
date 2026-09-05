@@ -283,6 +283,92 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       return jsonResponse(result, result.dispatched ? 201 : 200, cors);
     }
 
+    // 6a. Alert Retraction (DISPATCHER/ADMIN role required)
+    if (pathname === "/api/alerts/retract" && request.method === "POST") {
+      const clientKey = `alert_retract:${getClientIdentifier(request)}`;
+      const limitResult = defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.ALERT_DISPATCH);
+      if (!limitResult.allowed) {
+        return errorResponse(
+          `Rate limit exceeded for alert retraction. Maximum ${RATE_LIMIT_POLICIES.ALERT_DISPATCH.maxRequests} requests per ${RATE_LIMIT_POLICIES.ALERT_DISPATCH.windowSeconds}s.`,
+          "RATE_LIMIT_EXCEEDED",
+          429,
+          {
+            ...cors,
+            "Retry-After": String(limitResult.resetSeconds),
+            "X-RateLimit-Limit": String(limitResult.limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(limitResult.resetSeconds),
+          },
+        );
+      }
+
+      const authHeader = request.headers.get("Authorization");
+      if (!authHeader) {
+        return errorResponse("Authentication required for alert retraction", "UNAUTHORIZED", 401, cors);
+      }
+
+      const { authenticateToken } = await import("./official-auth.service");
+      const profile = await authenticateToken(authHeader);
+
+      let isAuthorized = false;
+      let actorId = "api_dispatcher";
+
+      const cronSecret = process.env["CRON_SECRET"];
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const isSystemSecret = Boolean(cronSecret && token === cronSecret);
+
+      if (isSystemSecret) {
+        isAuthorized = true;
+        actorId = "system:admin";
+      } else if (profile) {
+        actorId = profile.id;
+        isAuthorized = profile.role === "DISPATCHER" || profile.role === "ADMIN" || profile.dispatch_authorized;
+      }
+
+      if (!isAuthorized) {
+        return errorResponse(
+          "Forbidden: Alert retraction requires authorized DISPATCHER or ADMIN credentials",
+          "FORBIDDEN",
+          403,
+          cors,
+        );
+      }
+
+      let body: { alertId?: unknown; reason?: unknown } = {};
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse("Malformed JSON body", "INVALID_JSON", 400, cors);
+      }
+
+      const alertId = Number(body.alertId);
+      if (!Number.isInteger(alertId) || alertId <= 0) {
+        return errorResponse("Valid positive integer alertId is required", "INVALID_ALERT_ID", 400, cors);
+      }
+
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      if (!reason || reason.length < 5) {
+        return errorResponse(
+          "Operational retraction reason is required (minimum 5 characters)",
+          "INVALID_RETRACTION_REASON",
+          400,
+          cors,
+        );
+      }
+
+      try {
+        const { retractAlert } = await import("./alert.service");
+        const result = await retractAlert({
+          alertId,
+          reason,
+          retractedBy: actorId,
+        });
+        return jsonResponse(result, 200, cors);
+      } catch (err: any) {
+        return errorResponse(err.message || "Failed to retract alert", "RETRACTION_FAILED", 400, cors);
+      }
+    }
+
     // 6b. Simulation Endpoint (Explicitly Gated Behind ENABLE_SIMULATION=true)
     if (pathname === "/api/simulate" && request.method === "POST") {
       if (process.env["ENABLE_SIMULATION"] !== "true") {

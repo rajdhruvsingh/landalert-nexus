@@ -265,3 +265,122 @@ export async function evaluateAndDispatchAlert(
     dispatchStatus: finalDispatchStatus,
   };
 }
+
+export interface RetractAlertParams {
+  alertId: number;
+  reason: string;
+  retractedBy: string;
+}
+
+export interface RetractAlertResult {
+  success: boolean;
+  alertId: number;
+  retractedAt: string;
+  retractedBy: string;
+  reason: string;
+  smsSent: boolean;
+  smsResponse?: unknown;
+}
+
+/**
+ * Retracts a previously-dispatched alert (False-alarm correction flow).
+ * Restricted to authorized DISPATCHER or ADMIN operators.
+ *
+ * Immutability guarantee: The alert is NEVER deleted from public.alerts.
+ * It is marked as 'retracted' with full audit trail (reason, timestamp, operator).
+ * If the alert was broadcast over SMS, sends a follow-up correction broadcast.
+ */
+export async function retractAlert({
+  alertId,
+  reason,
+  retractedBy,
+}: RetractAlertParams): Promise<RetractAlertResult> {
+  if (!reason || reason.trim().length < 5) {
+    throw new Error("Operational retraction reason is required (minimum 5 characters)");
+  }
+
+  // 1. Fetch the alert to retract
+  const { data: alert, error: fetchErr } = await supabaseAdmin
+    .from("alerts")
+    .select("*")
+    .eq("id", alertId)
+    .maybeSingle();
+
+  if (fetchErr) throw new Error(`Database error fetching alert ${alertId}: ${fetchErr.message}`);
+  if (!alert) throw new Error(`Alert with id ${alertId} not found`);
+
+  const now = new Date().toISOString();
+
+  if (alert.is_retracted || (alert as any).status === "retracted") {
+    return {
+      success: true,
+      alertId,
+      retractedAt: (alert as any).retracted_at || now,
+      retractedBy: (alert as any).retracted_by || retractedBy,
+      reason: (alert as any).retraction_reason || reason,
+      smsSent: false,
+    };
+  }
+
+  // 2. Mark alert as retracted in public.alerts (never delete)
+  const { error: updateErr } = await (supabaseAdmin.from("alerts") as any)
+    .update({
+      status: "retracted",
+      is_retracted: true,
+      retracted_at: now,
+      retracted_by: retractedBy,
+      retraction_reason: reason.trim(),
+    })
+    .eq("id", alertId);
+
+  if (updateErr) throw new Error(`Failed to update alert retraction status: ${updateErr.message}`);
+
+  // 3. Dispatch follow-up correction SMS if channel was sms or both
+  let smsSent = false;
+  let smsResponse: unknown = undefined;
+
+  if (alert.channel === "sms" || alert.channel === "both") {
+    try {
+      const { getSmsProvider } = await import("./sms");
+      const smsProvider = getSmsProvider();
+
+      // Retrieve zone name
+      const { data: zone } = await supabaseAdmin
+        .from("risk_zones")
+        .select("zone_name")
+        .eq("id", alert.zone_id)
+        .maybeSingle();
+
+      const zoneName = zone?.zone_name ?? `Zone ${alert.zone_id}`;
+      const correctionMessage = `[CORRECTION / RETRACTION] The previous landslide alert for ${zoneName} has been RETRACTED by emergency authorities. Reason: ${reason.trim()}. Please disregard previous emergency warning.`;
+
+      const smsResult = await smsProvider.send({
+        recipients: ["910000000000"],
+        message: correctionMessage,
+        language: alert.language || "en",
+        metadata: {
+          retraction: true,
+          original_alert_id: alertId,
+          zone_id: alert.zone_id,
+          retracted_by: retractedBy,
+        },
+      });
+
+      smsSent = smsResult.success || smsResult.status === "SMS_SANDBOX_LOGGED";
+      smsResponse = smsResult;
+    } catch (smsErr) {
+      console.error("Failed to send follow-up retraction SMS:", smsErr);
+    }
+  }
+
+  return {
+    success: true,
+    alertId,
+    retractedAt: now,
+    retractedBy,
+    reason: reason.trim(),
+    smsSent,
+    smsResponse,
+  };
+}
+

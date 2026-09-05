@@ -75,6 +75,22 @@ const MOCK_MODEL_CONFIG = {
   weight_history: 0.1,
 };
 
+const MOCK_ALERTS_STORE: any[] = [
+  {
+    id: 101,
+    zone_id: 1,
+    risk_level: "High",
+    message: "High landslide risk in Zone 1",
+    language: "en",
+    channel: "sms",
+    explanation: "Rainfall spike detected",
+    dispatched_at: "2026-09-04T12:00:00.000Z",
+    dispatched_by: "dispatcher@sikkim.gov.in",
+    status: "active",
+    is_retracted: false,
+  },
+];
+
 interface MockQuery {
   _filters?: Record<string, unknown>;
   select: (cols: string) => MockQuery;
@@ -88,6 +104,9 @@ interface MockQuery {
       maybeSingle: () => Promise<{ data: { id: number; dispatched_at: string }; error: null }>;
     };
     then: (resolve: (res: { data: unknown; error: null }) => void) => void;
+  };
+  update: (updates: Record<string, unknown>) => {
+    eq: (col: string, val: unknown) => Promise<{ data: unknown; error: null }>;
   };
   upsert: (rows: unknown, opts?: unknown) => Promise<{ data: unknown; error: null }>;
   then: (resolve: (res: { data: unknown; error: null }) => void) => void;
@@ -122,7 +141,12 @@ vi.mock("@/integrations/supabase/client.server", () => {
               return { data: z ?? null, error: null };
             }
             if (table === "alerts") {
-              return { data: null, error: null };
+              const id = query._filters?.["id"] as number | undefined;
+              if (id) {
+                const a = MOCK_ALERTS_STORE.find((x) => x.id === id);
+                return { data: a ?? null, error: null };
+              }
+              return { data: MOCK_ALERTS_STORE[0] ?? null, error: null };
             }
             return { data: null, error: null };
           },
@@ -138,6 +162,19 @@ vi.mock("@/integrations/supabase/client.server", () => {
                 resolve({ data, error: null }),
             };
           },
+          update: (updates: Record<string, unknown>) => {
+            return {
+              eq: async (col: string, val: unknown) => {
+                if (table === "alerts" && col === "id") {
+                  const target = MOCK_ALERTS_STORE.find((x) => x.id === val);
+                  if (target) {
+                    Object.assign(target, updates);
+                  }
+                }
+                return { data: updates, error: null };
+              },
+            };
+          },
           upsert: async (rows: unknown, _opts?: unknown) => {
             return { data: rows, error: null };
           },
@@ -146,7 +183,7 @@ vi.mock("@/integrations/supabase/client.server", () => {
             if (table === "road_segments") return resolve({ data: MOCK_ROADS, error: null });
             if (table === "risk_model_config")
               return resolve({ data: [MOCK_MODEL_CONFIG], error: null });
-            if (table === "alerts") return resolve({ data: [], error: null });
+            if (table === "alerts") return resolve({ data: [...MOCK_ALERTS_STORE], error: null });
             if (table === "historical_landslides") return resolve({ data: [], error: null });
             return resolve({ data: [], error: null });
           },
@@ -1209,6 +1246,159 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
 
       defaultRateLimiter.reset(clientKey);
+    });
+  });
+
+  describe("TASK 5 — Alert False-Alarm & Retraction Flow", () => {
+    beforeEach(() => {
+      MOCK_ALERTS_STORE.length = 0;
+      MOCK_ALERTS_STORE.push({
+        id: 101,
+        zone_id: 1,
+        risk_level: "High",
+        message: "High landslide risk in Zone 1",
+        language: "en",
+        channel: "sms",
+        explanation: "Rainfall spike detected",
+        dispatched_at: "2026-09-04T12:00:00.000Z",
+        dispatched_by: "dispatcher@sikkim.gov.in",
+        status: "active",
+        is_retracted: false,
+      });
+    });
+
+    it("enforces DISPATCHER/ADMIN role for alert retraction and rejects unauthorized users", async () => {
+      // 1. Unauthenticated -> 401
+      const reqNoAuth = new Request("http://localhost/api/alerts/retract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alertId: 101, reason: "Radar telemetry failure verified by GSI" }),
+      });
+      const resNoAuth = await handleApiRequest(reqNoAuth);
+      expect(resNoAuth.status).toBe(401);
+
+      // 2. Citizen / PUBLIC_USER role -> 403
+      const reqCitizen = new Request("http://localhost/api/alerts/retract", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer citizen-user-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ alertId: 101, reason: "Unauthorized attempt" }),
+      });
+      const resCitizen = await handleApiRequest(reqCitizen);
+      expect(resCitizen.status).toBe(403);
+
+      // 3. Authorized DISPATCHER / system token -> 200
+      const reqAuthorized = new Request("http://localhost/api/alerts/retract", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer test-cron-secret-12345",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ alertId: 101, reason: "Slope stabilized; telemetry false-alarm" }),
+      });
+      const resAuthorized = await handleApiRequest(reqAuthorized);
+      expect(resAuthorized.status).toBe(200);
+
+      const json = await resAuthorized.json();
+      expect(json.success).toBe(true);
+      expect(json.alertId).toBe(101);
+      expect(json.reason).toContain("telemetry false-alarm");
+    });
+
+    it("verifies retracted alerts remain in history and are never deleted from the database", async () => {
+      const { retractAlert } = await import("./alert.service");
+
+      // Verify alert 101 exists initially in store
+      const before = MOCK_ALERTS_STORE.find((a) => a.id === 101);
+      expect(before).toBeDefined();
+
+      // Execute retraction
+      const result = await retractAlert({
+        alertId: 101,
+        reason: "False positive caused by AWS sensor drift",
+        retractedBy: "dispatcher@sikkim.gov.in",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.alertId).toBe(101);
+      expect(result.retractedAt).toBeDefined();
+      expect(result.retractedBy).toBe("dispatcher@sikkim.gov.in");
+
+      // Verify alert was NOT deleted and is still in store
+      const after = MOCK_ALERTS_STORE.find((a) => a.id === 101);
+      expect(after).toBeDefined();
+      expect(after.status).toBe("retracted");
+      expect(after.is_retracted).toBe(true);
+      expect(after.retraction_reason).toBe("False positive caused by AWS sensor drift");
+    });
+
+    it("verifies retraction sends follow-up correction broadcast via SMS gateway", async () => {
+      const { retractAlert } = await import("./alert.service");
+      const { getSmsProvider, setSmsProvider } = await import("./sms");
+
+      let capturedSmsRequest: any = null;
+      const testProvider = {
+        name: "test-mock-sms-provider",
+        isConfigured: () => true,
+        isSandbox: () => true,
+        send: async (req: any) => {
+          capturedSmsRequest = req;
+          return {
+            success: true,
+            provider: "test-mock-sms-provider",
+            status: "SMS_SANDBOX_LOGGED" as const,
+            messageId: "msg_retract_12345",
+          };
+        },
+      };
+
+      const prev = getSmsProvider();
+      setSmsProvider(testProvider);
+
+      try {
+        const result = await retractAlert({
+          alertId: 101,
+          reason: "Confirmed rain gauge anomaly; no slope movement",
+          retractedBy: "admin@nerdrr.gov.in",
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.smsSent).toBe(true);
+        expect(capturedSmsRequest).not.toBeNull();
+        expect(capturedSmsRequest.message).toContain("[CORRECTION / RETRACTION]");
+        expect(capturedSmsRequest.message).toContain("anomaly");
+        expect(capturedSmsRequest.metadata.retraction).toBe(true);
+      } finally {
+        setSmsProvider(prev);
+      }
+    });
+
+    it("verifies key parity for all retraction keys across all 4 locales", async () => {
+      const en = (await import("@/locales/en.json")).default;
+      const as = (await import("@/locales/as.json")).default;
+      const bn = (await import("@/locales/bn.json")).default;
+      const ne = (await import("@/locales/ne.json")).default;
+
+      const keysToCheck = [
+        "retract_alert",
+        "retract_alert_title",
+        "retract_alert_desc",
+        "retraction_reason",
+        "retract_confirm",
+        "retracted_badge",
+        "retracted_by",
+        "retracted_at",
+        "retracted_success",
+      ];
+
+      for (const k of keysToCheck) {
+        expect((en.alerts as any)[k], `en missing ${k}`).toBeDefined();
+        for (const [code, bundle] of [["as", as], ["bn", bn], ["ne", ne]] as const) {
+          expect((bundle.alerts as any)[k], `${code} missing ${k}`).toBeDefined();
+        }
+      }
     });
   });
 });
