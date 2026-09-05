@@ -465,16 +465,21 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
 
     // If online, upload media files first to obtain permanent storage URLs
     const uploadedUrls: string[] = [];
-    const mediaMeta: Array<{ name: string; size: number; mimeType: string; url?: string }> = [];
+    const mediaMeta: Array<{ id?: string; name: string; size: number; mimeType: string; storagePath?: string; url?: string }> = [];
 
-    if (isOnline && mediaList.length > 0) {
-      const session = await ensureAuthenticatedSession();
-      const authHeaders: Record<string, string> = {};
-      if (session?.access_token) {
-        authHeaders["Authorization"] = `Bearer ${session.access_token}`;
+    if (isOnline && connectivityState === "api_reachable" && mediaList.length > 0) {
+      let authHeaders: Record<string, string> = {};
+      try {
+        const session = await ensureAuthenticatedSession();
+        if (session?.access_token) {
+          authHeaders["Authorization"] = `Bearer ${session.access_token}`;
+        }
+      } catch {
+        // Public reporter
       }
 
       for (const item of mediaList) {
+        let uploaded = false;
         if (item.file) {
           try {
             const fd = new FormData();
@@ -492,32 +497,47 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 name: item.name,
                 size: item.size,
                 mimeType: item.mimeType,
+                storagePath: upJson.storagePath,
                 url: upJson.url,
               });
-              continue;
+              uploaded = true;
             }
           } catch (err) {
-            console.warn("Direct media upload failed, fallback to offline base64 queue:", err);
+            console.warn("Direct media upload failed, fallback to IndexedDB offline queue:", err);
           }
         }
-        // If upload failed or in sandbox, preserve base64
-        uploadedUrls.push(item.base64Data || item.previewUrl);
-        mediaMeta.push({
-          name: item.name,
-          size: item.size,
-          mimeType: item.mimeType,
-          url: item.base64Data,
-        });
+        if (!uploaded) {
+          // Store in IndexedDB for resilient offline queue
+          const { saveOfflineMedia } = await import("@/lib/offline-media-store");
+          const mediaId = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          await saveOfflineMedia(mediaId, item.file || item.base64Data || item.previewUrl, {
+            name: item.name,
+            mimeType: item.mimeType,
+            size: item.size,
+          });
+          mediaMeta.push({
+            id: mediaId,
+            name: item.name,
+            size: item.size,
+            mimeType: item.mimeType,
+          });
+        }
       }
     } else {
-      // Offline: store base64 payload in queue
+      // Offline: store media binary in IndexedDB, only store lightweight reference in queue
+      const { saveOfflineMedia } = await import("@/lib/offline-media-store");
       for (const item of mediaList) {
-        uploadedUrls.push(item.base64Data || "");
+        const mediaId = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await saveOfflineMedia(mediaId, item.file || item.base64Data || item.previewUrl, {
+          name: item.name,
+          mimeType: item.mimeType,
+          size: item.size,
+        });
         mediaMeta.push({
+          id: mediaId,
           name: item.name,
           size: item.size,
           mimeType: item.mimeType,
-          url: item.base64Data,
         });
       }
     }
@@ -532,7 +552,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
       visual_signs: visualSigns === "None" ? undefined : visualSigns,
       road_status: roadStatus,
       observer_id: observerId.trim() || "citizen_observer",
-      media_urls: uploadedUrls.filter((u) => !u.startsWith("data:")),
+      media_urls: uploadedUrls.filter((u) => !u.startsWith("data:") && !u.startsWith("offline_")),
       media_metadata: mediaMeta,
       geo_lat: geoLat ?? undefined,
       geo_lng: geoLng ?? undefined,

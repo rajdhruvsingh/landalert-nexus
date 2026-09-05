@@ -224,7 +224,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       observer_id: r.observer_id.trim(),
       idempotency_key: key,
       status,
-      is_training_eligible: isOfficial,
+      is_training_eligible: Boolean(isOfficial),
       source,
       media_urls: r.media_urls ?? [],
       media_metadata: r.media_metadata ?? [],
@@ -250,42 +250,84 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     };
   }
 
-  // Insert valid rows with ON CONFLICT (idempotency_key) DO NOTHING
+  // Ensure schema is up to date if database connection is available
+  const { ensureFieldObservationsSchema, getPostgresPool, getDatabaseUrl, isProductionEnvironment } =
+    await import("./db.server");
+  await ensureFieldObservationsSchema().catch(() => {});
+
+  // Insert valid rows with ON CONFLICT (idempotency_key) DO NOTHING via Supabase
   const { error: insErr } = await supabaseAdmin
     .from("field_observations")
-    .upsert(validRows, { onConflict: "idempotency_key", ignoreDuplicates: true });
+    .upsert(validRows as any, { onConflict: "idempotency_key", ignoreDuplicates: true });
 
   if (insErr) {
-    try {
-      const { execFile } = await import("node:child_process");
-      const { promisify } = await import("node:util");
-      const execFileAsync = promisify(execFile);
-      const script = `
-import sys, json, os, psycopg2
-rows = json.loads(sys.argv[1])
-db_url = os.environ.get("DATABASE_URL", "postgresql://localhost/landalert")
-conn = psycopg2.connect(db_url)
-with conn.cursor() as cur:
-    for r in rows:
-        cur.execute("""
-            INSERT INTO public.field_observations 
-            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced', %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source'], r['media_urls'], json.dumps(r['media_metadata']), r['geo_lat'], r['geo_lng'], r['geo_accuracy_m'], r['geo_captured_at'], r['consent_given'], r['review_status']))
-conn.commit()
-conn.close()
-`;
-      await execFileAsync("python3", ["-c", script, JSON.stringify(validRows)], {
-        env: {
-          ...process.env,
-          DATABASE_URL: process.env["DATABASE_URL"] || "postgresql://localhost/landalert",
-        },
-      });
-    } catch (localErr) {
+    const dbUrl = getDatabaseUrl();
+    const isProd = isProductionEnvironment();
+
+    if (!dbUrl) {
+      if (isProd) {
+        throw new Error(
+          `Failed to sync field observations: ${insErr.message} (Production DATABASE_URL is not configured)`,
+        );
+      }
+      throw new Error(`Failed to sync field observations: ${insErr.message}`);
+    }
+
+    const pool = getPostgresPool();
+    if (!pool) {
       throw new Error(
-        `Failed to sync field observations: ${insErr.message} (local fallback: ${localErr instanceof Error ? localErr.message : String(localErr)})`,
+        isProd
+          ? `Failed to sync field observations: ${insErr.message} (Production DATABASE_URL is not configured)`
+          : `Failed to sync field observations: ${insErr.message}`,
       );
+    }
+
+    let client = null;
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+      for (const r of validRows) {
+        await client.query(
+          `
+          INSERT INTO public.field_observations 
+          (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
+        `,
+          [
+            r.zone_id,
+            r.observer_id,
+            r.observed_at,
+            r.client_timestamp,
+            r.rainfall_mm,
+            r.soil_condition,
+            r.visual_signs,
+            r.road_status,
+            r.idempotency_key,
+            r.status,
+            r.is_training_eligible,
+            r.source,
+            r.media_urls,
+            JSON.stringify(r.media_metadata),
+            r.geo_lat,
+            r.geo_lng,
+            r.geo_accuracy_m,
+            r.geo_captured_at,
+            r.consent_given,
+            r.review_status,
+          ],
+        );
+      }
+      await client.query("COMMIT");
+    } catch (pgErr: any) {
+      if (client) {
+        await client.query("ROLLBACK").catch(() => {});
+      }
+      throw new Error(
+        `Failed to sync field observations: ${insErr.message} (PostgreSQL error: ${pgErr instanceof Error ? pgErr.message : String(pgErr)})`,
+      );
+    } finally {
+      if (client) client.release();
     }
   }
 

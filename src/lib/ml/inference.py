@@ -42,7 +42,14 @@ except (ImportError, ValueError):
     from artifact import load_model_artifact, ModelArtifact
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+_is_production = os.getenv("RENDER") is not None or os.getenv("NODE_ENV") == "production"
+_raw_db_url = os.getenv("DATABASE_URL")
+if _raw_db_url and _raw_db_url.strip():
+    DATABASE_URL = _raw_db_url.strip()
+elif _is_production:
+    DATABASE_URL = None
+else:
+    DATABASE_URL = "postgresql://localhost/landalert"
 
 class LandslideRiskInferenceEngine:
     def __init__(self, artifact_path: str = "models/v0.2-lr-trained.json"):
@@ -57,6 +64,10 @@ class LandslideRiskInferenceEngine:
         """
         close_conn = False
         if conn is None:
+            if not DATABASE_URL:
+                if _is_production:
+                    raise RuntimeError("Production DATABASE_URL is not configured")
+                raise RuntimeError("DATABASE_URL is not configured")
             conn = psycopg2.connect(DATABASE_URL, connect_timeout=3)
             close_conn = True
 

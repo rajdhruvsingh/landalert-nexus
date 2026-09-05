@@ -65,7 +65,12 @@ export function SyncQueueDialog({
   }, [reloadItems]);
 
   const handleSyncNow = async () => {
-    setSyncStatusMsg(null);
+    if (queueItems.length === 0) return;
+    setSyncStatusMsg(
+      t("sync_queue.syncing_progress", "Synchronizing {{count}} observation(s) with central server...", {
+        count: queueItems.length,
+      }),
+    );
     await checkHealth();
     try {
       const res = await triggerSync();
@@ -79,13 +84,14 @@ export function SyncQueueDialog({
           );
         } else if (res.errors?.length) {
           setSyncStatusMsg(
-            t("sync_queue.sync_error", "Sync notice: {{error}}", {
+            t("sync_queue.sync_error", "Sync error: {{error}}", {
               error: res.errors[0],
             }),
           );
         }
       }
     } catch (err: any) {
+      reloadItems();
       setSyncStatusMsg(err?.message || "Sync attempt failed.");
     }
   };

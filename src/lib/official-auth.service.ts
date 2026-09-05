@@ -401,6 +401,7 @@ export async function verifyGroundObservation(
  * Resolves or initializes a user profile (alias for backward compatibility).
  */
 export const getOrCreateUserProfile = resolveUserProfile;
+export const getSessionProfile = authenticateToken;
 
 /**
  * Authenticates a Bearer token and returns the caller's UserProfileRecord.

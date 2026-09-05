@@ -231,20 +231,38 @@ export function clearOfflineQueue(): void {
   }
 }
 
-async function uploadQueuedMediaItem(dataUrl: string, filename: string, zoneId: number): Promise<string | null> {
+async function uploadQueuedMediaItem(
+  mediaIdOrDataUrl: string,
+  filename: string,
+  zoneId: number,
+  fallbackMime = "image/jpeg",
+): Promise<string | null> {
   if (typeof window === "undefined" || typeof fetch === "undefined") return null;
   try {
-    const arr = dataUrl.split(",");
-    if (arr.length < 2) return null;
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
+    let blob: Blob | null = null;
+    // Check IndexedDB store first
+    const { getOfflineMedia, deleteOfflineMedia } = await import("./offline-media-store");
+    const stored = await getOfflineMedia(mediaIdOrDataUrl);
+    if (stored) {
+      blob = stored.blob;
+      filename = stored.name || filename;
+    } else if (mediaIdOrDataUrl.startsWith("data:")) {
+      const arr = mediaIdOrDataUrl.split(",");
+      if (arr.length >= 2) {
+        const mimeMatch = arr[0]?.match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : fallbackMime;
+        const bstr = atob(arr[1] || "");
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blob = new Blob([u8arr], { type: mime || fallbackMime });
+      }
     }
-    const blob = new Blob([u8arr], { type: mime });
+
+    if (!blob) return null;
+
     const fd = new FormData();
     fd.append("file", blob, filename);
     fd.append("zoneId", String(zoneId));
@@ -252,11 +270,7 @@ async function uploadQueuedMediaItem(dataUrl: string, filename: string, zoneId: 
     let authHeader = "";
     try {
       const { supabase } = await import("@/integrations/supabase/client");
-      let session = (await supabase.auth.getSession()).data.session;
-      if (!session) {
-        const anon = await supabase.auth.signInAnonymously();
-        session = anon.data.session;
-      }
+      const session = (await supabase.auth.getSession()).data.session;
       if (session?.access_token) {
         authHeader = `Bearer ${session.access_token}`;
       }
@@ -276,6 +290,9 @@ async function uploadQueuedMediaItem(dataUrl: string, filename: string, zoneId: 
     });
     if (res.ok) {
       const data = await res.json();
+      if (stored) {
+        await deleteOfflineMedia(mediaIdOrDataUrl).catch(() => {});
+      }
       return data.url;
     }
   } catch (err) {
@@ -306,23 +323,29 @@ export async function syncOfflineObservations(): Promise<SyncResult> {
 
       const newUrls: string[] = [...(obs.media_urls || [])];
       const newMetadata = await Promise.all(
-        obs.media_metadata.map(async (meta) => {
-          if (meta.url && meta.url.startsWith("data:")) {
-            const uploadedUrl = await uploadQueuedMediaItem(meta.url, meta.name || "media", obs.zone_id);
+        obs.media_metadata.map(async (meta: any) => {
+          const mediaKey = meta.id || meta.url;
+          if (mediaKey && (mediaKey.startsWith("offline_") || mediaKey.startsWith("data:"))) {
+            const uploadedUrl = await uploadQueuedMediaItem(
+              mediaKey,
+              meta.name || "field_evidence",
+              obs.zone_id,
+              meta.mimeType,
+            );
             if (uploadedUrl) {
               if (!newUrls.includes(uploadedUrl)) newUrls.push(uploadedUrl);
               return { ...meta, url: uploadedUrl };
             }
           }
           return meta;
-        })
+        }),
       );
       return {
         ...obs,
-        media_urls: newUrls,
+        media_urls: newUrls.filter((u) => !u.startsWith("data:") && !u.startsWith("offline_")),
         media_metadata: newMetadata,
       };
-    })
+    }),
   );
 
   try {
@@ -473,10 +496,14 @@ export function useOfflineQueue() {
         window.removeEventListener("storage", refreshQueueCount);
       };
     }
+    return undefined;
   }, [refreshQueueCount]);
 
   const triggerSync = useCallback(async () => {
-    if (!isOnline) return null;
+    const liveOnline = typeof navigator !== "undefined" ? navigator.onLine : isOnline;
+    if (!liveOnline) {
+      throw new Error("Device is currently offline. Connect to network to synchronize pending queue.");
+    }
     setSyncing(true);
     try {
       const res = await syncOfflineObservations();

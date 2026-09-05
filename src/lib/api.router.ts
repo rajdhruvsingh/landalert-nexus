@@ -443,7 +443,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
     // 7a. Field Observation Status & Capability Flag
     if (pathname === "/api/field-observations/status" && request.method === "GET") {
-      const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] === "true";
+      const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] !== "false";
       return jsonResponse({ mediaUploadEnabled }, 200, cors);
     }
 
@@ -466,7 +466,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         );
       }
 
-      const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] === "true";
+      const mediaUploadEnabled = process.env["MEDIA_UPLOAD_ENABLED"] !== "false";
       if (!mediaUploadEnabled) {
         return errorResponse(
           "Media upload is currently disabled on this server instance",
@@ -507,7 +507,6 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       } catch {
         return errorResponse("Invalid multipart form data", "INVALID_MULTIPART", 400, cors);
       }
-
 
       const file = formData.get("file");
       if (!file || !(file instanceof Blob)) {
@@ -551,6 +550,21 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
       let fileUrl = "";
       try {
+        // Ensure bucket exists
+        await supabaseAdmin.storage.createBucket("field-observation-media", {
+          public: false,
+          fileSizeLimit: 52428800,
+          allowedMimeTypes: [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/heic",
+            "video/mp4",
+            "video/webm",
+            "video/quicktime",
+          ],
+        }).catch(() => {});
+
         const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
           .from("field-observation-media")
           .upload(storagePath, buffer, {
@@ -561,7 +575,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         if (!uploadErr && uploadData) {
           const { data: signedData } = await supabaseAdmin.storage
             .from("field-observation-media")
-            .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+            .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
           fileUrl = signedData?.signedUrl || `/api/field-observations/media/${storagePath}`;
         }
       } catch {
