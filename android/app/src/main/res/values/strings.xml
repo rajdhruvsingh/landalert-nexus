@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LandAlert-Nexus</string>
+    <string name="title_activity_main">LandAlert-Nexus</string>
+    <string name="package_name">in.gov.landalert.nexus</string>
+    <string name="custom_url_scheme">in.gov.landalert.nexus</string>
+</resources>

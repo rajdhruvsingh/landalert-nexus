@@ -152,4 +152,29 @@ The following architectural decisions cannot be assumed or hardcoded by automate
 2. **Authoritative IMD In-Situ Calibration**:
    - Operational disaster alerts require bilateral IMD Doppler Weather Radar (DWR) integration to calibrate satellite-NWP precipitation estimates.
 
+---
+
+## 9. Native Mobile Application Deployment (Capacitor PWA Shell)
+
+### Code Status
+- **Capacitor Configuration**: `capacitor.config.ts` (App ID: `in.gov.landalert.nexus`, WebDir: `.output/public`)
+- **Native Plugins**: `@capacitor/geolocation` and `@capacitor/camera` integrated into `FieldObservationDialog.tsx` with seamless browser fallback and identical consent/file-size controls.
+- **Android Shell**: Android native project generated and synced (`android/`).
+
+### Verification & Environmental Limits
+1. **Environment Verification**:
+   - Android project structure initialized and assets synced via `npx cap sync android`.
+   - **iOS Build Limitation**: `xcodebuild` is NOT available in this environment (macOS Command Line Tools instance without Xcode.app). Per repo integrity rules, iOS compilation and simulator execution cannot and are **NOT claimed to be verified** in this environment.
+
+### Real-World Administrative Steps Required to Publish
+1. **Google Play Store**:
+   - Google Play Console organization account ($25 fee).
+   - Production Java Keystore creation for Android App Bundle (`.aab`) signing (`jarsigner` / `keytool`).
+   - Data safety questionnaire declarations regarding background geolocation for early warning.
+2. **Apple App Store**:
+   - Apple Developer Enterprise / Organization Account ($99/yr).
+   - macOS machine with full Xcode 15+ and Apple Distribution Certificate.
+   - Purpose string declarations in `Info.plist` for `NSCameraUsageDescription` and `NSLocationWhenInUseUsageDescription`.
+
+
 

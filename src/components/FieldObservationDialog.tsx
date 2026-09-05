@@ -23,6 +23,9 @@ import { submitFieldObservationsServerFn } from "@/lib/monitoring.functions";
 import type { FieldObservationInput } from "@/lib/sync.service";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserAuthorizationState } from "@/lib/auth-domains";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation as CapGeolocation } from "@capacitor/geolocation";
+import { Camera as CapCamera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 interface Props {
   initialZoneId?: number;
@@ -147,19 +150,48 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   const [roadStatus, setRoadStatus] = useState<"open" | "restricted" | "blocked" | "unknown">("open");
   const [observerId, setObserverId] = useState<string>("citizen_observer");
 
-  // 3. Geolocation Capture
+  // 3. Geolocation Capture (Capacitor Native with Web Fallback)
   const [geoLat, setGeoLat] = useState<number | null>(null);
   const [geoLng, setGeoLng] = useState<number | null>(null);
   const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null);
   const [geoCapturedAt, setGeoCapturedAt] = useState<string | null>(null);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
 
-  function captureGps() {
+  async function captureGps() {
+    setGpsStatus("Acquiring GPS location…");
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const perm = await CapGeolocation.checkPermissions();
+        if (perm.location !== "granted") {
+          const req = await CapGeolocation.requestPermissions();
+          if (req.location !== "granted") {
+            setGpsStatus("GPS permission denied by user");
+            return;
+          }
+        }
+        const pos = await CapGeolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+        setGeoLat(Number(pos.coords.latitude.toFixed(5)));
+        setGeoLng(Number(pos.coords.longitude.toFixed(5)));
+        setGeoAccuracy(Number(pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : "5.0"));
+        setGeoCapturedAt(new Date(pos.timestamp).toISOString());
+        setGpsStatus(
+          `GPS Acquired (Native): ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E (±${Math.round(pos.coords.accuracy || 5)}m)`,
+        );
+        return;
+      } catch (err: any) {
+        console.warn("Native Geolocation failed, falling back to browser API:", err);
+      }
+    }
+
+    // Web fallback
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGpsStatus("Browser geolocation not supported");
       return;
     }
-    setGpsStatus("Acquiring GPS location…");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGeoLat(Number(pos.coords.latitude.toFixed(5)));
@@ -175,6 +207,66 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
+  }
+
+  // Native Camera capture helper
+  async function handleNativeCameraCapture() {
+    if (mediaList.length >= 3) {
+      setFileError("Maximum 3 files allowed per observation");
+      return;
+    }
+    setFileError(null);
+    try {
+      const image = await CapCamera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: CameraSource.Prompt,
+      });
+
+      if (!image.base64String) return;
+
+      const mimeType = image.format ? `image/${image.format}` : "image/jpeg";
+      const base64Data = `data:${mimeType};base64,${image.base64String}`;
+
+      // Calculate approximate size in bytes from base64 string
+      const sizeInBytes = Math.round((image.base64String.length * 3) / 4);
+      if (sizeInBytes > 10 * 1024 * 1024) {
+        setFileError("Captured photo exceeds 10MB limit.");
+        return;
+      }
+
+      // Create a File object for consistent upload pipeline
+      const byteCharacters = atob(image.base64String);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: mimeType });
+      const filename = `camera_${Date.now()}.${image.format ?? "jpg"}`;
+      const file = new File([blob], filename, { type: mimeType });
+
+      setMediaList((prev) => [
+        ...prev,
+        {
+          file,
+          previewUrl: base64Data,
+          name: filename,
+          size: sizeInBytes,
+          mimeType,
+          base64Data,
+        },
+      ]);
+
+      if (!geoLat) {
+        captureGps();
+      }
+    } catch (err: any) {
+      if (err?.message !== "User cancelled photos app") {
+        setFileError(`Camera error: ${err?.message ?? "Capture failed"}`);
+      }
+    }
   }
 
   // 4. Media Upload (Photo/Video)
@@ -549,14 +641,27 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 </span>
               </div>
 
-              <Input
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                disabled={submitting || mediaList.length >= 3}
-                onChange={handleFileSelect}
-                className="bg-secondary/40 border-border font-mono text-xs file:font-mono file:text-xs file:bg-primary/20 file:text-primary file:border-0 file:rounded cursor-pointer"
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  disabled={submitting || mediaList.length >= 3}
+                  onChange={handleFileSelect}
+                  className="bg-secondary/40 border-border font-mono text-xs file:font-mono file:text-xs file:bg-primary/20 file:text-primary file:border-0 file:rounded cursor-pointer flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={submitting || mediaList.length >= 3}
+                  onClick={handleNativeCameraCapture}
+                  className="font-mono text-xs shrink-0"
+                  title="Capture photo using device camera or gallery"
+                >
+                  📷 Camera
+                </Button>
+              </div>
 
               {fileError && <p className="text-[0.7rem] text-destructive font-mono">{fileError}</p>}
 
