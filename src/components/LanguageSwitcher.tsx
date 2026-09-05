@@ -27,7 +27,10 @@ export function LanguageSwitcher() {
         value={currentLang}
         onValueChange={(val) => setAppLanguage(val as SupportedLanguage)}
       >
-        <SelectTrigger className="h-8 border-border bg-secondary/30 font-mono text-[0.72rem] tracking-wider uppercase px-2.5 min-w-[90px]">
+        <SelectTrigger
+          aria-label="Select interface language"
+          className="h-8 border-border bg-secondary/30 font-mono text-[0.72rem] tracking-wider uppercase px-2.5 min-w-[90px]"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="border-border bg-surface z-[150]">

@@ -175,21 +175,25 @@ function AlertsPage() {
             </div>
 
             {dispatchResult && (
-              <div className="rounded border border-primary/40 bg-primary/10 p-3 text-xs font-mono text-primary">
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded border border-primary/40 bg-primary/10 p-3 text-xs font-mono text-primary"
+              >
                 {dispatchResult}
               </div>
             )}
 
             <form onSubmit={handleManualDispatch} className="space-y-4 pt-1">
               <div className="grid gap-2">
-                <label className="text-xs font-mono uppercase text-muted-foreground">
+                <label htmlFor="target-zone-select" className="text-xs font-mono uppercase text-muted-foreground">
                   {t("alerts.target_zone")}
                 </label>
                 <Select
                   value={String(targetZoneId)}
                   onValueChange={(v) => setTargetZoneId(Number(v))}
                 >
-                  <SelectTrigger className="bg-secondary/40 border-border font-mono text-xs">
+                  <SelectTrigger id="target-zone-select" aria-label={t("alerts.target_zone")} className="bg-secondary/40 border-border font-mono text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-surface border-border max-h-56">
@@ -204,14 +208,14 @@ function AlertsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <label className="text-xs font-mono uppercase text-muted-foreground">
+                  <label htmlFor="target-lang-select" className="text-xs font-mono uppercase text-muted-foreground">
                     {t("alerts.select_language")}
                   </label>
                   <Select
                     value={targetLang}
                     onValueChange={(v) => setTargetLang(v as "en" | "as" | "bn" | "ne")}
                   >
-                    <SelectTrigger className="bg-secondary/40 border-border font-mono text-xs">
+                    <SelectTrigger id="target-lang-select" aria-label={t("alerts.select_language")} className="bg-secondary/40 border-border font-mono text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-surface border-border">
@@ -224,14 +228,14 @@ function AlertsPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <label className="text-xs font-mono uppercase text-muted-foreground">
+                  <label htmlFor="target-channel-select" className="text-xs font-mono uppercase text-muted-foreground">
                     {t("alerts.select_channel")}
                   </label>
                   <Select
                     value={targetChannel}
                     onValueChange={(v) => setTargetChannel(v as "sms" | "push" | "both")}
                   >
-                    <SelectTrigger className="bg-secondary/40 border-border font-mono text-xs">
+                    <SelectTrigger id="target-channel-select" aria-label={t("alerts.select_channel")} className="bg-secondary/40 border-border font-mono text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-surface border-border">
@@ -244,16 +248,18 @@ function AlertsPage() {
               </div>
 
               <div className="grid gap-2">
-                <label className="text-xs font-mono uppercase text-muted-foreground">
+                <label htmlFor="dispatch-justification" className="text-xs font-mono uppercase text-muted-foreground">
                   {t("alerts.justification_required")}
                 </label>
                 <Input
+                  id="dispatch-justification"
                   type="text"
                   placeholder="e.g. Field reports and radar confirm slope instability along NH-29"
                   value={justification}
                   onChange={(e) => setJustification(e.target.value)}
                   minLength={8}
                   required
+                  aria-required="true"
                   className="bg-secondary/40 border-border font-mono text-xs"
                 />
               </div>

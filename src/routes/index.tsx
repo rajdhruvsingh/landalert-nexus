@@ -183,7 +183,11 @@ function Dashboard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {actionNotice && (
-            <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-400">
+            <span
+              role="status"
+              aria-live="polite"
+              className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-400"
+            >
               {actionNotice}
             </span>
           )}
@@ -240,8 +244,11 @@ function Dashboard() {
               {states.map((s) => (
                 <button
                   key={s}
+                  type="button"
+                  aria-pressed={stateFilter === s}
+                  aria-label={`Filter by state: ${s}`}
                   onClick={() => setStateFilter(s)}
-                  className={`rounded border px-2 py-1 font-mono text-[0.7rem] transition-colors ${
+                  className={`rounded border px-2 py-1 font-mono text-[0.7rem] transition-colors focus-visible:ring-1 focus-visible:ring-primary ${
                     stateFilter === s
                       ? "border-primary/60 bg-primary/15 text-primary"
                       : "border-border text-muted-foreground hover:bg-secondary"
@@ -252,7 +259,12 @@ function Dashboard() {
               ))}
             </div>
           </div>
-          <div className="w-full flex-1 min-h-[500px] relative isolate z-0">
+          <div
+            role="region"
+            aria-label="Interactive Landslide Hazard Map"
+            tabIndex={0}
+            className="w-full flex-1 min-h-[500px] relative isolate z-0 focus-visible:ring-1 focus-visible:ring-primary outline-none"
+          >
             <MapCanvas zones={zones} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </div>
           <div className="flex flex-wrap items-center gap-4 border-t border-border px-4 py-2 shrink-0 bg-surface/40">
@@ -458,7 +470,7 @@ function Dashboard() {
           )}
 
           {/* Emergency Response Prioritisation Panel */}
-          <div className="panel">
+          <div className="panel" role="region" aria-label="Emergency Response Prioritisation List">
             <div className="border-b border-border px-4 py-3">
               <div className="flex items-center justify-between">
                 <span className="label-caps">{t("response_prioritization.section_title")}</span>
@@ -478,8 +490,10 @@ function Dashboard() {
                 .map((r) => (
                   <button
                     key={r.zoneId}
+                    type="button"
+                    aria-label={`Rank ${r.rank}: ${r.zoneName}, Priority Score ${r.compositeUrgencyScore.toFixed(1)}, ${r.currentRiskLevel} risk`}
                     onClick={() => setSelectedId(r.zoneId)}
-                    className={`flex w-full flex-col gap-1.5 border-b border-border/60 px-4 py-3 text-left transition-colors hover:bg-secondary/60 ${
+                    className={`flex w-full flex-col gap-1.5 border-b border-border/60 px-4 py-3 text-left transition-colors hover:bg-secondary/60 focus-visible:ring-1 focus-visible:ring-primary ${
                       selected?.id === r.zoneId ? "bg-secondary/70" : ""
                     }`}
                   >
@@ -535,8 +549,10 @@ function Dashboard() {
                       .map((u) => (
                         <button
                           key={u.zoneId}
+                          type="button"
+                          aria-label={`Unranked: ${u.zoneName}, ${u.district}, Status Unknown`}
                           onClick={() => setSelectedId(u.zoneId)}
-                          className={`flex w-full items-center justify-between rounded border border-border/60 p-2 text-left text-xs hover:bg-secondary/60 ${
+                          className={`flex w-full items-center justify-between rounded border border-border/60 p-2 text-left text-xs hover:bg-secondary/60 focus-visible:ring-1 focus-visible:ring-primary ${
                             selected?.id === u.zoneId ? "bg-secondary/70" : ""
                           }`}
                         >

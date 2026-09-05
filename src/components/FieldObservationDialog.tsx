@@ -530,6 +530,8 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
 
         {statusMessage && (
           <div
+            role="status"
+            aria-live="polite"
             className={`rounded border p-3 text-xs font-mono leading-relaxed ${
               statusMessage.type === "success"
                 ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
@@ -549,7 +551,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               {t("field_observation.zone_label", "Monitored Zone (NER)")}
             </Label>
             <Select value={String(zoneId)} onValueChange={(v) => setZoneId(Number(v))}>
-              <SelectTrigger id="zoneSelect" className="bg-secondary/40 border-border font-mono text-xs">
+              <SelectTrigger id="zoneSelect" aria-label={t("field_observation.zone_label", "Monitored Zone (NER)")} className="bg-secondary/40 border-border font-mono text-xs">
                 <SelectValue placeholder={t("field_observation.zone_placeholder", "Select Zone")} />
               </SelectTrigger>
               <SelectContent className="bg-surface border-border max-h-60">
@@ -591,7 +593,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 {t("field_observation.soil_label", "Soil Condition")}
               </Label>
               <Select value={soilCondition} onValueChange={setSoilCondition}>
-                <SelectTrigger id="soilCondition" className="bg-secondary/40 border-border font-mono text-xs">
+                <SelectTrigger id="soilCondition" aria-label={t("field_observation.soil_label", "Soil Condition")} className="bg-secondary/40 border-border font-mono text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface border-border">
@@ -610,7 +612,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 {t("field_observation.signs_label", "Visual Signs")}
               </Label>
               <Select value={visualSigns} onValueChange={setVisualSigns}>
-                <SelectTrigger id="visualSigns" className="bg-secondary/40 border-border font-mono text-xs">
+                <SelectTrigger id="visualSigns" aria-label={t("field_observation.signs_label", "Visual Signs")} className="bg-secondary/40 border-border font-mono text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface border-border">
@@ -631,7 +633,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 value={roadStatus}
                 onValueChange={(v) => setRoadStatus(v as "open" | "restricted" | "blocked" | "unknown")}
               >
-                <SelectTrigger id="roadStatus" className="bg-secondary/40 border-border font-mono text-xs">
+                <SelectTrigger id="roadStatus" aria-label={t("field_observation.road_label", "Road Connectivity")} className="bg-secondary/40 border-border font-mono text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface border-border">
@@ -648,7 +650,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
           {mediaUploadEnabled && (
             <div className="rounded border border-border bg-secondary/20 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-mono uppercase text-muted-foreground">
+                <Label htmlFor="fieldMediaUploadInput" className="text-xs font-mono uppercase text-muted-foreground">
                   {t("field_observation.media_title", "Field Media (Photos / Video)")}
                 </Label>
                 <span className="text-[0.65rem] font-mono text-muted-foreground">
@@ -658,6 +660,8 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
 
               <div className="flex gap-2">
                 <Input
+                  id="fieldMediaUploadInput"
+                  aria-label={t("field_observation.media_title", "Field Media (Photos / Video)")}
                   type="file"
                   accept="image/*,video/*"
                   multiple
@@ -669,6 +673,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                   type="button"
                   variant="outline"
                   size="sm"
+                  aria-label={t("field_observation.camera_button", "📷 Camera")}
                   disabled={submitting || mediaList.length >= 3}
                   onClick={handleNativeCameraCapture}
                   className="font-mono text-xs shrink-0"
@@ -703,6 +708,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                       </span>
                       <button
                         type="button"
+                        aria-label={`Remove media ${item.name}`}
                         onClick={() => removeMedia(idx)}
                         className="text-muted-foreground hover:text-destructive text-xs ml-1"
                         title="Remove"
@@ -728,6 +734,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               type="button"
               variant="outline"
               size="sm"
+              aria-label={geoLat ? t("field_observation.recapture_gps", "📍 Recapture GPS") : t("field_observation.capture_gps", "📍 Capture GPS")}
               onClick={captureGps}
               className="font-mono text-[0.7rem] h-7 px-2"
             >
