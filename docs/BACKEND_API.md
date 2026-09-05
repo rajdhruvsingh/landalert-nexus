@@ -356,3 +356,18 @@ Standard error codes:
 - `NOT_FOUND`: Non-existent route or resource
 - `DATABASE_ERROR`: Database query or RPC execution failure
 - `INTERNAL_SERVER_ERROR`: Unhandled exception
+
+---
+
+## 4. Integration Testing & Postgres RLS Verification
+
+The storage RLS policy test suite in `src/lib/storage-rls.test.ts` exercises true PostgreSQL Row-Level Security (RLS) enforcement directly on the `storage.objects` table.
+
+Because RLS is strictly enforced by the PostgreSQL database engine rather than application-layer code:
+- The test connects directly using the Node `pg` client (`pg.Client`).
+- In environments where `DATABASE_URL` is unset or PostgreSQL is unreachable, the test **skips gracefully** (`ctx.skip()`) with a diagnostic message rather than failing the build suite. This allows unit-test pipelines (`npm run test:all`) to pass deterministically in standalone/CI environments without requiring a live database service.
+- To execute this integration test locally or in an end-to-end CI pipeline:
+  1. Start the local database instance: `supabase start`
+  2. Configure the database connection string: `export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"`
+  3. Run the integration test: `npx vitest run src/lib/storage-rls.test.ts`
+
