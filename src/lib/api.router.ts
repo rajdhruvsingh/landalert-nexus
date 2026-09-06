@@ -16,7 +16,7 @@ import { getRiskPrediction, validatePredictionInput } from "./ml.service";
 import { evaluateAndDispatchAlert } from "./alert.service";
 import { syncFieldObservations, getOfflinePackage } from "./sync.service";
 import { getZonesGeoJson, getLandslidesGeoJson } from "./gis.service";
-import { ingestLiveRainfallImpl } from "./monitoring.functions";
+import { ingestLiveRainfallImpl } from "./monitoring.server";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getSatelliteLayerStatus, fetchSatelliteTile } from "./satellite.service";
@@ -395,7 +395,112 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       return jsonResponse(res, 200, cors);
     }
 
+    // 6c. Observation Review — Approve / Reject (VERIFIED_OFFICIAL, DISPATCHER, or ADMIN)
+    if (pathname === "/api/observations/review" && request.method === "POST") {
+      // Require authentication
+      const authHeader = request.headers.get("Authorization");
+      if (!authHeader) {
+        return errorResponse(
+          "Authentication required to review observations",
+          "UNAUTHORIZED",
+          401,
+          cors,
+        );
+      }
+
+      const { authenticateToken: authToken, verifyGroundObservation } = await import("./official-auth.service");
+      const profile = await authToken(authHeader);
+
+      // Role check: VERIFIED_OFFICIAL, DISPATCHER, or ADMIN only
+      const isAuthorized =
+        profile !== null &&
+        (profile.role === "VERIFIED_OFFICIAL" ||
+          profile.role === "DISPATCHER" ||
+          profile.role === "ADMIN");
+
+      if (!isAuthorized) {
+        return errorResponse(
+          "Forbidden: Only verified government officials, dispatchers, or administrators can review observations",
+          "FORBIDDEN",
+          403,
+          cors,
+        );
+      }
+
+      // Parse and validate request body
+      let body: {
+        observation_id?: unknown;
+        new_status?: unknown;
+        verification_notes?: unknown;
+        is_training_eligible?: unknown;
+      } = {};
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse("Malformed JSON request body", "INVALID_JSON", 400, cors);
+      }
+
+      const observationId = body.observation_id;
+      if (!observationId || (typeof observationId !== "string" && typeof observationId !== "number")) {
+        return errorResponse("observation_id is required", "MISSING_OBSERVATION_ID", 400, cors);
+      }
+
+      const newStatus = body.new_status;
+      if (newStatus !== "VERIFIED" && newStatus !== "REJECTED") {
+        return errorResponse(
+          "new_status must be 'VERIFIED' or 'REJECTED'",
+          "INVALID_STATUS",
+          400,
+          cors,
+        );
+      }
+
+      const verificationNotes =
+        typeof body.verification_notes === "string" ? body.verification_notes.trim() : "";
+
+      // REJECTED observations require a reason
+      if (newStatus === "REJECTED" && verificationNotes.length < 5) {
+        return errorResponse(
+          "A rejection reason (verification_notes, min 5 chars) is required when rejecting an observation",
+          "MISSING_REJECTION_REASON",
+          400,
+          cors,
+        );
+      }
+
+      const result = await verifyGroundObservation(
+        profile!,
+        String(observationId),
+        {
+          status: newStatus,
+          verificationNotes,
+          isTrainingEligible: Boolean(body.is_training_eligible),
+        },
+      );
+
+      if (!result.success) {
+        // Distinguish 404 from other errors
+        if (result.error?.includes("not found")) {
+          return errorResponse(result.error, "NOT_FOUND", 404, cors);
+        }
+        return errorResponse(result.error ?? "Review failed", "REVIEW_FAILED", 400, cors);
+      }
+
+      return jsonResponse(
+        {
+          ok: true,
+          observation_id: String(observationId),
+          new_status: newStatus,
+          reviewed_by: profile!.id,
+          reviewed_at: new Date().toISOString(),
+        },
+        200,
+        cors,
+      );
+    }
+
     // 7. Offline Field Observation Synchronization
+
     if (pathname === "/api/sync/observations" && request.method === "POST") {
       const clientKey = `sync_observations:${getClientIdentifier(request)}`;
       const limitResult = defaultRateLimiter.checkLimit(clientKey, RATE_LIMIT_POLICIES.OBSERVATION_SYNC);
@@ -800,7 +905,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           .filter((o) => o.zone_id === z.id)
           .map((o) => ({
             id: o.id,
-            reviewStatus: o.review_status ?? undefined,
+            status: (o as any).status ?? undefined,
             roadStatus: o.road_status ?? undefined,
             visualSigns: o.visual_signs ?? undefined,
             rainfallMm: o.rainfall_mm ?? undefined,
