@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
 function publicClient() {
-  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-  const url = process.env["SUPABASE_URL"]!;
+  const key = process.env["SUPABASE_PUBLISHABLE_KEY"] || "sb_publishable_default_key";
+  const url = process.env["SUPABASE_URL"] || "https://shkpwbqcbeqlybdrhczq.supabase.co";
   return createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
@@ -115,7 +115,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
 });
 
 export const getZoneDetail = createServerFn({ method: "GET" })
-  .inputValidator((data: { id: number }) => ({ id: Number(data.id) }))
+  .validator((data: { id: number }) => ({ id: Number(data.id) }))
   .handler(async ({ data }) => {
     const sb = publicClient();
     const [zone, readings, roads, slides, alerts, modelConfig, observations] = await Promise.all([
@@ -187,7 +187,7 @@ export const getCandidateModelConfig = createServerFn({ method: "GET" }).handler
  * raise alerts for any zone that crosses into High/Severe.
  */
 export const simulateRainfallSpike = createServerFn({ method: "POST" })
-  .inputValidator((data: { zoneId: number; rainfallMm: number }) => ({
+  .validator((data: { zoneId: number; rainfallMm: number }) => ({
     zoneId: Number(data.zoneId),
     rainfallMm: Math.max(0, Math.min(600, Number(data.rainfallMm))),
   }))
@@ -498,7 +498,7 @@ export const getResponsePrioritizationServerFn = createServerFn({ method: "GET" 
         .filter((o) => o.zone_id === z.id)
         .map((o) => ({
           id: o.id,
-          reviewStatus: o.review_status ?? undefined,
+          status: (o as any).status ?? undefined,
           roadStatus: o.road_status ?? undefined,
           visualSigns: o.visual_signs ?? undefined,
           rainfallMm: o.rainfall_mm ?? undefined,
@@ -635,4 +635,75 @@ export const retractAlertServerFn = createServerFn({ method: "POST" })
       reason: data.reason,
       retractedBy: profile.email || profile.id,
     });
+  });
+
+export interface LocationRiskResult {
+  matched: boolean;
+  zone: {
+    id: number;
+    zone_name: string;
+    district: string;
+    state: string;
+    current_risk_level: string;
+    risk_score: number;
+    explanation: string | null;
+    centroid_lat: number;
+    centroid_lng: number;
+    mean_slope_deg?: number;
+    population?: number;
+  } | null;
+  userCoords: {
+    lat: number;
+    lng: number;
+  };
+}
+
+export async function getRiskForLocation(lat: number, lng: number): Promise<LocationRiskResult> {
+  const sb = publicClient();
+  const { data: zones, error } = await sb
+    .from("risk_zones")
+    .select("id, zone_name, district, state, current_risk_level, risk_score, explanation, centroid_lat, centroid_lng, mean_slope_deg, population")
+    .order("id");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const { findMatchingZone } = await import("./risk");
+  const matched = findMatchingZone(lat, lng, zones ?? []);
+
+  if (!matched) {
+    return {
+      matched: false,
+      zone: null,
+      userCoords: { lat, lng },
+    };
+  }
+
+  return {
+    matched: true,
+    zone: {
+      id: matched.id,
+      zone_name: matched.zone_name,
+      district: matched.district,
+      state: matched.state,
+      current_risk_level: matched.current_risk_level,
+      risk_score: matched.risk_score,
+      explanation: matched.explanation,
+      centroid_lat: matched.centroid_lat,
+      centroid_lng: matched.centroid_lng,
+      mean_slope_deg: matched.mean_slope_deg,
+      population: matched.population,
+    },
+    userCoords: { lat, lng },
+  };
+}
+
+export const getRiskForLocationServerFn = createServerFn({ method: "GET" })
+  .validator((data: { lat: number; lng: number }) => ({
+    lat: Number(data.lat),
+    lng: Number(data.lng),
+  }))
+  .handler(async ({ data }): Promise<LocationRiskResult> => {
+    return getRiskForLocation(data.lat, data.lng);
   });
