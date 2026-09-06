@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { getOverview, dispatchAlertServerFn, retractAlertServerFn } from "@/lib/monitoring.functions";
 import { RiskBadge } from "@/components/RiskBits";
@@ -54,6 +54,31 @@ const TEMPLATES: Record<
     render: (zone, level) =>
       `${zone} मा पहिरोको ${level === "Severe" ? "गम्भीर" : "उच्च"} जोखिम। भिरालो सडक नजानुहोस्। चिरा वा पहिरो देखिए जिल्ला नियन्त्रण कक्षलाई खबर गर्नुहोस्।`,
   },
+  hi: {
+    label: "हिन्दी (Hindi)",
+    render: (zone, level) =>
+      `${zone} में भूस्खलन का ${level === "Severe" ? "अति गंभीर" : "उच्च"} जोखिम। ढलान वाले मार्गों पर जाने से बचें। दरारें दिखने पर जिला नियंत्रण कक्ष को तुरंत सूचित करें।`,
+  },
+  mni: {
+    label: "মণিপুরী (Manipuri)",
+    render: (zone, level) =>
+      `${zone} দা চীংহায়বগী ${level === "Severe" ? "য়াম্না ৱাংবা" : "অকনবা"} খুদোংথীবা লৈরে। চীংগী লম্বী চৎপদা চেকশিনবীয়ু। মফম চৎহায়বা উবদা ডিষ্ট্রিক্ট কন্ত্রোল রুমদা পাউ পীবীয়ু।`,
+  },
+  lus: {
+    label: "Mizo (Mizo)",
+    render: (zone, level) =>
+      `${zone}-ah lei min hlauhawmna a ${level === "Severe" ? "sang tawpkhawk" : "sang"}. Chhengchhe kawngah fimkhur rawh. Lei khi i hmuh chuan district control room hriattir vat rawh.`,
+  },
+  kha: {
+    label: "Khasi (Khasi)",
+    render: (zone, level) =>
+      `Ka jingtwap khyndew ha ${zone} ka long kaba ${level === "Severe" ? "jur bha" : "ma"}. Kyntait ban iaid lynti lum. Lada lap ba pait khyndew pyntip kloi sha district control room.`,
+  },
+  grt: {
+    label: "Garo (Garo)",
+    render: (zone, level) =>
+      `${zone}-o a·a bel·ani ${level === "Severe" ? "kenbegnibegipa" : "kengipa"} obosta donga. A·bri ramarango re·rurana simsakbo. A·a bretako nikode district control room-ona paratbo.`,
+  },
 };
 
 export const Route = createFileRoute("/alerts")({
@@ -81,11 +106,28 @@ export const Route = createFileRoute("/alerts")({
 
 function AlertsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data } = useSuspenseQuery(overviewQuery);
   const qc = useQueryClient();
   const [lang, setLang] = useState("en");
   const [level, setLevel] = useState("All");
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<string>("All");
+
+  // Seamlessly transition if the user navigates directly to /alerts#risk-map or similar hash anchors
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const rawHash = window.location.hash.replace("#", "");
+      if (
+        rawHash === "risk-map" ||
+        rawHash === "observations" ||
+        rawHash === "recent-observations" ||
+        rawHash === "road-network" ||
+        rawHash === "road-connectivity"
+      ) {
+        navigate({ to: "/", hash: rawHash });
+      }
+    }
+  }, [navigate]);
 
   // Alert dispatch modal state
   const [openDispatch, setOpenDispatch] = useState(false);
@@ -97,7 +139,7 @@ function AlertsPage() {
   const [dispatchResult, setDispatchResult] = useState<string | null>(null);
 
   const alerts = useMemo(() => {
-    return data.alerts.filter((a) => {
+    return data.alerts.filter((a: any) => {
       const matchLevel = level === "All" || a.risk_level === level;
       const matchZone = selectedZoneFilter === "All" || String(a.zone_id) === selectedZoneFilter;
       return matchLevel && matchZone;
@@ -110,7 +152,7 @@ function AlertsPage() {
     setDispatchResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await dispatchAlertServerFn({
+      const res: any = await dispatchAlertServerFn({
         data: {
           zoneId: targetZoneId,
           language: targetLang,
@@ -156,7 +198,7 @@ function AlertsPage() {
         data: {
           alertId: selectedAlertToRetract,
           reason: retractionReason.trim(),
-          authToken: session?.access_token,
+          ...(session?.access_token ? { authToken: session.access_token } : {}),
         },
       });
       setRetractResult(t("alerts.retracted_success"));
@@ -233,7 +275,7 @@ function AlertsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-surface border-border max-h-56">
-                    {data.zones.map((z) => (
+                    {data.zones.map((z: any) => (
                       <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
                         Zone {z.id}: {z.zone_name} ({z.current_risk_level})
                       </SelectItem>
@@ -351,7 +393,7 @@ function AlertsPage() {
               <SelectItem value="All" className="text-xs font-mono">
                 {t("alerts.all_zones")}
               </SelectItem>
-              {data.zones.map((z) => (
+              {data.zones.map((z: any) => (
                 <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
                   {z.zone_name}
                 </SelectItem>
@@ -378,9 +420,9 @@ function AlertsPage() {
       </div>
 
       <div className="mt-6 space-y-4">
-        {alerts.map((a) => {
-          const zone = data.zones.find((z) => z.id === a.zone_id);
-          const zoneName = zone ? `${zone.zone_name}, ${zone.state}` : `Zone ${a.zone_id}`;
+        {alerts.map((a: any) => {
+          const zone = data.zones.find((z: any) => z.id === a.zone_id);
+          const zoneName = zone ? `${zone.zone_name} (${zone.district}, ${zone.state})` : `Zone ${a.zone_id}`;
           const isDelivered = (a as { delivery_status?: string }).delivery_status === "delivered";
 
           const isRetracted = Boolean((a as any).is_retracted || (a as any).status === "retracted");

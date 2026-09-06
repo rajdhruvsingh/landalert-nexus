@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { sanitizeObservationList } from "./observation-sanitizer";
 
 function publicClient() {
   const key = process.env["SUPABASE_PUBLISHABLE_KEY"] || "sb_publishable_default_key";
@@ -70,7 +71,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
         alerts: alerts.data ?? [],
         activeModel: modelConfig.data ?? null,
         candidateModel: candidateConfig?.data ?? null,
-        observations: observations?.data ?? [],
+        observations: sanitizeObservationList(observations?.data ?? []),
       };
     }
   } catch {
@@ -97,7 +98,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
         alerts: aRes.rows || [],
         activeModel: mRes.rows[0] || null,
         candidateModel: cRes.rows[0] || null,
-        observations: oRes.rows || [],
+        observations: sanitizeObservationList(oRes.rows || []),
       };
     } catch (pgErr) {
       console.error("[getOverview] Postgres fallback query error:", pgErr);
@@ -152,7 +153,7 @@ export const getZoneDetail = createServerFn({ method: "GET" })
       slides: slides.data ?? [],
       alerts: alerts.data ?? [],
       activeModel: modelConfig.data ?? null,
-      observations: observations.data ?? [],
+      observations: sanitizeObservationList(observations.data ?? []),
     };
   });
 
@@ -237,7 +238,7 @@ export const getResponsePrioritizationServerFn = createServerFn({ method: "GET" 
 
     const zones = zonesRes.data ?? [];
     const roads = roadsRes.data ?? [];
-    const observations = obsRes.data ?? [];
+    const observations = sanitizeObservationList(obsRes.data ?? []);
 
     const zoneInputs = zones.map((z) => ({
       zoneId: z.id,
@@ -280,6 +281,67 @@ export const getRiskPredictionServerFn = createServerFn({ method: "GET" })
     return getRiskPrediction(data.zoneId, data.asOfDate);
   });
 
+export const getSpatialGridServerFn = createServerFn({ method: "GET" })
+  .validator((data?: { stateName?: string | undefined; districtName?: string | undefined }) => ({
+    stateName: data?.stateName,
+    districtName: data?.districtName,
+  }))
+  .handler(async ({ data }) => {
+    const { getAllSpatialCells, getSpatialCellsByState, getSpatialCellsByDistrict, evaluateCellRisk } = await import(
+      "./spatial-risk.service"
+    );
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+    const activeZones = zonesData ?? [];
+
+    let cells = getAllSpatialCells();
+    if (data?.stateName && data.stateName !== "All") {
+      cells = getSpatialCellsByState(data.stateName);
+    } else if (data?.districtName && data.districtName !== "All") {
+      cells = getSpatialCellsByDistrict(data.districtName);
+    }
+
+    const evaluations = cells.map((c) => evaluateCellRisk(c, activeZones));
+    return {
+      cells: evaluations,
+      count: evaluations.length,
+      model_version: "v0.3-spatial-surface",
+      evaluated_at: new Date().toISOString(),
+    };
+  });
+
+export const getLocationSpatialRiskServerFn = createServerFn({ method: "GET" })
+  .validator(
+    (data: {
+      name: string;
+      type?: "city" | "town" | "locality" | "district";
+      district: string;
+      state: string;
+      coordinates: [number, number];
+    }) => ({
+      name: data.name,
+      type: data.type || ("city" as const),
+      district: data.district,
+      state: data.state,
+      coordinates: data.coordinates,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { deriveLocationSpatialRisk } = await import("./spatial-risk.service");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+    const activeZones = zonesData ?? [];
+
+    return deriveLocationSpatialRisk(
+      data.name,
+      data.type || "city",
+      data.district,
+      data.state,
+      data.coordinates,
+      activeZones,
+    );
+  });
+
 export const getSystemHealthServerFn = createServerFn({ method: "GET" }).handler(async () => {
   const { getSystemHealth } = await import("./health.service");
   return getSystemHealth();
@@ -300,25 +362,19 @@ export const getZonesGeoJsonServerFn = createServerFn({ method: "GET" }).handler
   return getZonesGeoJson();
 });
 
+export interface DispatchAlertInput {
+  zoneId: number;
+  language?: "en" | "bn" | "as" | "ne" | undefined;
+  channel?: "sms" | "push" | "both" | undefined;
+  idempotencyKey?: string | undefined;
+  justification?: string | undefined;
+  userToken?: string | undefined;
+}
+
 export const dispatchAlertServerFn = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      zoneId: number;
-      language?: "en" | "as" | "bn" | "ne";
-      channel?: "sms" | "push" | "both";
-      idempotencyKey?: string;
-      justification?: string;
-      userToken?: string;
-    }) => ({
-      zoneId: Number(data.zoneId),
-      language: data.language,
-      channel: data.channel,
-      idempotencyKey: data.idempotencyKey,
-      justification: data.justification,
-      userToken: data.userToken,
-    }),
-  )
-  .handler(async ({ data }) => {
+  .validator((data: DispatchAlertInput) => data)
+  .handler(async (ctx) => {
+    const data = ctx.data;
     const { getRiskPrediction } = await import("./ml.service");
     const { evaluateAndDispatchAlert } = await import("./alert.service");
     const { authenticateToken, verifyDispatcherAuthorization } = await import("./official-auth.service");
@@ -371,13 +427,16 @@ export const submitFieldObservationsServerFn = createServerFn({ method: "POST" }
     return syncFieldObservations(data.observations);
   });
 
+export interface RetractAlertInput {
+  alertId: number;
+  reason: string;
+  authToken?: string | undefined;
+}
+
 export const retractAlertServerFn = createServerFn({ method: "POST" })
-  .validator((data: { alertId: number; reason: string; authToken?: string }) => ({
-    alertId: Number(data.alertId),
-    reason: String(data.reason || "").trim(),
-    authToken: data.authToken,
-  }))
-  .handler(async ({ data }) => {
+  .validator((data: RetractAlertInput) => data)
+  .handler(async (ctx) => {
+    const data = ctx.data;
     const { getSessionProfile } = await import("./official-auth.service");
     const profile = await getSessionProfile(data.authToken);
 

@@ -1,11 +1,20 @@
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Rectangle, CircleMarker, Tooltip, useMap } from "react-leaflet";
 import { useEffect, useState } from "react";
 import type { ZoneRow, SlideRow } from "@/lib/monitoring.functions";
 import { riskColor, zonePolygon } from "@/lib/risk";
 import { useTranslation } from "react-i18next";
+import type { CellRiskEvaluation } from "@/lib/spatial-risk.service";
 
-function MapResizeHandler({ selectedZone }: { selectedZone?: ZoneRow | null }) {
+function MapResizeHandler({
+  selectedZone,
+  center,
+  zoom,
+}: {
+  selectedZone?: ZoneRow | null;
+  center?: [number, number];
+  zoom?: number;
+}) {
   const map = useMap();
   useEffect(() => {
     map.invalidateSize();
@@ -38,8 +47,12 @@ function MapResizeHandler({ selectedZone }: { selectedZone?: ZoneRow | null }) {
       map.flyTo([selectedZone.centroid_lat, selectedZone.centroid_lng], Math.max(map.getZoom(), 8), {
         duration: 0.8,
       });
+    } else if (center) {
+      map.flyTo(center, zoom ?? map.getZoom(), {
+        duration: 0.8,
+      });
     }
-  }, [selectedZone, map]);
+  }, [selectedZone, center, zoom, map]);
 
   return null;
 }
@@ -51,6 +64,8 @@ type Props = {
   onSelect?: (id: number) => void;
   center?: [number, number];
   zoom?: number;
+  spatialCells?: CellRiskEvaluation[];
+  onSelectCell?: (cell: CellRiskEvaluation) => void;
 };
 
 export default function RiskMap({
@@ -60,6 +75,8 @@ export default function RiskMap({
   onSelect,
   center = [25.6, 92.8],
   zoom = 7,
+  spatialCells = [],
+  onSelectCell,
 }: Props) {
   const { t } = useTranslation();
   const [satelliteStatus, setSatelliteStatus] = useState<{
@@ -69,6 +86,8 @@ export default function RiskMap({
   } | null>(null);
   const [showTrueColor, setShowTrueColor] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
+  const [showSpatialGrid, setShowSpatialGrid] = useState(true);
+  const [showInSarDeformation, setShowInSarDeformation] = useState(false);
 
   const selectedZone = zones.find((z) => z.id === selectedId) ?? null;
 
@@ -84,43 +103,77 @@ export default function RiskMap({
 
   return (
     <div className="relative w-full h-full min-h-[460px]">
-      {/* Satellite Imagery Layer Controls (Gracefully hidden if not configured in environment) */}
-      {hasSatellite && (
-        <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 rounded border border-border/80 bg-background/90 p-2.5 shadow-lg backdrop-blur text-xs font-mono">
-          <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 mb-1">
-            <span className="font-semibold text-primary uppercase text-[0.68rem] tracking-wider">
-              {t("risk_map.sentinel_visuals", "🛰 Sentinel-2 Visuals")}
-            </span>
-            <span
-              className="text-[0.65rem] text-muted-foreground cursor-help"
-              title={t("risk_map.visual_only_title", "Supplementary visual context only — not automated landslide scar detection or hazard prediction.")}
-            >
-              {t("risk_map.visual_only", "ℹ Visual Only")}
-            </span>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showTrueColor}
-              onChange={(e) => setShowTrueColor(e.target.checked)}
-              className="rounded border-border text-primary"
-            />
-            <span className="text-[0.72rem]">{t("risk_map.true_color", "True-Color Imagery")}</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showNdvi}
-              onChange={(e) => setShowNdvi(e.target.checked)}
-              className="rounded border-border text-primary"
-            />
-            <span className="text-[0.72rem]">{t("risk_map.ndvi_vegetation", "NDVI Vegetation Index")}</span>
-          </label>
-          <div className="text-[0.62rem] text-muted-foreground/80 pt-0.5 border-t border-border/30">
-            {t("risk_map.sentinel_attribution", "Copernicus Sentinel data 2026")}
-          </div>
+      {/* Layer Controls Panel (Satellite & Spatial Grid) */}
+      <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 rounded border border-border/80 bg-background/95 p-2.5 shadow-lg backdrop-blur text-xs font-mono">
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 mb-1">
+          <span className="font-semibold text-primary uppercase text-[0.68rem] tracking-wider">
+            {t("risk_map.layers_title", "Layers & Grid")}
+          </span>
+          <span
+            className="text-[0.65rem] text-muted-foreground cursor-help"
+            title={t("risk_map.spatial_coverage_info", "Continuous 0.25° spatial landslide risk prediction grid across all 8 Northeast states.")}
+          >
+            {spatialCells.length} cells
+          </span>
         </div>
-      )}
+
+        {/* Spatial Grid Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showSpatialGrid}
+            onChange={(e) => setShowSpatialGrid(e.target.checked)}
+            className="rounded border-border text-primary"
+          />
+          <span className="text-[0.72rem] font-semibold text-foreground">
+            {t("risk_map.show_spatial_surface", "8-State Spatial Risk Surface")}
+          </span>
+        </label>
+
+        {/* InSAR Ground Deformation Layer Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showInSarDeformation}
+            onChange={(e) => setShowInSarDeformation(e.target.checked)}
+            className="rounded border-border text-violet-500"
+          />
+          <span className="text-[0.72rem] font-semibold text-foreground flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-violet-500 inline-block"></span>
+            {t("risk_map.show_insar_layer", "InSAR Ground Deformation")}
+          </span>
+        </label>
+
+        {/* Satellite Imagery Layer Controls */}
+        {hasSatellite && (
+          <>
+            <div className="border-t border-border/40 pt-1 mt-0.5 text-[0.65rem] uppercase text-muted-foreground font-semibold">
+              {t("risk_map.sentinel_visuals", "🛰 Sentinel-2 Visuals")}
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showTrueColor}
+                onChange={(e) => setShowTrueColor(e.target.checked)}
+                className="rounded border-border text-primary"
+              />
+              <span className="text-[0.72rem]">{t("risk_map.true_color", "True-Color Imagery")}</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showNdvi}
+                onChange={(e) => setShowNdvi(e.target.checked)}
+                className="rounded border-border text-primary"
+              />
+              <span className="text-[0.72rem]">{t("risk_map.ndvi_vegetation", "NDVI Vegetation Index")}</span>
+            </label>
+            <div className="text-[0.62rem] text-muted-foreground/80 pt-0.5 border-t border-border/30">
+              {t("risk_map.sentinel_attribution", "Copernicus Sentinel data 2026")}
+            </div>
+          </>
+        )}
+      </div>
 
       <MapContainer
         center={center}
@@ -129,7 +182,7 @@ export default function RiskMap({
         className="isolate w-full h-full min-h-[460px]"
         style={{ height: "100%", width: "100%", minHeight: "460px", zIndex: 1 }}
       >
-        <MapResizeHandler selectedZone={selectedZone} />
+        <MapResizeHandler selectedZone={selectedZone} center={center} zoom={zoom} />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -154,6 +207,52 @@ export default function RiskMap({
             opacity={0.65}
           />
         )}
+        {/* Continuous 8-State Spatial Prediction Grid Surface */}
+        {showSpatialGrid && spatialCells.map((c) => {
+          const hasInSar = c.provenance.satellite_deformation?.status === "AVAILABLE";
+          const strokeColor = showInSarDeformation && hasInSar ? "#8b5cf6" : riskColor(c.risk_level);
+          const fillColor = showInSarDeformation && hasInSar ? "#a78bfa" : riskColor(c.risk_level);
+          const weight = showInSarDeformation && hasInSar ? 2.0 : 0.6;
+          const fillOpacity = showInSarDeformation && hasInSar ? 0.38 : 0.22;
+
+          return (
+            <Rectangle
+              key={c.cell_id}
+              bounds={c.bounds}
+              pathOptions={{
+                color: strokeColor,
+                weight,
+                fillColor,
+                fillOpacity,
+              }}
+              eventHandlers={{
+                click: () => onSelectCell?.(c),
+              }}
+            >
+              <Tooltip direction="top" opacity={0.95}>
+                <div className="font-mono text-xs leading-snug">
+                  <div className="font-bold">{c.district}, {c.state} <span className="font-normal opacity-70">({c.cell_id})</span></div>
+                  <div>Risk: <span className="font-semibold">{t(`risk_levels.${c.risk_level}`, c.risk_level)}</span> (Score: {c.final_risk_score}/100)</div>
+                  <div className="text-[0.65rem] text-muted-foreground">Susceptibility: {(c.static_susceptibility * 100).toFixed(0)}% · Elev: {c.elevation_m}m · Slope: {c.slope_deg}°</div>
+                  {hasInSar ? (
+                    <div className="text-[0.68rem] text-violet-400 font-bold mt-0.5 border-t border-border/40 pt-0.5">
+                      🛰 InSAR:{" "}
+                      {c.provenance.satellite_deformation!.los_velocity_mean_mm_year !== null
+                        ? `${c.provenance.satellite_deformation!.los_velocity_mean_mm_year} mm/yr (Velocity)`
+                        : `${c.provenance.satellite_deformation!.cumulative_displacement_mm} mm (Pair LOS)`}{" "}
+                      ({c.provenance.satellite_deformation!.sensor})
+                    </div>
+                  ) : (
+                    <div className="text-[0.62rem] text-muted-foreground/70 mt-0.5 border-t border-border/30 pt-0.5">
+                      InSAR: UNAVAILABLE ({c.provenance.satellite_deformation?.unavailable_reason === "SAR_DECORRELATION_DENSE_CANOPY" ? "Canopy decorrelation" : "Processing pending"})
+                    </div>
+                  )}
+                </div>
+              </Tooltip>
+            </Rectangle>
+          );
+        })}
+
       {zones.map((z) => {
         const active = selectedId === z.id;
         return (

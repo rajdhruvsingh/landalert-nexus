@@ -27,7 +27,7 @@ import psycopg2
 from src.lib.ml.inference import LandslideRiskInferenceEngine
 from scripts.ml_registry import verify_model_candidate, get_db
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def test_scenario_a_valid_fresh_data():
     """Scenario A: Valid fresh data produces scores, categories, and explanations."""
@@ -61,8 +61,8 @@ def test_scenario_c_fallback_soil_moisture():
 def test_scenario_d_missing_environmental_data():
     """Scenario D: Zone with no weather data before cutoff returns MISSING."""
     engine = LandslideRiskInferenceEngine()
-    # Evaluate as of 2015-01-01 (before weather backfill starts)
-    res = engine.predict_zone(zone_id=1, as_of_date="2015-01-01")
+    # Evaluate as of 2009-01-01 (before weather backfill starts in 2010)
+    res = engine.predict_zone(zone_id=1, as_of_date="2009-01-01")
     assert res["status"] == "MISSING"
     assert "error" in res
 
@@ -135,9 +135,12 @@ def test_scenario_h_candidate_model_gating_and_rollback():
         """, (test_ver,))
         conn.commit()
 
-        # 5. Gating should now pass and mark as validated
+        # 5. Gating evaluates software and scientific gates:
+        # Software gate passes (valid artifact, 19 weights, PR-AUC >= floor),
+        # and authoritative scientific gate PASSES because real events (549) >= 200.
         passed, reasons = verify_model_candidate(test_ver, conn=conn)
-        assert passed is True, f"Gate failed unexpectedly: {reasons}"
+        assert passed is True, f"Candidate should pass when real events >= 200, but got: {reasons}"
+        assert len(reasons) == 0
 
         cur.execute("SELECT status FROM public.risk_model_config WHERE model_version = %s;", (test_ver,))
         assert cur.fetchone()[0] == "validated"

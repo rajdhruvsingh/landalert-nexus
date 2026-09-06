@@ -3,6 +3,7 @@ import {
   queueObservation,
   getQueuedObservations,
   pruneQueue,
+  clearOfflineQueue,
   getCachedOfflinePackage,
 } from "./offline-manager";
 import {
@@ -152,6 +153,39 @@ describe("Frontend Offline Queue & Synchronization Layer", () => {
 
     expect(expiredResult.isExpired).toBe(true);
     expect(expiredResult.ageHours).toBeGreaterThan(24);
+  });
+
+  it("executes client offline queueing, acknowledged key pruning, and queue clearing", () => {
+    // 1. Initial state: queue is completely empty
+    clearOfflineQueue();
+    expect(getQueuedObservations().length).toBe(0);
+
+    // 2. Offline simulation: queue an observation while disconnected
+    const fieldObs = queueObservation({
+      zone_id: 2,
+      observed_at: new Date().toISOString(),
+      rainfall_mm: 78.5,
+      soil_condition: "saturated",
+      visual_signs: "Active debris slide blocking left lane",
+      road_status: "restricted",
+      observer_id: "field_ranger_noney",
+      geo_lat: 24.817,
+      geo_lng: 93.633,
+      geo_accuracy_m: 6.2,
+      consent_given: true,
+      media_urls: ["https://storage.landalert.org/media/slide_noney.jpg"],
+    });
+
+    // Verify observation is queued locally with generated idempotency key and client timestamp
+    const queuedBefore = getQueuedObservations();
+    expect(queuedBefore.length).toBe(1);
+    expect(queuedBefore[0]?.idempotency_key).toBe(fieldObs.idempotency_key);
+    expect(queuedBefore[0]?.client_timestamp).toBeDefined();
+
+    // 3. Queue pruning: remove successfully synchronized records using acknowledged keys
+    pruneQueue([fieldObs.idempotency_key!]);
+    const queuedAfter = getQueuedObservations();
+    expect(queuedAfter.length).toBe(0);
   });
 });
 

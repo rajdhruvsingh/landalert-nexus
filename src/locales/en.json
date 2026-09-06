@@ -39,7 +39,11 @@
     "observation_trust": "Observation Trust: Official Review Required",
     "status_unknown_desc": "Status Unknown — system data unavailable.",
     "no_roads": "No road segments mapped yet.",
-    "no_alerts": "No alerts dispatched yet."
+    "no_alerts": "No alerts dispatched yet.",
+    "report_observation_for_zone": "+ Report Observation for {{zone}}",
+    "ml_risk": "ML Risk",
+    "residents": "residents",
+    "mean_slope": "mean slope"
   },
   "risk_levels": {
     "Low": "Low",
@@ -252,7 +256,10 @@
     "trend_improving": "Easing",
     "disclaimer": "Advisory forecast guidance only. Operational alerts require authoritative current computation.",
     "forecast_guidance": "Forecast Guidance",
-    "open_meteo_guidance": "Open-Meteo Guidance"
+    "open_meteo_guidance": "Open-Meteo Guidance",
+    "hours_24": "24 Hours",
+    "hours_48": "48 Hours",
+    "hours_72": "72 Hours"
   },
   "response_prioritization": {
     "section_title": "Emergency Response Prioritisation",
@@ -332,7 +339,11 @@
     "true_color": "True-Color Imagery",
     "ndvi_vegetation": "NDVI Vegetation Index",
     "sentinel_attribution": "Copernicus Sentinel data 2026",
-    "slide_tooltip": "{{severity}} slide · {{date}}"
+    "slide_tooltip": "{{severity}} slide · {{date}}",
+    "layers_title": "Layers & Grid",
+    "spatial_coverage_info": "Continuous 0.25° spatial landslide risk prediction grid across all 8 Northeast states.",
+    "show_spatial_surface": "8-State Spatial Risk Surface",
+    "show_insar_layer": "InSAR Ground Deformation"
   },
   "system_health": {
     "button_label": "System Health",
@@ -412,7 +423,11 @@
     "subtitle": "Real-time risk assessment across North Eastern Region",
     "filter_region": "North East India",
     "risk_level": "Risk level",
-    "scale_km": "100 km"
+    "scale_km": "100 km",
+    "reset": "Reset",
+    "uninstrumented_district_notice": "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
+    "view_all_state_districts": "View All {{state}} Districts",
+    "location_uninstrumented_notice": "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active."
   },
   "operational_tables": {
     "latest_alerts_title": "Latest Alerts",
@@ -561,5 +576,41 @@
     "enable_title": "Enable location to see risk in your area",
     "enable_desc": "Allow location access to view real-time landslide risk and early warnings for your current zone.",
     "retry": "Enable Location"
+  },
+  "search": {
+    "placeholder": "Search zone, district, city or town...",
+    "no_locations": "No locations found matching '{{query}}'",
+    "city_town": "City / Town",
+    "district": "District",
+    "state": "State",
+    "monitored_station": "Monitored Station",
+    "telemetry_active": "Telemetry Active",
+    "regional_coverage": "Regional Coverage",
+    "locality": "Locality"
+  },
+  "map_panel.location_uninstrumented_notice": "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active.",
+  "map_panel.uninstrumented_district_notice": "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
+  "map_panel.view_all_state_districts": "View All {{state}} Districts",
+  "spatial_risk": {
+    "cell_assessment": "Spatial Grid Cell Assessment",
+    "derived_location_assessment": "Derived Spatial Risk Assessment",
+    "current_risk": "Current Risk",
+    "static_susceptibility": "Static Susceptibility",
+    "terrain_basis": "Relief, slope gradient & terrain ruggedness",
+    "dynamic_trigger": "Rainfall Trigger",
+    "telemetry_interpolated": "Interpolated from regional weather clusters",
+    "satellite_signal": "Satellite Deformation",
+    "satellite_unconfigured": "No fabricated signal; InSAR awaiting provider setup",
+    "confidence_and_evidence": "Data Confidence",
+    "verified_obs_count": "verified field observations",
+    "transparency_title": "Scientific Integrity & Statistical Probability Policy",
+    "probability_calibrated": "Calibrated statistical probability: {{prob}}%",
+    "probability_uncalibrated_notice": "Statistical probability is reported as UNAVAILABLE because empirical landslide frequency has not undergone formal isotonic probability calibration for this specific coordinate. An operational, data-driven Risk Score (0-100) combining static susceptibility and dynamic trigger conditions is provided instead.",
+    "aggregation_summary": "Derived from {{count}} surrounding 0.25° spatial grid cells via Inverse-Distance Weighting (IDW).",
+    "sar_decorrelation": "C-band phase decorrelation (dense canopy)",
+    "sar_processing_pending": "SAR interferometric processing pending",
+    "sar_unconfigured": "No convergent orbit acquisition",
+    "scientific_integrity_no_fake": "Strict integrity policy: No synthetic or 0 mm/yr values substituted.",
+    "insar_option_a_notice": "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.4-lr-trained without uncalibrated weight injection."
   }
 }

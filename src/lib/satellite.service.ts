@@ -30,8 +30,8 @@ const tileCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export function getSatelliteLayerStatus(): SatelliteLayerStatus {
-  const isEnabled = process.env.SATELLITE_LAYER_ENABLED === "true";
-  const instanceId = process.env.SENTINEL_HUB_INSTANCE_ID || process.env.COPERNICUS_INSTANCE_ID;
+  const isEnabled = process.env["SATELLITE_LAYER_ENABLED"] === "true";
+  const instanceId = process.env["SENTINEL_HUB_INSTANCE_ID"] || process.env["COPERNICUS_INSTANCE_ID"];
   const isConfigured = Boolean(instanceId && instanceId.trim().length > 0);
 
   return {
@@ -57,15 +57,15 @@ export function tileToBbox3857(x: number, y: number, z: number): [number, number
   const minLat = (minLatRad * 180) / Math.PI;
   const maxLat = (maxLatRad * 180) / Math.PI;
 
-  const to3857 = (lat: number, lng: number) => {
+  const to3857 = (lat: number, lng: number): [number, number] => {
     const xMeters = (lng * 20037508.34) / 180;
     let yMeters = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180);
     yMeters = (yMeters * 20037508.34) / 180;
     return [xMeters, yMeters];
   };
 
-  const [minX, minY] = to3857(minLat, minLng);
-  const [maxX, maxY] = to3857(maxLat, maxLng);
+  const [minX = 0, minY = 0] = to3857(minLat, minLng);
+  const [maxX = 0, maxY = 0] = to3857(maxLat, maxLng);
   return [minX, minY, maxX, maxY];
 }
 
@@ -88,7 +88,7 @@ export async function fetchSatelliteTile(
     );
   }
 
-  const instanceId = (process.env.SENTINEL_HUB_INSTANCE_ID || process.env.COPERNICUS_INSTANCE_ID)!.trim();
+  const instanceId = (process.env["SENTINEL_HUB_INSTANCE_ID"] || process.env["COPERNICUS_INSTANCE_ID"])!.trim();
   const cacheKey = `${layer}:${z}:${x}:${y}`;
   const now = Date.now();
 

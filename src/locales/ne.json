@@ -332,7 +332,10 @@
     "true_color": "वास्तविक रङ्गको छवि (True-Color)",
     "ndvi_vegetation": "NDVI वनस्पति सूचकांक",
     "sentinel_attribution": "कोपरनिकस सेन्टिनेल डेटा २०२६",
-    "slide_tooltip": "{{severity}} पहिरो · {{date}}"
+    "slide_tooltip": "{{severity}} पहिरो · {{date}}",
+    "layers_title": "तहहरू र ग्रिड",
+    "spatial_coverage_info": "सबै ८ उत्तर-पूर्वी राज्यहरूमा ०.२५° स्थानिक पहिरो जोखिम पूर्वानुमान ग्रिड।",
+    "show_spatial_surface": "८-राज्य स्थानिक जोखिम सतह"
   },
   "system_health": {
     "button_label": "प्रणाली स्वास्थ्य",
@@ -412,7 +415,10 @@
     "subtitle": "उत्तर-पूर्वी क्षेत्रभरि वास्तविक समयको जोखिम मूल्याङ्कन",
     "filter_region": "उत्तर-पूर्वी भारत",
     "risk_level": "जोखिम स्तर",
-    "scale_km": "१०० किमी"
+    "scale_km": "१०० किमी",
+    "location_uninstrumented_notice": "स्थान: {{name}}, {{district}}, {{state}} — यस इलाकामा कुनै सक्रिय टेलिमेट्री स्टेशन छैन। क्षेत्रीय निगरानी सक्रिय छ।",
+    "uninstrumented_district_notice": "{{district}} मा कुनै सक्रिय टेलिमेट्री स्टेशन दर्ता गरिएको छैन। जिल्ला क्षेत्र क्षेत्रीय कभरेज अन्तर्गत निगरानी गरिन्छ।",
+    "view_all_state_districts": "{{state}} का सबै जिल्लाहरू हेर्नुहोस्"
   },
   "operational_tables": {
     "latest_alerts_title": "ताजा चेतावनीहरू",
@@ -561,5 +567,54 @@
     "enable_title": "आफ्नो क्षेत्रको जोखिम हेर्न स्थान सक्षम गर्नुहोस्",
     "enable_desc": "आफ्नो क्षेत्रको वास्तविक समयको पहिरो जोखिम र पूर्व चेतावनी हेर्न स्थान पहुँच अनुमति दिनुहोस्।",
     "retry": "स्थान सक्षम गर्नुहोस्"
+  },
+  "map_panel.reset": "पुनर्स्थापित गर्नुहोस्",
+  "map_panel.uninstrumented_district_notice": "{{district}} मा कुनै सक्रिय टेलिमेट्री स्टेशन दर्ता गरिएको छैन। जिल्ला क्षेत्र क्षेत्रीय कभरेज अन्तर्गत निगरानी गरिन्छ।",
+  "map_panel.view_all_state_districts": "{{state}} का सबै जिल्लाहरू हेर्नुहोस्",
+  "map_panel.location_uninstrumented_notice": "स्थान: {{name}}, {{district}}, {{state}} — यस इलाकामा कुनै सक्रिय टेलिमेट्री स्टेशन छैन। क्षेत्रीय निगरानी सक्रिय छ।",
+  "dashboard.report_observation_for_zone": "स्थानका लागि अवलोकन पेश गर्नुहोस्",
+  "dashboard.ml_risk": "ML जोखिम",
+  "dashboard.residents": "बासिन्दा",
+  "dashboard.mean_slope": "औसत ढलान",
+  "weather_forecast.hours_24": "२४ घण्टा",
+  "weather_forecast.hours_48": "४८ घण्टा",
+  "weather_forecast.hours_72": "७२ घण्टा",
+  "search.placeholder": "८ उत्तर-पूर्वी राज्यका शहर, नगर वा जिल्ला खोज्नुहोस्...",
+  "search.no_locations": "कुनै स्थान फेला परेन",
+  "search.city_town": "शहर / नगर",
+  "search.district": "जिल्ला",
+  "search.state": "राज्य",
+  "search.monitored_station": "निगरानी केन्द्र",
+  "search.telemetry_active": "टेलिमेट्री सक्रिय",
+  "search.regional_coverage": "क्षेत्रीय कभरेज",
+  "search.locality": "इलाका",
+  "search": {
+    "placeholder": "८ उत्तर-पूर्वी राज्यका शहर, नगर वा जिल्ला खोज्नुहोस्...",
+    "no_locations": "कुनै स्थान फेला परेन",
+    "city_town": "शहर / नगर",
+    "district": "जिल्ला",
+    "state": "राज्य",
+    "monitored_station": "निगरानी केन्द्र",
+    "telemetry_active": "टेलिमेट्री सक्रिय",
+    "regional_coverage": "क्षेत्रीय कभरेज",
+    "locality": "इलाका",
+    "header_matches": "भौगोलिक मिलानहरू"
+  },
+  "spatial_risk": {
+    "cell_assessment": "स्थानिक ग्रिड सेल मूल्याङ्कन",
+    "derived_location_assessment": "स्थानिक जोखिम मूल्याङ्कन",
+    "current_risk": "हालको जोखिम",
+    "static_susceptibility": "स्थिर संवेदनशीलता",
+    "terrain_basis": "भू-भाग ढलान, उचाइ र भू-स्वरूप",
+    "dynamic_trigger": "वर्षा ट्रिगर",
+    "telemetry_interpolated": "क्षेत्रीय मौसम क्लस्टरबाट गणना गरिएको",
+    "satellite_signal": "उपग्रह विरूपण",
+    "satellite_unconfigured": "कुनै नक्कली संकेत छैन; इनसार प्रतीक्षामा",
+    "confidence_and_evidence": "तथ्याङ्क विश्वसनीयता",
+    "verified_obs_count": "प्रमाणित स्थलगत निरीक्षण",
+    "transparency_title": "वैज्ञानिक अखण्डता र साङ्ख्यिकीय सम्भाव्यता नीति",
+    "probability_calibrated": "क्यालिब्रेट गरिएको सम्भाव्यता: {{prob}}%",
+    "probability_uncalibrated_notice": "यस स्थानका लागि औपचारिक क्यालिब्रेसन नभएकाले साङ्ख्यिकीय सम्भाव्यता अनुपलब्ध देखाइएको छ। यसको सट्टा डाटा-संचालित जोखिम स्कोर (०-१००) प्रदान गरिएको छ।",
+    "aggregation_summary": "वरपरका {{count}} वटा ०.२५° स्थानिक ग्रिड सेलहरूबाट प्राप्त।"
   }
 }

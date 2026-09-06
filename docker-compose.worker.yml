@@ -1,0 +1,52 @@
+# =============================================================================
+# docker-compose.worker.yml — Dedicated InSAR Worker Deployment
+# =============================================================================
+# Run locally or on a dedicated cloud compute instance (e.g. AWS EC2 / GCP GCE):
+# docker compose -f docker-compose.worker.yml up -d
+# =============================================================================
+
+version: "3.8"
+
+services:
+  insar-worker:
+    build:
+      context: .
+      dockerfile: workers/insar/Dockerfile.insar
+    container_name: landalert-insar-worker
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: ${WORKER_MEM_LIMIT:-7G}
+        reservations:
+          cpus: "2.0"
+          memory: ${WORKER_MEM_RESERVATION:-4G}
+    env_file:
+      - .env
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CDSE_USERNAME=${CDSE_USERNAME}
+      - CDSE_PASSWORD=${CDSE_PASSWORD}
+      - SATELLITE_STORAGE_PATH=${SATELLITE_STORAGE_PATH:-/data/insar_cache}
+      - OBJECT_STORAGE_ENDPOINT=${OBJECT_STORAGE_ENDPOINT}
+      - OBJECT_STORAGE_BUCKET=${OBJECT_STORAGE_BUCKET:-landalert-insar-products}
+      - OBJECT_STORAGE_ACCESS_KEY=${OBJECT_STORAGE_ACCESS_KEY}
+      - OBJECT_STORAGE_SECRET_KEY=${OBJECT_STORAGE_SECRET_KEY}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - insar-cache:/data/insar_cache
+      - insar-workspace:/data/insar_workspace
+    healthcheck:
+      test: ["CMD-SHELL", "snaphu -h > /dev/null 2>&1 && gdalinfo --version > /dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  insar-cache:
+    driver: local
+  insar-workspace:
+    driver: local

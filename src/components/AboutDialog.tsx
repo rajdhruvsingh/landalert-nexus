@@ -47,7 +47,7 @@ export function AboutDialog({ trigger }: { trigger?: React.ReactNode }) {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("about.model_engine", "Model Engine")}:</span>
-              <span className="text-foreground font-semibold">Threshold + Logistic Ensemble v0.2</span>
+              <span className="text-foreground font-semibold">Threshold + Logistic Ensemble v0.4</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("about.coverage", "Monitored Geography")}:</span>

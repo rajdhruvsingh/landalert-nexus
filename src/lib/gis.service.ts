@@ -76,7 +76,7 @@ export async function getZonesGeoJson(): Promise<
   ]);
 
   if (zonesRes.error) throw new Error(zonesRes.error.message);
-  const activeModel = modelRes.data?.model_version ?? "v0.2-lr-trained";
+  const activeModel = modelRes.data?.model_version ?? "v0.4-lr-trained";
 
   const features: GeoJsonFeature<GeoJsonPolygonGeometry, ZoneGisProperties>[] = (
     zonesRes.data ?? []

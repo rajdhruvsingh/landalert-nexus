@@ -31,10 +31,10 @@ export const SUPPORTED_LANGUAGES = [
   { code: "bn", name: "Bengali", nativeName: "বাংলা" },
   { code: "as", name: "Assamese", nativeName: "অসমীয়া" },
   { code: "ne", name: "Nepali", nativeName: "नेपाली" },
-  { code: "mni", name: "Manipuri", nativeName: "মৈতৈলোন্" },
-  { code: "lus", name: "Mizo", nativeName: "Mizo ṭawng" },
+  { code: "mni", name: "Manipuri", nativeName: "মণিপুরী" },
+  { code: "lus", name: "Mizo", nativeName: "Mizo" },
   { code: "kha", name: "Khasi", nativeName: "Khasi" },
-  { code: "grt", name: "Garo", nativeName: "A·chik" },
+  { code: "grt", name: "Garo", nativeName: "Garo" },
 ] as const;
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]["code"];

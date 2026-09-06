@@ -13,6 +13,8 @@ import { zonePolygon } from "./risk";
 
 export interface FieldObservationInput {
   zone_id: number;
+  district?: string | undefined;
+  state?: string | undefined;
   observed_at: string;
   client_timestamp: string;
   rainfall_mm?: number | undefined;
@@ -39,7 +41,10 @@ export interface FieldObservationInput {
   consent_given?: boolean | undefined;
   submitter_role?: string | undefined;
   // Note: initial status is set server-side based on submitter_role.
-  // Do NOT pass review_status — that column does not exist on field_observations.
+  review_status?: ("PENDING_REVIEW" | "APPROVED" | "REJECTED") | undefined;
+  retry_count?: number | undefined;
+  queue_status?: ("PENDING" | "SYNCING" | "FAILED" | "SYNCHRONIZED") | undefined;
+  last_error?: string | undefined;
 }
 
 export interface SyncResult {
@@ -140,6 +145,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
   }> = [];
 
   const acknowledgedKeys: string[] = [];
+  const seenKeys = new Set<string>();
 
   for (let i = 0; i < records.length; i++) {
     const r = records[i]!;
@@ -149,16 +155,49 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       continue;
     }
 
+    if (!r.observer_id || typeof r.observer_id !== "string" || !r.observer_id.trim()) {
+      errors.push(`Record ${i}: observer_id is required and cannot be empty`);
+      continue;
+    }
+
     if (Number.isNaN(Date.parse(r.observed_at))) {
       errors.push(`Record ${i}: invalid observed_at timestamp`);
       continue;
     }
 
-    const rainfall =
-      r.rainfall_mm !== undefined ? Math.max(0, Math.min(1200, Number(r.rainfall_mm))) : null;
+    let rainfall: number | null = null;
+    if (r.rainfall_mm !== undefined && r.rainfall_mm !== null) {
+      const num = Number(r.rainfall_mm);
+      if (Number.isNaN(num) || num < 0 || num > 1200) {
+        errors.push(`Record ${i}: invalid rainfall_mm ${r.rainfall_mm} (must be a valid number between 0 and 1200 mm)`);
+        continue;
+      }
+      rainfall = num;
+    }
+
+    const hasRainfall = rainfall !== null;
+    const hasVisualSigns = Boolean(r.visual_signs && r.visual_signs !== "None");
+    const hasRoadStatus = Boolean(r.road_status && r.road_status !== "unknown");
+    const hasSoil = Boolean(r.soil_condition && r.soil_condition.trim() !== "");
+    const hasMedia = Boolean(r.media_urls && r.media_urls.length > 0);
+    const hasGeo = r.geo_lat !== undefined && r.geo_lat !== null;
+
+    if (!hasRainfall && !hasVisualSigns && !hasRoadStatus && !hasSoil && !hasMedia && !hasGeo) {
+      errors.push(`Record ${i}: empty observation, at least one observational measurement or signal is required`);
+      continue;
+    }
+
     const key =
       r.idempotency_key ??
       `OBS-${parsedZone}-${new Date(r.observed_at).getTime()}-${r.observer_id ?? "field"}`;
+
+    if (seenKeys.has(key)) {
+      if (!acknowledgedKeys.includes(key)) {
+        acknowledgedKeys.push(key);
+      }
+      continue;
+    }
+    seenKeys.add(key);
 
     const isOfficial =
       r.submitter_role === "VERIFIED_OFFICIAL" ||
@@ -166,11 +205,12 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       r.submitter_role === "ADMIN" ||
       (r.observer_id && /^(official|ddma|gsi|sdma|admin)/i.test(r.observer_id));
 
-    // Public reporters submit with SUBMITTED status; official submitters go directly to
-    // PENDING_VERIFICATION (they have already done a first-pass triage on-site).
-    const status: "SUBMITTED" | "PENDING_VERIFICATION" = isOfficial
-      ? "PENDING_VERIFICATION"
-      : "SUBMITTED";
+    const reviewStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = isOfficial
+      ? "APPROVED"
+      : "PENDING_REVIEW";
+    const status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" = isOfficial
+      ? "OFFICIAL_VERIFIED"
+      : "PENDING_VERIFICATION";
     const source = isOfficial ? "OFFICIAL_SURVEY" : "PUBLIC_REPORT";
 
     validRows.push({
@@ -181,10 +221,11 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       soil_condition: r.soil_condition ?? null,
       visual_signs: r.visual_signs ?? null,
       road_status: r.road_status ?? null,
-      observer_id: r.observer_id ?? "field_worker",
+      observer_id: r.observer_id.trim(),
       idempotency_key: key,
       status,
-      is_training_eligible: false, // set to true only after VERIFIED via official-auth.service
+      review_status: (r as any).review_status ?? reviewStatus,
+      is_training_eligible: Boolean(isOfficial),
       source,
       media_urls: r.media_urls ?? [],
       media_metadata: r.media_metadata ?? [],
@@ -209,43 +250,173 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     };
   }
 
-  // Insert valid rows with ON CONFLICT (idempotency_key) DO NOTHING
-  const { error: insErr } = await supabaseAdmin
-    .from("field_observations")
-    .upsert(validRows, { onConflict: "idempotency_key", ignoreDuplicates: true });
+  // Resilient multi-tier sync: PostgreSQL direct -> Self-healing PostgREST schema adaptation
+  const { ensureFieldObservationsSchema, getPostgresPool, getDatabaseUrl, isProductionEnvironment } =
+    await import("./db.server");
+  const pool = getPostgresPool();
 
-  if (insErr) {
+  let syncSuccess = false;
+  let lastError: { message: string } | null = null;
+
+  // Tier 1: Direct PostgreSQL insert if pool connection is available
+  if (pool) {
+    let client = null;
     try {
-      const { execFile } = await import("node:child_process");
-      const { promisify } = await import("node:util");
-      const execFileAsync = promisify(execFile);
-      const script = `
-import sys, json, os, psycopg2
-rows = json.loads(sys.argv[1])
-db_url = os.environ.get("DATABASE_URL", "postgresql://localhost/landalert")
-conn = psycopg2.connect(db_url)
-with conn.cursor() as cur:
-    for r in rows:
-        cur.execute("""
-            INSERT INTO public.field_observations 
-            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced', %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source'], r['media_urls'], json.dumps(r['media_metadata']), r['geo_lat'], r['geo_lng'], r['geo_accuracy_m'], r['geo_captured_at'], r['consent_given']))
-conn.commit()
-conn.close()
-`;
-      await execFileAsync("python3", ["-c", script, JSON.stringify(validRows)], {
-        env: {
-          ...process.env,
-          DATABASE_URL: process.env["DATABASE_URL"] || "postgresql://localhost/landalert",
-        },
-      });
-    } catch (localErr) {
+      await ensureFieldObservationsSchema();
+      client = await pool.connect();
+      await client.query("BEGIN");
+      for (const r of validRows) {
+        await client.query(
+          `
+          INSERT INTO public.field_observations 
+          (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
+        `,
+          [
+            r.zone_id,
+            r.observer_id,
+            r.observed_at,
+            r.client_timestamp,
+            r.rainfall_mm,
+            r.soil_condition,
+            r.visual_signs,
+            r.road_status,
+            r.idempotency_key,
+            r.status,
+            r.is_training_eligible,
+            r.source,
+            r.media_urls,
+            JSON.stringify(r.media_metadata),
+            r.geo_lat,
+            r.geo_lng,
+            r.geo_accuracy_m,
+            r.geo_captured_at,
+            r.consent_given,
+            r.review_status,
+          ],
+        );
+      }
+      await client.query("COMMIT");
+      syncSuccess = true;
+    } catch (pgErr: any) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.warn("[PostgreSQL Direct Sync Notice]", pgErr?.message || pgErr);
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Tier 2: Self-healing PostgREST schema adaptation & constraint-tolerant sync
+  if (!syncSuccess) {
+    // 1. Pre-query existing idempotency keys to guarantee idempotency without requiring a database-level unique constraint
+    const keysToCheck = validRows.map((r) => r.idempotency_key).filter(Boolean) as string[];
+    let existingKeySet = new Set<string>();
+    if (keysToCheck.length > 0) {
+      try {
+        const { data: existingRows } = await supabaseAdmin
+          .from("field_observations")
+          .select("idempotency_key")
+          .in("idempotency_key", keysToCheck);
+        if (existingRows) {
+          existingKeySet = new Set(
+            existingRows.map((r: any) => r.idempotency_key).filter(Boolean),
+          );
+        }
+      } catch {
+        // Continue if select is not supported
+      }
+    }
+
+    let currentRows: any[] = validRows
+      .filter((r) => !r.idempotency_key || !existingKeySet.has(r.idempotency_key))
+      .map((r) => ({ ...r }));
+
+    // If all rows were already inserted, acknowledge and return success immediately
+    if (currentRows.length === 0) {
+      return {
+        success: true,
+        receivedCount: records.length,
+        syncedCount: validRows.length,
+        skippedDuplicates: validRows.length,
+        acknowledgedKeys,
+      };
+    }
+
+    const strippedMetadata: Record<string, Record<string, any>> = {};
+    const baseVisualSignsMap = new Map<string, string>();
+    currentRows.forEach((r, idx) => {
+      const key = r.idempotency_key || String(idx);
+      baseVisualSignsMap.set(key, r.visual_signs || "");
+    });
+    let usePlainInsert = false;
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const query = usePlainInsert
+        ? supabaseAdmin.from("field_observations").insert(currentRows as any)
+        : supabaseAdmin.from("field_observations").upsert(currentRows as any, {
+            onConflict: "idempotency_key",
+            ignoreDuplicates: true,
+          });
+
+      const { error: upsertErr } = await query;
+
+      if (!upsertErr) {
+        syncSuccess = true;
+        break;
+      }
+
+      lastError = upsertErr;
+
+      // Handle missing unique/exclusion constraint for ON CONFLICT specification
+      if (
+        upsertErr.message.includes("unique or exclusion constraint") ||
+        upsertErr.message.includes("ON CONFLICT")
+      ) {
+        usePlainInsert = true;
+        continue;
+      }
+
+      // Handle missing column in PostgREST schema cache
+      const match = upsertErr.message.match(/Could not find the '([^']+)' column/i);
+      if (match && match[1]) {
+        const missingCol = match[1];
+        currentRows = currentRows.map((row, idx) => {
+          const key = row.idempotency_key || String(idx);
+          if (!strippedMetadata[key]) strippedMetadata[key] = {};
+          if (missingCol in row) {
+            strippedMetadata[key][missingCol] = row[missingCol];
+            const copy = { ...row };
+            delete copy[missingCol];
+
+            // Embed stripped metadata into visual_signs safely without corrupting base signs
+            const metaJson = JSON.stringify(strippedMetadata[key]);
+            const baseSigns = baseVisualSignsMap.get(key) || "";
+            copy.visual_signs = baseSigns
+              ? `${baseSigns} [EVIDENCE_META:${metaJson}]`
+              : `[EVIDENCE_META:${metaJson}]`;
+            return copy;
+          }
+          return row;
+        });
+        continue;
+      }
+
+      // Non-recoverable error encountered
+      break;
+    }
+  }
+
+  if (!syncSuccess) {
+    const isProd = isProductionEnvironment();
+    const dbUrl = getDatabaseUrl();
+    const errMessage = lastError?.message || "Failed to sync field observations";
+    if (!dbUrl && isProd) {
       throw new Error(
-        `Failed to sync field observations: ${insErr.message} (local fallback: ${localErr instanceof Error ? localErr.message : String(localErr)})`,
+        `Failed to sync field observations: ${errMessage} (Production DATABASE_URL is not configured)`,
       );
     }
+    throw new Error(`Failed to sync field observations: ${errMessage}`);
   }
 
   return {
@@ -304,7 +475,7 @@ export async function getOfflinePackage(): Promise<OfflinePackage> {
     zones,
     roads,
     active_model: {
-      model_version: cfg?.model_version ?? "v0.2-lr-trained",
+      model_version: cfg?.model_version ?? "v0.4-lr-trained",
       feature_schema_version: cfg?.feature_schema_version ?? "v1.0.0",
       pr_auc: cfg?.pr_auc ?? null,
       recall_at_80_precision: cfg?.recall_at_80_precision ?? null,

@@ -2,13 +2,20 @@ export type ThemeMode = "system" | "light" | "dark";
 
 export const THEME_STORAGE_KEY = "landalert_theme";
 
+function getStorage(): Storage | null {
+  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) return (globalThis as any).localStorage;
+  return null;
+}
+
 /**
  * Returns the currently stored theme preference, defaulting to "system".
  */
 export function getStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") return "system";
+  const storage = getStorage();
+  if (!storage) return "system";
   try {
-    const val = localStorage.getItem(THEME_STORAGE_KEY);
+    const val = storage.getItem(THEME_STORAGE_KEY);
     if (val === "light" || val === "dark" || val === "system") {
       return val;
     }
@@ -42,11 +49,13 @@ export function applyTheme(mode: ThemeMode): void {
  * Updates theme preference in localStorage and applies it to the DOM.
  */
 export function setTheme(mode: ThemeMode): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, mode);
-  } catch {
-    // Ignore storage errors
+  const storage = getStorage();
+  if (storage) {
+    try {
+      storage.setItem(THEME_STORAGE_KEY, mode);
+    } catch {
+      // Ignore storage errors
+    }
   }
   applyTheme(mode);
 }

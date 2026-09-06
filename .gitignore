@@ -37,3 +37,19 @@ __pycache__/
 *.pyc
 public/uploads/
 
+# Satellite & InSAR Data (Large files & intermediate rasters)
+*.SAFE
+*.SAFE.zip
+*.EOF
+*.raw
+*.int
+*.flat
+*.amp
+*.slc
+*.dem
+data/insar_cache/
+data/insar_workspace/
+insar_cache/
+insar_workspace/
+scratch/
+supabase/.temp/

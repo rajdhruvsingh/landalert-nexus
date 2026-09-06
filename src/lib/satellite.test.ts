@@ -9,9 +9,9 @@ describe("Satellite Imagery Service (Sentinel Hub / Copernicus)", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    delete process.env.SENTINEL_HUB_INSTANCE_ID;
-    delete process.env.COPERNICUS_INSTANCE_ID;
-    delete process.env.SATELLITE_LAYER_ENABLED;
+    delete process.env["SENTINEL_HUB_INSTANCE_ID"];
+    delete process.env["COPERNICUS_INSTANCE_ID"];
+    delete process.env["SATELLITE_LAYER_ENABLED"];
   });
 
   afterEach(() => {
@@ -26,8 +26,8 @@ describe("Satellite Imagery Service (Sentinel Hub / Copernicus)", () => {
   });
 
   it("reports enabled and configured when flags and instance ID are present", () => {
-    process.env.SATELLITE_LAYER_ENABLED = "true";
-    process.env.SENTINEL_HUB_INSTANCE_ID = "test-instance-id-12345";
+    process.env["SATELLITE_LAYER_ENABLED"] = "true";
+    process.env["SENTINEL_HUB_INSTANCE_ID"] = "test-instance-id-12345";
 
     const status = getSatelliteLayerStatus();
     expect(status.enabled).toBe(true);
@@ -47,8 +47,8 @@ describe("Satellite Imagery Service (Sentinel Hub / Copernicus)", () => {
   });
 
   it("refuses to fetch satellite tiles when SATELLITE_LAYER_ENABLED is false", async () => {
-    process.env.SATELLITE_LAYER_ENABLED = "false";
-    process.env.SENTINEL_HUB_INSTANCE_ID = "valid-id";
+    process.env["SATELLITE_LAYER_ENABLED"] = "false";
+    process.env["SENTINEL_HUB_INSTANCE_ID"] = "valid-id";
 
     await expect(fetchSatelliteTile("TRUE-COLOR", 10, 800, 400)).rejects.toThrow(
       "SATELLITE_LAYER_DISABLED",
@@ -56,7 +56,7 @@ describe("Satellite Imagery Service (Sentinel Hub / Copernicus)", () => {
   });
 
   it("refuses to fetch satellite tiles when SENTINEL_HUB_INSTANCE_ID is unconfigured", async () => {
-    process.env.SATELLITE_LAYER_ENABLED = "true";
+    process.env["SATELLITE_LAYER_ENABLED"] = "true";
 
     await expect(fetchSatelliteTile("TRUE-COLOR", 10, 800, 400)).rejects.toThrow(
       "SATELLITE_LAYER_NOT_CONFIGURED",
@@ -64,8 +64,8 @@ describe("Satellite Imagery Service (Sentinel Hub / Copernicus)", () => {
   });
 
   it("fetches and caches satellite tiles when configured using mock client", async () => {
-    process.env.SATELLITE_LAYER_ENABLED = "true";
-    process.env.SENTINEL_HUB_INSTANCE_ID = "mock-instance-id-xyz";
+    process.env["SATELLITE_LAYER_ENABLED"] = "true";
+    process.env["SENTINEL_HUB_INSTANCE_ID"] = "mock-instance-id-xyz";
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,

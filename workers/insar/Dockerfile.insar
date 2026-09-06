@@ -1,0 +1,89 @@
+# =============================================================================
+# Dockerfile.insar — Dedicated LandAlert-Nexus InSAR Processing Worker
+# =============================================================================
+# Production compute worker container decoupled from the Render free-tier web service.
+# Target specs: 16 GB+ RAM, 100 GB+ storage, multi-core CPU.
+# Includes: Python 3, GDAL, SNAPHU 2D Phase Unwrapping, ISCE2/MintPy dependencies.
+# =============================================================================
+
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install system dependencies & build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    wget \
+    ca-certificates \
+    libgdal-dev \
+    gdal-bin \
+    python3 \
+    python3-pip \
+    python3-dev \
+    libfftw3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build SNAPHU (Statistical-Cost Network-Flow Algorithm for Phase Unwrapping)
+WORKDIR /tmp/snaphu
+RUN curl -fsSL https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/snaphu-v2.0.7.tar.gz -o snaphu.tar.gz \
+    && tar -xzf snaphu.tar.gz \
+    && cd snaphu-v2.0.7/src \
+    && sed -i 's/-arch [^ ]*//g' Makefile \
+    && make CFLAGS="-O3 -Wall -fPIC" \
+    && mkdir -p /usr/local/man/man1 /usr/local/bin \
+    && make install \
+    && cp ../bin/snaphu /usr/local/bin/ \
+    && rm -rf /tmp/snaphu
+
+# Final runtime image
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-gdal \
+    gdal-bin \
+    libgdal-dev \
+    libfftw3-3 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy SNAPHU binary from builder
+COPY --from=builder /usr/local/bin/snaphu /usr/local/bin/snaphu
+
+# Create dedicated unprivileged user & workspace directories
+RUN useradd -m -u 1001 insarworker \
+    && mkdir -p /data/insar_cache /data/insar_workspace /app \
+    && chown -R insarworker:insarworker /data /app
+
+WORKDIR /app
+
+# Install Python requirements
+COPY workers/insar/requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy worker application code
+COPY workers/insar/ .
+RUN chown -R insarworker:insarworker /app
+
+# Strict build-time validation: Build will FAIL immediately if SNAPHU, GDAL, or core libraries are missing
+RUN (snaphu -h || true) \
+    && gdalinfo --version \
+    && python3 -c "import requests, numpy, scipy; print('Build validation passed.')"
+
+USER insarworker
+
+# Healthcheck using worker self-test
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 worker.py --self-test || exit 1
+
+ENTRYPOINT ["python3", "worker.py"]

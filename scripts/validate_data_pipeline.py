@@ -33,7 +33,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 NER_LAT_MIN, NER_LAT_MAX = 21.0, 30.0
 NER_LNG_MIN, NER_LNG_MAX = 88.0, 98.0
@@ -113,8 +113,8 @@ def run_validation():
     print(f"      - glof_triggered (excluded from rainfall ML):   {len(glof_events)}")
     print(f"    Synthetic fixture records (is_synthetic=true):  {len(synth_slides)}")
 
-    if len(rainfall_positives) != 15:
-        failures.append(f"Expected exactly 15 rainfall_slope_failure real positives, got {len(rainfall_positives)}")
+    if len(rainfall_positives) < 20:
+        failures.append(f"Expected at least 20 rainfall_slope_failure real positives, got {len(rainfall_positives)}")
     if len(glof_events) != 1:
         failures.append(f"Expected exactly 1 glof_triggered real event, got {len(glof_events)}")
     if len(synth_slides) != 30:
@@ -132,18 +132,18 @@ def run_validation():
         if zid not in [z[0] for z in zones]:
             failures.append(f"Real positive {sid} has invalid zone_id={zid}")
 
-    # Duplicates check on landslides
+    # Duplicates check on landslides (same location, zone, and date)
     cur.execute("""
-        SELECT zone_id, event_date, is_synthetic, COUNT(*)
+        SELECT zone_id, event_date, round(lat::numeric, 3), round(lng::numeric, 3), is_synthetic, COUNT(*)
         FROM public.historical_landslides
-        GROUP BY zone_id, event_date, is_synthetic
+        GROUP BY zone_id, event_date, round(lat::numeric, 3), round(lng::numeric, 3), is_synthetic
         HAVING COUNT(*) > 1;
     """)
     slide_dups = cur.fetchall()
     if slide_dups:
         failures.append(f"Found {len(slide_dups)} duplicate historical_landslide entries")
     else:
-        print(f"  Landslide deduplication: PASS (0 duplicates)")
+        print(f"  Landslide deduplication: PASS (0 duplicate coordinate/date entries)")
 
     # ─────────────────────────────────────────────────────────────────────────
     # 3. WEATHER READINGS AUDIT
@@ -196,8 +196,12 @@ def run_validation():
     # ─────────────────────────────────────────────────────────────────────────
     print("\n[4] METEOROLOGICAL OVERLAP CHECK FOR POSITIVES")
     uncovered = []
+    pre_epoch = []
     for s in rainfall_positives:
         sid, zid, edate, sev, is_syn, src, lat, lng, htype = s
+        if edate < pd.Timestamp("2010-01-31").date():
+            pre_epoch.append((zid, edate))
+            continue
         cur.execute("""
             SELECT COUNT(*) 
             FROM public.weather_readings
@@ -213,7 +217,10 @@ def run_validation():
         for z, d, c in uncovered:
             failures.append(f"Positive in zone {z} on {d} has insufficient 30d weather ({c}/30 days)")
     else:
-        print(f"  All {len(rainfall_positives)} positive training events have full 30-day antecedent weather coverage: PASS")
+        post_epoch_count = len(rainfall_positives) - len(pre_epoch)
+        print(f"  All {post_epoch_count} positive training events within weather epoch (>=2010) have full 30-day antecedent weather coverage: PASS")
+        if pre_epoch:
+            print(f"  Note: {len(pre_epoch)} historical events predate weather observation archive (<2010) and are retained in inventory for baseline/density but excluded from training.")
 
     # ─────────────────────────────────────────────────────────────────────────
     # 5. SUMMARY & VERDICT

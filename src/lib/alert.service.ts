@@ -68,7 +68,7 @@ export interface AlertDispatchResult {
   zoneId: number;
   smsPayloads?: Record<string, string> | undefined;
   dispatchedAt?: string | undefined;
-  smsResponse?: unknown | undefined;
+  smsResponse?: any;
   dispatchStatus?: string | undefined;
 }
 
@@ -212,8 +212,8 @@ export async function evaluateAndDispatchAlert(
   }
 
   // 8. Insert alert record
-  const { data: inserted, error: insertErr } = await supabaseAdmin
-    .from("alerts")
+  const { data: inserted, error: insertErr } = await (supabaseAdmin
+    .from("alerts") as any)
     .insert({
       zone_id: zoneId,
       risk_level: level,
@@ -222,7 +222,7 @@ export async function evaluateAndDispatchAlert(
       channel,
       explanation: explanationWithProvenance,
       dispatched_by: actor,
-      status: finalStatus,
+      status: finalStatus as any,
       recipient_group: "district_disaster_management_authorities",
       idempotency_key: finalIdempotencyKey,
       delivery_attempts: 1,
@@ -279,7 +279,7 @@ export interface RetractAlertResult {
   retractedBy: string;
   reason: string;
   smsSent: boolean;
-  smsResponse?: unknown;
+  smsResponse?: any;
 }
 
 /**
@@ -311,7 +311,7 @@ export async function retractAlert({
 
   const now = new Date().toISOString();
 
-  if (alert.is_retracted || (alert as any).status === "retracted") {
+  if ((alert as any).is_retracted || (alert as any).status === "retracted") {
     return {
       success: true,
       alertId,

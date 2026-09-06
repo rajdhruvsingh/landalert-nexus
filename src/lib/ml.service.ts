@@ -50,8 +50,8 @@ export interface RiskPredictionResult {
   };
   canonical_features?: Record<string, number>;
   data_freshness: {
-    latest_weather_timestamp?: string | null;
-    weather_age_hours?: number;
+    latest_weather_timestamp?: string | null | undefined;
+    weather_age_hours?: number | undefined;
     soil_moisture_status: "measured" | "stale" | "missing" | "fallback";
   };
   inference_timestamp: string;
@@ -197,24 +197,39 @@ export async function getDatabaseFallbackPrediction(zoneId: number): Promise<Ris
       const probability = latestPred?.probability ?? Math.round((riskScore / 100) * 1000) / 1000;
 
       const result: RiskPredictionResult = {
-        status: zone.soil_moisture_status === "fallback" ? "FALLBACK" : "VALID",
+        // DB fallback — this is NOT a fresh ML inference. Mark as DEGRADED
+        // so the frontend and API consumers know this is a cached/stale value.
+        // MUST NOT use status='VALID' here as that would falsely imply
+        // the result was freshly computed by the Python inference engine.
+        status: "DEGRADED",
         zone_id: zone.id,
         zone_name: zone.zone_name,
         district: zone.district,
         state: zone.state,
-        model_version: cfg?.model_version ?? "v0.2-lr-trained",
+        // Use the actual model version from the latest DB prediction record if
+        // available, falling back to the active registry model. This preserves
+        // the true provenance of the cached prediction.
+        model_version: latestPred?.model_version ?? cfg?.model_version ?? "v0.4-lr-trained",
         feature_schema_version: cfg?.feature_schema_version ?? "v1.0.0",
         probability,
         risk_score: riskScore,
         risk_level: riskLevel,
-        explanation_narrative: zone.explanation ?? "Operational threshold calculation",
+        explanation_narrative:
+          "Degraded mode: showing last cached prediction from database — Python inference engine unavailable. " +
+          (zone.explanation ?? ""),
         data_freshness: {
+          // Preserve the original weather timestamp, not the current time
           latest_weather_timestamp: zone.last_computed_at,
           weather_age_hours:
-            Math.round(((Date.now() - new Date(zone.last_computed_at).getTime()) / 3600000) * 10) / 10,
+            zone.last_computed_at
+              ? Math.round(((Date.now() - new Date(zone.last_computed_at).getTime()) / 3600000) * 10) / 10
+              : undefined,
           soil_moisture_status: zone.soil_moisture_status ?? "fallback",
         },
-        inference_timestamp: new Date().toISOString(),
+        // Preserve original prediction timestamp; do NOT set to new Date().toISOString()
+        // which would falsely imply the prediction was computed right now.
+        inference_timestamp:
+          latestPred?.prediction_time ?? zone.last_computed_at ?? new Date(0).toISOString(),
         persisted: false,
       };
 
@@ -259,7 +274,7 @@ export async function getDatabaseFallbackPrediction(zoneId: number): Promise<Ris
     zone_name: zInfo.name,
     district: zInfo.district,
     state: zInfo.state,
-    model_version: "v0.2-lr-trained",
+    model_version: "v0.4-lr-trained",
     feature_schema_version: "v1.0.0",
     probability: null,
     risk_score: null,
@@ -268,7 +283,6 @@ export async function getDatabaseFallbackPrediction(zoneId: number): Promise<Ris
       "Status Unknown: system data unavailable — inference engine and telemetry database offline.",
     data_freshness: {
       latest_weather_timestamp: null,
-      weather_age_hours: undefined,
       soil_moisture_status: "fallback",
     },
     inference_timestamp: new Date().toISOString(),

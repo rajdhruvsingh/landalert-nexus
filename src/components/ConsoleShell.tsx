@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useRouter, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { IndiaEmblem } from "./IndiaEmblem";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -14,11 +14,15 @@ import { OfflineBanner } from "./OfflineBanner";
 import { Search, ChevronDown, UserCheck, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserAuthorizationState } from "@/lib/auth-domains";
+import { searchGeography, type SearchResultItem } from "@/lib/geography";
 import type { User } from "@supabase/supabase-js";
 import "@/lib/i18n";
 
 export function ConsoleNav() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const routerState = useRouterState();
+  const currentPath = routerState.location.pathname;
   const [user, setUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -38,21 +42,115 @@ export function ConsoleNav() {
 
   const authState = getUserAuthorizationState(user);
 
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+
   const handleSearchChange = (val: string) => {
     setSearchQuery(val);
+    if (val.trim().length >= 2) {
+      const res = searchGeography(val).slice(0, 8);
+      setSearchResults(res);
+      setShowSearchDropdown(res.length > 0);
+    } else {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+    }
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: val.trim().toLowerCase() } }));
     }
   };
 
+  const handleSelectSearchResult = (item: SearchResultItem) => {
+    setSearchQuery(item.name);
+    setShowSearchDropdown(false);
+    if (typeof window !== "undefined") {
+      if (currentPath === "/") {
+        window.dispatchEvent(
+          new CustomEvent("landalert-filter", {
+            detail: {
+              query: item.name.toLowerCase(),
+              item,
+            },
+          }),
+        );
+        const mapEl = document.getElementById("risk-map");
+        if (mapEl) {
+          mapEl.scrollIntoView({ behavior: "smooth" });
+        }
+      } else {
+        sessionStorage.setItem("landalert_pending_search", item.name.toLowerCase());
+        sessionStorage.setItem("landalert_pending_search_item", JSON.stringify(item));
+        navigate({ to: "/", hash: "risk-map" });
+      }
+    }
+  };
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSearchDropdown(false);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return;
+
+    const matched = searchGeography(q);
+    const topItem = matched.length > 0 ? matched[0] : undefined;
+
     if (typeof window !== "undefined") {
-      const q = searchQuery.trim().toLowerCase();
-      window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q } }));
-      const mapEl = document.getElementById("risk-map");
-      if (mapEl) {
-        mapEl.scrollIntoView({ behavior: "smooth" });
+      if (currentPath === "/") {
+        window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q, item: topItem } }));
+        const mapEl = document.getElementById("risk-map");
+        if (mapEl) {
+          mapEl.scrollIntoView({ behavior: "smooth" });
+        }
+      } else {
+        sessionStorage.setItem("landalert_pending_search", q);
+        if (topItem) {
+          sessionStorage.setItem("landalert_pending_search_item", JSON.stringify(topItem));
+        }
+        navigate({ to: "/", hash: "risk-map" });
+      }
+    }
+  };
+
+  const handleNavToSection = (
+    e: React.MouseEvent,
+    hash: string,
+    eventName?: string
+  ) => {
+    e.preventDefault();
+    if (typeof window === "undefined") return;
+
+    if (currentPath === "/") {
+      const targetId =
+        hash === "observations" || hash === "recent-observations"
+          ? "recent-observations"
+          : hash === "road-network" || hash === "roads" || hash === "road-connectivity"
+          ? "road-connectivity"
+          : hash;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+      }
+      window.history.pushState(null, "", `/#${hash}`);
+      if (eventName) {
+        window.dispatchEvent(new CustomEvent(eventName));
+      }
+    } else {
+      if (eventName) {
+        sessionStorage.setItem("landalert_pending_event", eventName);
+      }
+      navigate({
+        to: "/",
+        hash,
+      });
+    }
+  };
+
+  const handleHomeClick = (e: React.MouseEvent) => {
+    if (currentPath === "/") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (window.location.hash) {
+        window.history.pushState(null, "", "/");
       }
     }
   };
@@ -175,45 +273,50 @@ export function ConsoleNav() {
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 lg:px-8">
           {/* Horizontal Links */}
           <div className="flex items-center overflow-x-auto scrollbar-none gap-1 sm:gap-2 py-0 font-sans text-xs">
-            <NavLink to="/" label={t("nav.home", "Home")} exact />
+            <Link
+              to="/"
+              activeOptions={{ exact: true }}
+              onClick={handleHomeClick}
+              className="whitespace-nowrap relative px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&.active]:text-primary [&.active]:font-semibold [&.active]:after:content-[''] [&.active]:after:absolute [&.active]:after:bottom-0 [&.active]:after:left-0 [&.active]:after:right-0 [&.active]:after:h-[2.5px] [&.active]:after:bg-primary"
+            >
+              {t("nav.home", "Home")}
+            </Link>
             <a
-              href="#risk-map"
-              onClick={(e) => {
-                const el = document.getElementById("risk-map");
-                if (el) {
-                  e.preventDefault();
-                  el.scrollIntoView({ behavior: "smooth" });
-                }
-              }}
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+              href="/#risk-map"
+              onClick={(e) => handleNavToSection(e, "risk-map")}
+              className={`whitespace-nowrap px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                currentPath === "/" && routerState.location.hash === "risk-map"
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {t("nav.risk_map", "Risk Map")}
             </a>
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("landalert-open-observations"));
-                }
-              }}
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+            <a
+              href="/#recent-observations"
+              onClick={(e) => handleNavToSection(e, "recent-observations", "landalert-open-observations")}
+              className={`whitespace-nowrap px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                currentPath === "/" &&
+                (routerState.location.hash === "recent-observations" || routerState.location.hash === "observations")
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {t("nav.observations", "Observations")}
-            </button>
+            </a>
             <NavLink to="/alerts" label={t("nav.alerts", "Alerts")} />
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("landalert-open-roads"));
-                  const el = document.getElementById("road-connectivity");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }
-              }}
-              className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+            <a
+              href="/#road-connectivity"
+              onClick={(e) => handleNavToSection(e, "road-connectivity", "landalert-open-roads")}
+              className={`whitespace-nowrap px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                currentPath === "/" &&
+                (routerState.location.hash === "road-connectivity" || routerState.location.hash === "road-network")
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {t("nav.road_network", "Road Network")}
-            </button>
+            </a>
             <ReportsDialog />
             <AboutDialog />
           </div>
@@ -235,6 +338,40 @@ export function ConsoleNav() {
             >
               <Search className="h-3.5 w-3.5" />
             </button>
+            {showSearchDropdown && searchResults.length > 0 && (
+              <div className="absolute top-full right-0 mt-1 w-72 sm:w-80 rounded border border-border bg-surface shadow-xl z-[300] overflow-hidden text-left">
+                <div className="px-2.5 py-1.5 border-b border-border/60 bg-secondary/30 text-[0.65rem] font-mono uppercase text-muted-foreground flex justify-between items-center">
+                  <span>{t("search.header_matches", "Geographic Matches")}</span>
+                  <span>({searchResults.length})</span>
+                </div>
+                <div className="max-h-60 overflow-y-auto divide-y divide-border/40">
+                  {searchResults.map((item) => (
+                    <button
+                      key={`${item.type}-${item.id}`}
+                      type="button"
+                      onClick={() => handleSelectSearchResult(item)}
+                      className="w-full text-left px-3 py-2 hover:bg-secondary/60 flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer"
+                    >
+                      <div className="truncate">
+                        <div className="font-semibold text-foreground truncate">{item.name}</div>
+                        <div className="text-[0.68rem] text-muted-foreground truncate">{item.description}</div>
+                      </div>
+                      <span className="shrink-0 font-mono text-[0.62rem] uppercase px-1.5 py-0.5 rounded bg-secondary border border-border text-primary font-bold">
+                        {item.type === "city" || item.type === "town"
+                          ? t("search.city_town", "City/Town")
+                          : item.type === "district"
+                          ? t("search.district", "District")
+                          : item.type === "state"
+                          ? t("search.state", "State")
+                          : item.type === "zone"
+                          ? t("search.monitored_station", "Station")
+                          : item.type}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </form>
         </div>
 

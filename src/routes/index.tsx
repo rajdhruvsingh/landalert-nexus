@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -11,8 +11,15 @@ import {
   getZoneWeatherRiskForecastServerFn,
   getResponsePrioritizationServerFn,
   getRiskForLocationServerFn,
+  getSpatialGridServerFn,
   type ZoneRow,
 } from "@/lib/monitoring.functions";
+import {
+  deriveLocationSpatialRisk,
+  type LocationSpatialRisk,
+  type CellRiskEvaluation,
+} from "@/lib/spatial-risk.service";
+import SpatialLocationRiskPanel from "@/components/SpatialLocationRiskPanel";
 import { MapCanvas } from "@/components/MapCanvas";
 import {
   RiskBadge,
@@ -28,6 +35,7 @@ import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { FieldObservationDialog } from "@/components/FieldObservationDialog";
 import { RoadNetworkDialog } from "@/components/RoadNetworkDialog";
 import { ObservationDetailsDialog } from "@/components/ObservationDetailsDialog";
+import { sanitizeObservationRecord } from "@/lib/observation-sanitizer";
 import { riskColor, RISK_LEVELS } from "@/lib/risk";
 import { Button } from "@/components/ui/button";
 import { HimalayaSilhouette } from "@/components/HimalayaSilhouette";
@@ -79,12 +87,28 @@ export const Route = createFileRoute("/")({
   errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
 });
 
+import {
+  getAllStates,
+  getStateByName,
+  getDistrictsByState,
+  getDistrictByName,
+  searchGeography,
+  NER_DISTRICTS,
+  NORTH_EASTERN_REGION,
+} from "@/lib/geography";
+
 function Dashboard() {
   const { t } = useTranslation();
   const { data } = useSuspenseQuery(overviewQuery);
+  const dataZonesRef = useRef(data.zones);
+  dataZonesRef.current = data.zones;
+
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedSpatialLocation, setSelectedSpatialLocation] = useState<LocationSpatialRisk | null>(null);
+  const [selectedCellRisk, setSelectedCellRisk] = useState<CellRiskEvaluation | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("All");
+  const [districtFilter, setDistrictFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showZoneDetails, setShowZoneDetails] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
@@ -123,14 +147,8 @@ function Dashboard() {
 
   // On login or on home-page mount if already logged in, request user location
   useEffect(() => {
-    console.log("[index.tsx] useEffect [isLoggedIn] fired. isLoggedIn =", isLoggedIn);
     if (isLoggedIn) {
-      console.log("[index.tsx] Calling userLocation.requestLocation()...");
-      userLocation.requestLocation().then((loc) => {
-        console.log("[index.tsx] userLocation.requestLocation() resolved with:", loc);
-      }).catch((err) => {
-        console.error("[index.tsx] userLocation.requestLocation() rejected with:", err);
-      });
+      userLocation.requestLocation();
     }
   }, [isLoggedIn]);
 
@@ -154,12 +172,68 @@ function Dashboard() {
   const recompute = useServerFn(recomputeAll);
   const ingest = useServerFn(ingestLiveRainfall);
 
-  // Listen to header search query and modal trigger events
+  const [customCenter, setCustomCenter] = useState<[number, number] | null>(null);
+  const [customZoom, setCustomZoom] = useState<number | null>(null);
+  const [uninstrumentedLocationNotice, setUninstrumentedLocationNotice] = useState<{
+    name: string;
+    district: string;
+    state: string;
+  } | null>(null);
+
+  // Continuous 8-State Spatial Prediction Grid query
+  const spatialGridQuery = useQuery({
+    queryKey: ["spatial-grid", stateFilter, districtFilter],
+    queryFn: () =>
+      getSpatialGridServerFn({
+        data: {
+          stateName: stateFilter === "All" ? undefined : stateFilter,
+          districtName: districtFilter === "All" ? undefined : districtFilter,
+        },
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Listen to header search query, modal trigger events, and URL hash scrolling
   useEffect(() => {
     const handleSearch = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (typeof detail?.query === "string") {
         setSearchQuery(detail.query);
+      }
+      const item =
+        detail?.item ||
+        (typeof detail?.query === "string" && detail.query.trim().length >= 2
+          ? searchGeography(detail.query)[0]
+          : undefined);
+
+      if (item) {
+        if (item.centroid) {
+          setCustomCenter(item.centroid);
+          setCustomZoom(item.type === "city" || item.type === "town" || item.type === "locality" ? 11 : item.type === "district" ? 9 : 8);
+        }
+        if (item.stateName) {
+          setStateFilter(item.stateName);
+        }
+        if (item.districtName) {
+          setDistrictFilter(item.districtName);
+        }
+        if (item.zoneId) {
+          setSelectedId(item.zoneId);
+        }
+        if (item.centroid) {
+          const locRisk = deriveLocationSpatialRisk(
+            item.name,
+            item.type || "city",
+            item.districtName || item.name,
+            item.stateName || "",
+            item.centroid,
+            dataZonesRef.current,
+          );
+          setSelectedSpatialLocation(locRisk);
+          setSelectedCellRisk(null);
+          setShowZoneDetails(false);
+          setUninstrumentedLocationNotice(null);
+        }
       }
     };
     const handleOpenRoads = () => setRoadDialogOpen(true);
@@ -173,11 +247,78 @@ function Dashboard() {
       setObsDialogOpen(true);
     };
 
+    const handleHashScroll = () => {
+      if (typeof window === "undefined") return;
+      const rawHash = window.location.hash.replace("#", "");
+      if (!rawHash) return;
+
+      const targetId =
+        rawHash === "observations"
+          ? "recent-observations"
+          : rawHash === "road-network" || rawHash === "roads"
+          ? "road-connectivity"
+          : rawHash;
+
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth" });
+        }, 120);
+      }
+
+      const pendingEvent = sessionStorage.getItem("landalert_pending_event");
+      if (pendingEvent) {
+        sessionStorage.removeItem("landalert_pending_event");
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(pendingEvent));
+        }, 250);
+      }
+
+      const pendingSearch = sessionStorage.getItem("landalert_pending_search");
+      const pendingSearchItemStr = sessionStorage.getItem("landalert_pending_search_item");
+      if (pendingSearch) {
+        sessionStorage.removeItem("landalert_pending_search");
+        setSearchQuery(pendingSearch);
+      }
+      if (pendingSearchItemStr) {
+        sessionStorage.removeItem("landalert_pending_search_item");
+        try {
+          const item = JSON.parse(pendingSearchItemStr);
+          if (item.centroid) {
+            setCustomCenter(item.centroid);
+            setCustomZoom(item.type === "city" || item.type === "town" || item.type === "locality" ? 11 : 9);
+          }
+          if (item.stateName) setStateFilter(item.stateName);
+          if (item.districtName) setDistrictFilter(item.districtName);
+          if (item.zoneId) {
+            setSelectedId(item.zoneId);
+          }
+          if (item.centroid) {
+            const locRisk = deriveLocationSpatialRisk(
+              item.name,
+              item.type || "city",
+              item.districtName || item.name,
+              item.stateName || "",
+              item.centroid,
+              dataZonesRef.current,
+            );
+            setSelectedSpatialLocation(locRisk);
+            setSelectedCellRisk(null);
+            setShowZoneDetails(false);
+            setUninstrumentedLocationNotice(null);
+          }
+        } catch {}
+      }
+    };
+
+    handleHashScroll();
+    window.addEventListener("hashchange", handleHashScroll);
     window.addEventListener("landalert-filter", handleSearch);
     window.addEventListener("landalert-open-roads", handleOpenRoads);
     window.addEventListener("landalert-open-observations", handleOpenObs);
 
     return () => {
+      window.removeEventListener("hashchange", handleHashScroll);
       window.removeEventListener("landalert-filter", handleSearch);
       window.removeEventListener("landalert-open-roads", handleOpenRoads);
       window.removeEventListener("landalert-open-observations", handleOpenObs);
@@ -185,13 +326,36 @@ function Dashboard() {
   }, []);
 
   const states: string[] = useMemo(
-    () => ["All", ...(Array.from(new Set((data.zones as ZoneRow[]).map((z: ZoneRow) => z.state))) as string[]).sort()],
-    [data.zones],
+    () => ["All", ...getAllStates().map((s) => s.name)],
+    [],
   );
+
+  const availableDistricts = useMemo(() => {
+    if (stateFilter === "All") return [];
+    return getDistrictsByState(stateFilter);
+  }, [stateFilter]);
+
+  const mapCenterAndZoom = useMemo<{ center: [number, number]; zoom: number }>(() => {
+    if (customCenter) {
+      return { center: customCenter, zoom: customZoom ?? 10 };
+    }
+    if (districtFilter !== "All" && stateFilter !== "All") {
+      const dist = getDistrictByName(districtFilter, stateFilter);
+      if (dist) {
+        return { center: dist.centroid, zoom: 9 };
+      }
+    }
+    if (stateFilter !== "All") {
+      const st = getStateByName(stateFilter);
+      if (st) {
+        return { center: st.centroid, zoom: 8 };
+      }
+    }
+    return { center: [25.6, 92.8], zoom: 7 };
+  }, [stateFilter, districtFilter, customCenter, customZoom]);
 
   const filteredZones = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q && stateFilter === "All") return data.zones;
 
     const matchingRoadZoneIds = new Set(
       q
@@ -207,15 +371,16 @@ function Dashboard() {
 
     return data.zones.filter((z: ZoneRow) => {
       const matchesState = stateFilter === "All" || z.state === stateFilter;
+      const matchesDistrict = districtFilter === "All" || z.district === districtFilter;
       const matchesQuery =
         !q ||
         z.zone_name.toLowerCase().includes(q) ||
         z.district.toLowerCase().includes(q) ||
         z.state.toLowerCase().includes(q) ||
         matchingRoadZoneIds.has(z.id);
-      return matchesState && matchesQuery;
+      return matchesState && matchesDistrict && matchesQuery;
     });
-  }, [data.zones, data.roads, stateFilter, searchQuery]);
+  }, [data.zones, data.roads, stateFilter, districtFilter, searchQuery]);
 
   const selected: ZoneRow | null =
     data.zones.find((z: ZoneRow) => z.id === selectedId) ?? filteredZones[0] ?? data.zones[0] ?? null;
@@ -556,7 +721,7 @@ function Dashboard() {
         <section className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
           {/* LEFT: Landslide Risk Map */}
           <div className="space-y-4">
-            <div id="risk-map" className="panel overflow-hidden flex flex-col">
+            <div id="risk-map" className="panel overflow-hidden flex flex-col scroll-mt-20">
               {/* Card Header */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 bg-surface shrink-0">
                 <div>
@@ -568,15 +733,32 @@ function Dashboard() {
                   </p>
                 </div>
 
-                {/* State/Region Selector Dropdown */}
-                <div className="flex items-center gap-1.5">
+                {/* State/Region & District Hierarchical Filter Controls */}
+                <div className="flex flex-wrap items-center gap-1.5">
                   <select
                     aria-label="Filter by region or state"
                     value={stateFilter}
-                    onChange={(e) => setStateFilter(e.target.value)}
-                    className="h-8 rounded border border-border bg-background px-2.5 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
+                    onChange={(e) => {
+                      const st = e.target.value;
+                      setStateFilter(st);
+                      setDistrictFilter("All");
+                      setSelectedSpatialLocation(null);
+                      setSelectedCellRisk(null);
+                      setUninstrumentedLocationNotice(null);
+                      if (st !== "All") {
+                        const stateObj = getStateByName(st);
+                        if (stateObj) {
+                          setCustomCenter(stateObj.centroid);
+                          setCustomZoom(8);
+                        }
+                      } else {
+                        setCustomCenter(null);
+                        setCustomZoom(null);
+                      }
+                    }}
+                    className="h-8 rounded border border-border bg-background px-2 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
                   >
-                    <option value="All">{t("map_panel.filter_region", "North East India")}</option>
+                    <option value="All">{t("map_panel.filter_region", "North East India (All 8 States)")}</option>
                     {states
                       .filter((s: string) => s !== "All")
                       .map((s: string) => (
@@ -585,8 +767,107 @@ function Dashboard() {
                         </option>
                       ))}
                   </select>
+
+                  {stateFilter !== "All" && (
+                    <select
+                      aria-label="Filter by district"
+                      value={districtFilter}
+                      onChange={(e) => {
+                        const distName = e.target.value;
+                        setDistrictFilter(distName);
+                        setSelectedCellRisk(null);
+                        setUninstrumentedLocationNotice(null);
+                        if (distName !== "All") {
+                          const distObj = getDistrictByName(distName);
+                          if (distObj) {
+                            setCustomCenter(distObj.centroid);
+                            setCustomZoom(9);
+                            const locRisk = deriveLocationSpatialRisk(
+                              distObj.name,
+                              "district",
+                              distObj.name,
+                              distObj.stateName,
+                              distObj.centroid,
+                              dataZonesRef.current,
+                            );
+                            setSelectedSpatialLocation(locRisk);
+                            setShowZoneDetails(false);
+                          }
+                        } else {
+                          setSelectedSpatialLocation(null);
+                        }
+                      }}
+                      className="h-8 rounded border border-border bg-background px-2 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
+                    >
+                      <option value="All">{t("map_panel.all_districts", `All Districts in ${stateFilter}`)}</option>
+                      {availableDistricts.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name} {d.zoneIds.length > 0 ? `(${d.zoneIds.length} station)` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {(stateFilter !== "All" || districtFilter !== "All" || customCenter !== null || selectedSpatialLocation !== null || selectedCellRisk !== null) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStateFilter("All");
+                        setDistrictFilter("All");
+                        setCustomCenter(null);
+                        setCustomZoom(null);
+                        setUninstrumentedLocationNotice(null);
+                        setSelectedSpatialLocation(null);
+                        setSelectedCellRisk(null);
+                        setSearchQuery("");
+                      }}
+                      className="h-8 rounded border border-border bg-secondary/50 px-2 text-[0.68rem] font-mono text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {t("map_panel.reset", "Reset")}
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Notice for Searched Location without active telemetry */}
+              {uninstrumentedLocationNotice && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                  <span>
+                    {t("map_panel.location_uninstrumented_notice", "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active.", {
+                      name: uninstrumentedLocationNotice.name,
+                      district: uninstrumentedLocationNotice.district,
+                      state: uninstrumentedLocationNotice.state,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUninstrumentedLocationNotice(null)}
+                    className="text-[0.68rem] font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100"
+                  >
+                    {t("common.close", "Dismiss")}
+                  </button>
+                </div>
+              )}
+
+              {/* Notice for Districts without active monitored zones (only shown when not already covered by specific location notice) */}
+              {!uninstrumentedLocationNotice && districtFilter !== "All" && filteredZones.length === 0 && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                  <span>
+                    {t("map_panel.uninstrumented_district_notice", "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.", {
+                      district: districtFilter,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDistrictFilter("All")}
+                    className="text-[0.68rem] font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100"
+                  >
+                    {t("map_panel.view_all_state_districts", "View All {{state}} Districts", {
+                      state: stateFilter,
+                    })}
+                  </button>
+                </div>
+              )}
 
               {/* Map Container */}
               <div
@@ -598,9 +879,20 @@ function Dashboard() {
                 <MapCanvas
                   zones={filteredZones}
                   selectedId={selected?.id ?? null}
+                  center={mapCenterAndZoom.center}
+                  zoom={mapCenterAndZoom.zoom}
+                  spatialCells={spatialGridQuery.data?.cells ?? []}
                   onSelect={(id) => {
                     setSelectedId(id);
+                    setSelectedSpatialLocation(null);
+                    setSelectedCellRisk(null);
                     setShowZoneDetails(true);
+                  }}
+                  onSelectCell={(cell) => {
+                    setSelectedCellRisk(cell);
+                    setSelectedSpatialLocation(null);
+                    setShowZoneDetails(false);
+                    setCustomCenter(cell.centroid);
                   }}
                 />
 
@@ -636,8 +928,20 @@ function Dashboard() {
               </div>
             </div>
 
+            {/* Spatial Location Risk Panel (for Searched/Selected Cities or Districts) or Direct Cell Evaluation */}
+            {(selectedSpatialLocation || selectedCellRisk) && (
+              <SpatialLocationRiskPanel
+                locationRisk={selectedSpatialLocation}
+                cellRisk={selectedCellRisk}
+                onClose={() => {
+                  setSelectedSpatialLocation(null);
+                  setSelectedCellRisk(null);
+                }}
+              />
+            )}
+
             {/* Expandable Zone Operational Drawer & Scientific Decision Support */}
-            {selected && showZoneDetails && (
+            {selected && showZoneDetails && !selectedSpatialLocation && !selectedCellRisk && (
               <div id="zone-details-brief" className="panel p-4 space-y-4 border-l-4 border-l-primary animate-in fade-in duration-200">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
                   <div>
@@ -720,7 +1024,7 @@ function Dashboard() {
                         </div>
                         <div className="grid grid-cols-3 gap-2 mt-2">
                           <div className="rounded border border-border p-2 text-center bg-surface">
-                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">24 Hours</div>
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">{t("weather_forecast.hours_24", "24 Hours")}</div>
                             <div className="my-1 flex justify-center">
                               <ForecastRiskBadge
                                 level={selectedForecast.forecastWindows["24h"].projectedRiskLevel}
@@ -731,7 +1035,7 @@ function Dashboard() {
                             <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["24h"].forecastRainfallMm.toFixed(1)} mm</div>
                           </div>
                           <div className="rounded border border-border p-2 text-center bg-surface">
-                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">48 Hours</div>
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">{t("weather_forecast.hours_48", "48 Hours")}</div>
                             <div className="my-1 flex justify-center">
                               <ForecastRiskBadge
                                 level={selectedForecast.forecastWindows["48h"].projectedRiskLevel}
@@ -742,7 +1046,7 @@ function Dashboard() {
                             <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["48h"].forecastRainfallMm.toFixed(1)} mm</div>
                           </div>
                           <div className="rounded border border-border p-2 text-center bg-surface">
-                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">72 Hours</div>
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">{t("weather_forecast.hours_72", "72 Hours")}</div>
                             <div className="my-1 flex justify-center">
                               <ForecastRiskBadge
                                 level={selectedForecast.forecastWindows["72h"].projectedRiskLevel}
@@ -775,7 +1079,7 @@ function Dashboard() {
                             type="button"
                             className="w-full rounded border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer"
                           >
-                            + Report Observation for {selected.zone_name}
+                            + {t("dashboard.report_observation_for_zone", "Report Observation for {{zone}}", { zone: selected.zone_name })}
                           </button>
                         }
                         onSuccess={() => qc.invalidateQueries()}
@@ -824,38 +1128,60 @@ function Dashboard() {
                   </span>
                 </div>
 
-                {/* 4 Metrics in a row with subtle vertical separators */}
-                <div className="grid grid-cols-4 divide-x divide-border py-4 my-1 text-center">
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {distinctDistricts.length || 12}
+                {/* Regional Scope Clarification */}
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[0.68rem] text-muted-foreground font-mono">
+                  <span>{t("overview.coverage_scope", "Coverage: 8 NER States · 130 Districts · 479 Spatial Grid Cells")}</span>
+                  <span className="font-semibold text-primary">{data.zones.length} {t("overview.operational_zones", "Priority Telemetry Stations")}</span>
+                </div>
+
+                {/* 6 Metrics Grid with subtle vertical separators */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-border py-4 my-1 text-center">
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
+                      8
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
-                      {t("overview.districts_monitored", "Districts monitored")}
-                    </div>
-                  </div>
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-red-600">
-                      {highOrSevereZones.length || 8}
-                    </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
-                      {t("overview.high_or_severe", "High or severe risk")}
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.states_monitored", "States Covered")}
                     </div>
                   </div>
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {data.alerts.length || 24}
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
+                      {Object.keys(NER_DISTRICTS).length}
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.districts_monitored", "Districts Covered")}
+                    </div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-primary">
+                      {data.zones.length}
+                    </div>
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.active_zones", "Active Stations")}
+                    </div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-red-600">
+                      {highOrSevereZones.length}
+                    </div>
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.high_or_severe", "High / Severe")}
+                    </div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
+                      {data.alerts.length}
+                    </div>
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
                       {t("overview.active_alerts", "Active alerts")}
                     </div>
                   </div>
-                  <div className="px-2">
-                    <div className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-                      {observationsList.length ? 180 + observationsList.length : 183}
+                  <div className="px-1.5">
+                    <div className="font-display text-xl sm:text-2xl font-bold text-foreground">
+                      {((data as any).observations || []).length}
                     </div>
-                    <div className="mt-1 text-[0.68rem] text-muted-foreground leading-tight">
-                      {t("overview.field_observations_30d", "Field observations (last 30 days)")}
+                    <div className="mt-1 text-[0.65rem] text-muted-foreground leading-tight">
+                      {t("overview.field_observations_30d", "Field Reports")}
                     </div>
                   </div>
                 </div>
@@ -869,7 +1195,9 @@ function Dashboard() {
                   </div>
                   <div>
                     <div className="font-semibold text-xs text-red-900 dark:text-red-300 font-display">
-                      {t("overview.elevated_risk_title", `Elevated landslide risk in parts of ${elevatedStates}`)}
+                      {highOrSevereZones.length > 0
+                        ? t("overview.elevated_risk_title", `Elevated landslide risk in parts of ${elevatedStates}`)
+                        : t("overview.standard_risk_title", "Operational situational monitoring active across North Eastern Region")}
                     </div>
                     <div className="text-[0.68rem] text-red-700/80 dark:text-red-400 mt-0.5">
                       {t("overview.elevated_risk_desc", "Due to sustained rainfall and saturated soil conditions.")}
@@ -881,6 +1209,7 @@ function Dashboard() {
                   type="button"
                   onClick={() => {
                     setShowZoneDetails(true);
+                    window.history.pushState(null, "", "/#risk-map");
                     setTimeout(() => {
                       const el = document.getElementById("zone-details-brief") || document.getElementById("risk-map");
                       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -977,9 +1306,10 @@ function Dashboard() {
                 <a
                   href="#risk-map"
                   onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState(null, "", "/#risk-map");
                     const el = document.getElementById("risk-map");
                     if (el) {
-                      e.preventDefault();
                       el.scrollIntoView({ behavior: "smooth" });
                     }
                   }}
@@ -1029,6 +1359,7 @@ function Dashboard() {
                   type="button"
                   onClick={() => {
                     setRoadDialogOpen(true);
+                    window.history.pushState(null, "", "/#road-connectivity");
                     const el = document.getElementById("road-connectivity");
                     if (el) el.scrollIntoView({ behavior: "smooth" });
                   }}
@@ -1046,7 +1377,8 @@ function Dashboard() {
             </div>
 
             {/* 4. Regional Observations (with See Details) */}
-            <div id="recent-observations" className="panel p-4 flex flex-col">
+            <div id="recent-observations" className="panel p-4 flex flex-col relative scroll-mt-20">
+              <span id="observations" className="absolute -top-20" aria-hidden="true" />
               <div className="flex items-center justify-between border-b border-border pb-2.5">
                 <h2 className="text-base font-bold text-foreground font-display">
                   {t("operational_tables.recent_observations_title", "Regional Observations")}
@@ -1056,6 +1388,7 @@ function Dashboard() {
                   onClick={() => {
                     setSelectedObsId(null);
                     setObsDialogOpen(true);
+                    window.history.pushState(null, "", "/#recent-observations");
                   }}
                   className="text-xs font-medium text-primary hover:underline font-sans cursor-pointer"
                 >
@@ -1076,12 +1409,13 @@ function Dashboard() {
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {observationsList.map((obs: any) => {
-                      const z = data.zones.find((x: ZoneRow) => x.id === obs.zone_id);
-                      const loc = z ? `${z.zone_name}, ${z.state}` : `Zone ${obs.zone_id}`;
+                      const cleanObs = sanitizeObservationRecord(obs);
+                      const z = data.zones.find((x: ZoneRow) => x.id === cleanObs.zone_id);
+                      const loc = z ? `${z.zone_name}, ${z.state}` : `Zone ${cleanObs.zone_id}`;
                       const typeLabel =
-                        obs.visual_signs ||
-                        (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
-                      const statusMeta = getObservationStatusMeta(obs.status);
+                        cleanObs.visual_signs ||
+                        (cleanObs.road_status && cleanObs.road_status !== "open" ? `Road ${cleanObs.road_status}` : "Slope Movement");
+                      const statusMeta = getObservationStatusMeta((cleanObs as any).status ?? (cleanObs as any).review_status);
                       return (
                         <tr key={obs.id} className="hover:bg-secondary/20 transition-colors">
                           <td className="py-2.5 px-2.5 font-mono text-[0.7rem] whitespace-nowrap text-muted-foreground">
@@ -1132,7 +1466,8 @@ function Dashboard() {
         {/* BOTTOM SECTION: Road Connectivity (50%) & Alert Console (50%) */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* Left: Road Connectivity */}
-          <div id="road-connectivity" className="panel flex flex-col h-full overflow-hidden">
+          <div id="road-connectivity" className="panel flex flex-col h-full overflow-hidden relative scroll-mt-20">
+            <span id="road-network" className="absolute -top-20" aria-hidden="true" />
             <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface shrink-0">
               <div>
                 <h2 className="text-base font-bold text-foreground font-display">
@@ -1144,7 +1479,10 @@ function Dashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => setRoadDialogOpen(true)}
+                onClick={() => {
+                  setRoadDialogOpen(true);
+                  window.history.pushState(null, "", "/#road-connectivity");
+                }}
                 className="text-xs font-medium text-primary hover:underline font-sans cursor-pointer"
               >
                 {t("operational_tables.view_all_roads", "See All Roads →")}

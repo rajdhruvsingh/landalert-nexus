@@ -121,7 +121,7 @@ function ZonePage() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) {
-        const authState = getUserAuthorizationState(session.user.email, session.user.user_metadata);
+        const authState = getUserAuthorizationState({ email: session.user.email, user_metadata: session.user.user_metadata });
         setViewerRole(authState.role);
       }
     });
@@ -141,7 +141,7 @@ function ZonePage() {
     setDispatchStatus(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await dispatchAlertServerFn({
+      const res: any = await dispatchAlertServerFn({
         data: {
           zoneId: zone.id,
           language: alertLang,

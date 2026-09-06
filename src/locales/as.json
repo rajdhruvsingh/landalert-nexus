@@ -332,7 +332,10 @@
     "true_color": "প্ৰকৃত-ৰঙৰ ছবি (True-Color)",
     "ndvi_vegetation": "NDVI উদ্ভিদ সূচক",
     "sentinel_attribution": "কপাৰ্নিকাছ চেন্টিনেল তথ্য ২০২৬",
-    "slide_tooltip": "{{severity}} ভূমিস্খলন · {{date}}"
+    "slide_tooltip": "{{severity}} ভূমিস্খলন · {{date}}",
+    "layers_title": "স্তৰ আৰু গ্ৰিড",
+    "spatial_coverage_info": "সকলো ৮ উত্তৰ-পূব ৰাজ্যত ০.২৫° স্থানিক বিপদ পূৰ্বানুমান গ্ৰিড।",
+    "show_spatial_surface": "৮-ৰাজ্য স্থানিক বিপদ পৃষ্ঠ"
   },
   "system_health": {
     "button_label": "প্ৰণালীৰ স্বাস্থ্য",
@@ -412,7 +415,10 @@
     "subtitle": "উত্তৰ-পূব অঞ্চলৰ বাস্তৱ-সময়ৰ বিপদাশংকা মূল্যায়ন",
     "filter_region": "উত্তৰ-পূব ভাৰত",
     "risk_level": "বিপদাশংকা স্তৰ",
-    "scale_km": "১০০ কিঃমিঃ"
+    "scale_km": "১০০ কিঃমিঃ",
+    "location_uninstrumented_notice": "স্থান: {{name}}, {{district}}, {{state}} — এই অঞ্চলত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন নাই। আঞ্চলিক নিৰীক্ষণ সক্ৰিয় হৈ আছে।",
+    "uninstrumented_district_notice": "{{district}}ত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন পঞ্জীয়ন হোৱা নাই। জিলা এলেকা আঞ্চলিক আৱৰণৰ অধীনত নিৰীক্ষণ কৰা হৈছে।",
+    "view_all_state_districts": "{{state}}ৰ সকলো জিলা চাওক"
   },
   "operational_tables": {
     "latest_alerts_title": "শেহতীয়া সতৰ্কবাৰ্তা",
@@ -561,5 +567,54 @@
     "enable_title": "আপোনাৰ অঞ্চলৰ বিপদ চাবলৈ স্থান সক্ৰিয় কৰক",
     "enable_desc": "আপোনাৰ খণ্ডৰ প্ৰকৃত সময়ৰ ভূমিস্খলনৰ তথ্য চাবলৈ স্থানৰ অনুমতি প্ৰদান কৰক।",
     "retry": "স্থান সক্ৰিয় কৰক"
+  },
+  "map_panel.reset": "পূৰ্বৰ অৱস্থালৈ",
+  "map_panel.uninstrumented_district_notice": "{{district}}ত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন পঞ্জীয়ন হোৱা নাই। জিলা এলেকা আঞ্চলিক আৱৰণৰ অধীনত নিৰীক্ষণ কৰা হৈছে।",
+  "map_panel.view_all_state_districts": "{{state}}ৰ সকলো জিলা চাওক",
+  "map_panel.location_uninstrumented_notice": "স্থান: {{name}}, {{district}}, {{state}} — এই অঞ্চলত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন নাই। আঞ্চলিক নিৰীক্ষণ সক্ৰিয় হৈ আছে।",
+  "dashboard.report_observation_for_zone": "স্থানৰ বাবে পৰ্যবেক্ষণ জমা দিয়ক",
+  "dashboard.ml_risk": "ML বিপদাশংকা",
+  "dashboard.residents": "বাসিন্দা",
+  "dashboard.mean_slope": "গড় ঢাল",
+  "weather_forecast.hours_24": "২৪ ঘণ্টা",
+  "weather_forecast.hours_48": "৪৮ ঘণ্টা",
+  "weather_forecast.hours_72": "৭২ ঘণ্টা",
+  "search.placeholder": "৮ খন উত্তৰ-পূৰ্বাঞ্চলীয় ৰাজ্যৰ চহৰ, নগৰ, জিলা সন্ধান কৰক...",
+  "search.no_locations": "কোনো স্থান পোৱা নগল",
+  "search.city_town": "চহৰ / নগৰ",
+  "search.district": "জিলা",
+  "search.state": "ৰাজ্য",
+  "search.monitored_station": "নিৰীক্ষিত কেন্দ্ৰ",
+  "search.telemetry_active": "টেলিমেট্ৰি সক্ৰিয়",
+  "search.regional_coverage": "আঞ্চলিক আৱৰণ",
+  "search.locality": "অঞ্চল",
+  "search": {
+    "placeholder": "৮ খন উত্তৰ-পূৰ্বাঞ্চলীয় ৰাজ্যৰ চহৰ, নগৰ, জিলা সন্ধান কৰক...",
+    "no_locations": "কোনো স্থান পোৱা নগল",
+    "city_town": "চহৰ / নগৰ",
+    "district": "জিলা",
+    "state": "ৰাজ্য",
+    "monitored_station": "নিৰীক্ষিত কেন্দ্ৰ",
+    "telemetry_active": "টেলিমেট্ৰি সক্ৰিয়",
+    "regional_coverage": "আঞ্চলিক আৱৰণ",
+    "locality": "অঞ্চল",
+    "header_matches": "ভৌগোলিক ফলাফল"
+  },
+  "spatial_risk": {
+    "cell_assessment": "স্থানিক গ্ৰিড চেল মূল্যায়ন",
+    "derived_location_assessment": "উপলব্ধ স্থানিক বিপদ মূল্যায়ন",
+    "current_risk": "বৰ্তমানৰ বিপদ",
+    "static_susceptibility": "স্থিৰ সংবেদনশীলতা",
+    "terrain_basis": "ভূমিৰ ঢাল, উচ্চতা আৰু বন্ধুরতা",
+    "dynamic_trigger": "বৰষুণৰ ট্ৰিগাৰ",
+    "telemetry_interpolated": "আঞ্চলিক বতৰ ক্লাষ্টাৰৰ পৰা অন্তৰ্ভুক্ত",
+    "satellite_signal": "উপগ্ৰহ বিকৃতি",
+    "satellite_unconfigured": "কোনো ভুৱা সংকেত নাই; ইনছাৰ প্ৰদানকাৰী সংযোগ অপেক্ষাৰত",
+    "confidence_and_evidence": "তথ্যৰ নিৰ্ভৰযোগ্যতা",
+    "verified_obs_count": "প্ৰমাণিত ক্ষেত্ৰ পৰিদৰ্শন",
+    "transparency_title": "বৈজ্ঞানিক নিষ্ঠা আৰু পৰিসাংখ্যিক সম্ভাৱিতা নীতি",
+    "probability_calibrated": "কেলিব্ৰেট কৰা পৰিসাংখ্যিক সম্ভাৱিতা: {{prob}}%",
+    "probability_uncalibrated_notice": "পৰিসাংখ্যিক সম্ভাৱিতা অনুপলব্ধ বুলি দেখুওৱা হৈছে কাৰণ এই স্থানাংকৰ বাবে ভূস্খলনৰ আনুষ্ঠানিক কেলিব্ৰেচন হোৱা নাই। ইয়াৰ পৰিৱৰ্তে তথ্য-চালিত বিপদ স্কোৰ (০-১০০) প্ৰদান কৰা হৈছে।",
+    "aggregation_summary": "ওচৰৰ {{count}} টা ০.২৫° স্থানিক গ্ৰিড চেলৰ পৰা সংগ্ৰহ কৰা হৈছে।"
   }
 }

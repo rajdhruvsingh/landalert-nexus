@@ -7,6 +7,7 @@ import {
 } from "@/lib/offline-manager";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { SyncQueueDialog } from "./SyncQueueDialog";
 
 export function OfflineBanner() {
   const { t } = useTranslation();
@@ -14,6 +15,7 @@ export function OfflineBanner() {
   const [cachedStatus, setCachedStatus] = useState<CachedBundleStatus | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
+  const [queueDialogOpen, setQueueDialogOpen] = useState(false);
 
   useEffect(() => {
     setCachedStatus(getCachedOfflinePackage());
@@ -36,11 +38,6 @@ export function OfflineBanner() {
     } finally {
       setDownloading(false);
     }
-  }
-
-  // If online and no queued items and no notice, don't show full alert banner
-  if (isOnline && queueCount === 0 && !bannerNotice) {
-    return null;
   }
 
   return (
@@ -72,17 +69,14 @@ export function OfflineBanner() {
         </div>
 
         <div className="flex items-center gap-2">
-          {queueCount > 0 && isOnline && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => triggerSync()}
-              disabled={syncing}
-              className="h-7 px-2.5 text-[0.68rem] font-mono uppercase border-primary/50 text-primary hover:bg-primary/10"
-            >
-              {syncing ? t("offline.syncing", "Syncing…") : t("offline.sync_queue_count", "Sync Queue ({{count}})", { count: queueCount })}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setQueueDialogOpen(true)}
+            className="h-7 px-2.5 text-[0.68rem] font-mono uppercase border-primary/50 text-primary hover:bg-primary/10 cursor-pointer"
+          >
+            {syncing ? t("offline.syncing", "Syncing…") : t("offline.sync_queue_count", "Sync Queue ({{count}})", { count: queueCount })}
+          </Button>
 
           {isOnline && (
             <Button
@@ -90,11 +84,13 @@ export function OfflineBanner() {
               variant="outline"
               onClick={handleDownloadPackage}
               disabled={downloading}
-              className="h-7 px-2.5 text-[0.68rem] font-mono uppercase text-muted-foreground hover:text-foreground"
+              className="h-7 px-2.5 text-[0.68rem] font-mono uppercase text-muted-foreground hover:text-foreground cursor-pointer"
             >
               {downloading ? t("offline.caching", "Caching…") : t("offline.download_bundle", "Download 24h Bundle")}
             </Button>
           )}
+
+          <SyncQueueDialog open={queueDialogOpen} onOpenChange={setQueueDialogOpen} />
         </div>
       </div>
     </aside>

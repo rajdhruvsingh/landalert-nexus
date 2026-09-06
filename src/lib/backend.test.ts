@@ -57,14 +57,14 @@ const MOCK_ROADS = [
 ];
 
 const MOCK_MODEL_CONFIG = {
-  id: 4,
-  model_version: "v0.2-lr-trained",
+  id: 5,
+  model_version: "v0.4-lr-trained",
   feature_schema_version: "v1.0.0",
-  pr_auc: 0.5934,
-  recall_at_80_precision: 0.125,
-  dataset_fingerprint: "f1054c5041ad8e672a45899f42f037d1f7cd15cc6f55256d8d7d68388ed2aa26",
+  pr_auc: 0.6037,
+  recall_at_80_precision: 0.18,
+  dataset_fingerprint: "e2f7a1c9b8d4063a19f5e72c3b6d0a8e4f1c2b9a7d3e6f08c1b4e2a5d9f3c7b8",
   is_active: true,
-  artifact_path: "models/v0.2-lr-trained.json",
+  artifact_path: "models/v0.4-lr-trained.json",
   cutoff_moderate: 38.0,
   cutoff_high: 56.0,
   cutoff_severe: 74.0,
@@ -239,7 +239,7 @@ describe("Authoritative ML Fallback & Degraded State Handling", () => {
       zone_name: "Aizawl East",
       district: "Aizawl",
       state: "Mizoram",
-      model_version: "v0.2-lr-trained",
+      model_version: "v0.4-lr-trained",
       feature_schema_version: "v1.0.0",
       probability: 0.72,
       risk_score: 72,
@@ -383,7 +383,7 @@ describe("REST API Router (/api/*)", () => {
       feature_schema_version: string;
       scientific_status: string;
     };
-    expect(body.active_model_version).toBe("v0.2-lr-trained");
+    expect(body.active_model_version).toBe("v0.4-lr-trained");
     expect(body.feature_schema_version).toBe("v1.0.0");
     expect(body.scientific_status).toContain("DATA LIMITED");
   });
@@ -408,7 +408,7 @@ describe("REST API Router (/api/*)", () => {
         data_freshness: { soil_moisture_status: string };
       };
       expect(body.zone_id).toBe(1);
-      expect(body.model_version).toBe("v0.2-lr-trained");
+      expect(body.model_version).toBe("v0.4-lr-trained");
       expect(body.probability).toBeGreaterThanOrEqual(0.0);
       expect(body.probability).toBeLessThanOrEqual(1.0);
       expect(body.risk_score).toBeGreaterThanOrEqual(0.0);
@@ -474,7 +474,7 @@ describe("REST API Router (/api/*)", () => {
       cache_policy: { max_age_hours: number; is_expired: boolean };
     };
     expect(body.zones.length).toBe(15);
-    expect(body.active_model.model_version).toBe("v0.2-lr-trained");
+    expect(body.active_model.model_version).toBe("v0.4-lr-trained");
     expect(body.active_model.cutoffs.moderate).toBe(38.0);
     expect(body.active_model.cutoffs.high).toBe(56.0);
     expect(body.active_model.cutoffs.severe).toBe(74.0);
@@ -540,6 +540,67 @@ describe("REST API Router (/api/*)", () => {
     expect(body.success).toBe(true);
     expect(body.syncedCount).toBe(1);
     expect(body.acknowledgedKeys).toContain(idempotencyKey);
+  });
+
+  it("executes complete offline-to-online lifecycle with idempotency and duplicate replay prevention", async () => {
+    const idempotencyKey = `LIFECYCLE-KEY-${Date.now()}`;
+    const payload = {
+      observations: [
+        {
+          zone_id: 2,
+          observed_at: new Date().toISOString(),
+          client_timestamp: new Date().toISOString(),
+          rainfall_mm: 68.4,
+          soil_condition: "saturated",
+          visual_signs: "Debris slide on roadside",
+          road_status: "restricted",
+          observer_id: "field_officer_02",
+          idempotency_key: idempotencyKey,
+        },
+      ],
+    };
+
+    // 1. First sync submission (simulating initial reconnection)
+    const req1 = new Request("http://localhost:3000/api/sync/observations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res1 = await handleApiRequest(req1);
+    expect(res1).not.toBeNull();
+    expect(res1!.status).toBe(200);
+
+    const body1 = (await res1!.json()) as {
+      success: boolean;
+      syncedCount: number;
+      skippedDuplicates: number;
+      acknowledgedKeys: string[];
+    };
+    expect(body1.success).toBe(true);
+    expect(body1.syncedCount).toBe(1);
+    expect(body1.acknowledgedKeys).toContain(idempotencyKey);
+
+    // 2. Duplicate sync replay (simulating network retry or re-queued item)
+    const req2 = new Request("http://localhost:3000/api/sync/observations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res2 = await handleApiRequest(req2);
+    expect(res2).not.toBeNull();
+    expect(res2!.status).toBe(200);
+
+    const body2 = (await res2!.json()) as {
+      success: boolean;
+      syncedCount: number;
+      skippedDuplicates: number;
+      acknowledgedKeys: string[];
+    };
+    expect(body2.success).toBe(true);
+    expect(body2.syncedCount).toBe(1);
+    expect(body2.acknowledgedKeys).toContain(idempotencyKey);
   });
 
   it("GET /api/unknown-route returns 404 NOT_FOUND", async () => {
@@ -936,9 +997,9 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
           method: "GET",
         });
         const res = await handleApiRequest(req);
-        expect(res.status).toBe(200);
+        expect(res!.status).toBe(200);
 
-        const data = await res.json();
+        const data: any = await res!.json();
         expect(data.zoneId).toBe(1);
         expect(data.currentRiskLevel).toBeDefined();
         expect(data.forecastWindows).toBeDefined();
@@ -974,8 +1035,8 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       const evaluated = evaluateEmergencyPrioritization([unknownZone]);
       expect(evaluated.rankedZones.length).toBe(0);
       expect(evaluated.unrankedZones.length).toBe(1);
-      expect(evaluated.unrankedZones[0].zoneId).toBe(99);
-      expect(evaluated.unrankedZones[0].reason).toContain("UNKNOWN");
+      expect(evaluated.unrankedZones[0]?.zoneId).toBe(99);
+      expect(evaluated.unrankedZones[0]?.reason).toContain("UNKNOWN");
     });
 
     it("verifies ranking order responds correctly to changes in each input factor according to documented weights", async () => {
@@ -1038,10 +1099,10 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       ]);
 
       expect(rankedResult.rankedZones.length).toBe(5);
-      expect(rankedResult.rankedZones[0].rank).toBe(1);
+      expect(rankedResult.rankedZones[0]?.rank).toBe(1);
       for (let i = 0; i < rankedResult.rankedZones.length - 1; i++) {
-        expect(rankedResult.rankedZones[i].priorityScore).toBeGreaterThanOrEqual(
-          rankedResult.rankedZones[i + 1].priorityScore,
+        expect(rankedResult.rankedZones[i]!.priorityScore).toBeGreaterThanOrEqual(
+          rankedResult.rankedZones[i + 1]!.priorityScore,
         );
       }
     });
@@ -1080,9 +1141,9 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
     it("verifies prioritization REST API returns decision-support envelope with unranked zones segregated", async () => {
       const req = new Request("http://localhost/api/response/prioritization", { method: "GET" });
       const res = await handleApiRequest(req);
-      expect(res.status).toBe(200);
+      expect(res!.status).toBe(200);
 
-      const json = await res.json();
+      const json: any = await res!.json();
       expect(Array.isArray(json.rankedZones)).toBe(true);
       expect(Array.isArray(json.unrankedZones)).toBe(true);
       expect(json.weights).toBeDefined();
@@ -1206,11 +1267,11 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       // Next request through API router should trigger 429
       const req = createTestReq();
       const res = await handleApiRequest(req);
-      expect(res.status).toBe(429);
-      expect(res.headers.get("Retry-After")).toBeDefined();
-      expect(Number(res.headers.get("Retry-After"))).toBeGreaterThan(0);
+      expect(res!.status).toBe(429);
+      expect(res!.headers.get("Retry-After")).toBeDefined();
+      expect(Number(res!.headers.get("Retry-After"))).toBeGreaterThan(0);
 
-      const json = await res.json();
+      const json: any = await res!.json();
       expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
       expect(json.error).toMatch(/rate limit exceeded/i);
 
@@ -1239,10 +1300,10 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       });
 
       const res = await handleApiRequest(req);
-      expect(res.status).toBe(429);
-      expect(res.headers.get("Retry-After")).toBeDefined();
+      expect(res!.status).toBe(429);
+      expect(res!.headers.get("Retry-After")).toBeDefined();
 
-      const json = await res.json();
+      const json: any = await res!.json();
       expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
 
       defaultRateLimiter.reset(clientKey);
@@ -1275,7 +1336,7 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
         body: JSON.stringify({ alertId: 101, reason: "Radar telemetry failure verified by GSI" }),
       });
       const resNoAuth = await handleApiRequest(reqNoAuth);
-      expect(resNoAuth.status).toBe(401);
+      expect(resNoAuth!.status).toBe(401);
 
       // 2. Citizen / PUBLIC_USER role -> 403
       const reqCitizen = new Request("http://localhost/api/alerts/retract", {
@@ -1287,7 +1348,7 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
         body: JSON.stringify({ alertId: 101, reason: "Unauthorized attempt" }),
       });
       const resCitizen = await handleApiRequest(reqCitizen);
-      expect(resCitizen.status).toBe(403);
+      expect(resCitizen!.status).toBe(403);
 
       // 3. Authorized DISPATCHER / system token -> 200
       const reqAuthorized = new Request("http://localhost/api/alerts/retract", {
@@ -1299,9 +1360,9 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
         body: JSON.stringify({ alertId: 101, reason: "Slope stabilized; telemetry false-alarm" }),
       });
       const resAuthorized = await handleApiRequest(reqAuthorized);
-      expect(resAuthorized.status).toBe(200);
+      expect(resAuthorized!.status).toBe(200);
 
-      const json = await resAuthorized.json();
+      const json: any = await resAuthorized!.json();
       expect(json.success).toBe(true);
       expect(json.alertId).toBe(101);
       expect(json.reason).toContain("telemetry false-alarm");
