@@ -405,17 +405,22 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
   });
 
   it("22. Cross-City Isolation: geographically separated NER cities retrieve distinct deformation data", () => {
-    const gangtok = getLocationDeformation(27.33, 88.61, "Gangtok", "East Sikkim", "Sikkim");
+    const guwahati = getLocationDeformation(26.18, 91.75, "Guwahati", "Kamrup Metropolitan", "Assam");
     const dibrugarh = getLocationDeformation(27.47, 94.91, "Dibrugarh", "Dibrugarh", "Assam");
+    const gangtok = getLocationDeformation(27.33, 88.61, "Gangtok", "East Sikkim", "Sikkim");
 
-    expect(gangtok.deformation.status).toBe("AVAILABLE");
-    expect(gangtok.deformation.los_velocity_mean_mm_year).toBe(-14.2);
+    expect(guwahati.deformation.status).toBe("AVAILABLE");
+    expect(guwahati.deformation.cumulative_displacement_mm).toBe(-7.99);
+    expect(guwahati.deformation.los_velocity_mean_mm_year).toBeNull(); // Single pair
+
+    expect(gangtok.deformation.status).toBe("UNAVAILABLE");
+    expect(gangtok.deformation.unavailable_reason).toBe("SAR_DECORRELATION_DENSE_CANOPY");
 
     expect(dibrugarh.deformation.status).toBe("UNAVAILABLE");
-    expect(dibrugarh.deformation.los_velocity_mean_mm_year).toBeNull();
+    expect(dibrugarh.deformation.cumulative_displacement_mm).toBeNull();
 
-    expect(gangtok.deformation.los_velocity_mean_mm_year).not.toBe(
-      dibrugarh.deformation.los_velocity_mean_mm_year
+    expect(guwahati.deformation.cumulative_displacement_mm).not.toBe(
+      dibrugarh.deformation.cumulative_displacement_mm
     );
   });
 

@@ -158,3 +158,134 @@ def test_ml_production_model_immutability():
     assert "satellite_deformation" not in CANONICAL_FEATURES
     assert "sar_coherence" not in CANONICAL_FEATURES
     assert FEATURE_SCHEMA_VERSION == "v1.0.0"
+
+
+def test_repeated_result_forensic_detection():
+    """
+    Forensic Audit (Phase 9): Detects suspicious identical outputs.
+    Ensures no two independent locations share copied deformation or coherence values.
+    """
+    import psycopg2
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        pytest.skip("DATABASE_URL not configured")
+
+    conn = psycopg2.connect(db_url)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT cell_id, status, cumulative_displacement_mm, los_velocity_mean_mm_year, coherence_mean, unavailable_reason "
+        "FROM public.insar_deformation_products;"
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    assert len(rows) >= 8, f"Expected at least 8 evaluated states in DB, got {len(rows)}"
+
+    available_displacements = []
+    available_coherences = []
+
+    for cell_id, status, cum_disp, vel, coh, reason in rows:
+        # Invariant 1: UNAVAILABLE must NEVER have non-null deformation
+        if status == "UNAVAILABLE":
+            assert cum_disp is None, f"Cell {cell_id} is UNAVAILABLE but has deformation {cum_disp}"
+            assert vel is None, f"Cell {cell_id} is UNAVAILABLE but has velocity {vel}"
+            assert reason is not None, f"Cell {cell_id} is UNAVAILABLE but lacks scientific reason"
+            assert reason in (
+                "SAR_DECORRELATION_DENSE_CANOPY",
+                "INSUFFICIENT_TEMPORAL_SAR_ACQUISITIONS",
+                "PENDING_SAR_INTERFEROMETRIC_PROCESSING",
+                "LOW_COHERENCE",
+                "INSUFFICIENT_VALID_PIXELS",
+            )
+        elif status == "AVAILABLE":
+            assert cum_disp is not None, f"Cell {cell_id} is AVAILABLE but has null displacement"
+            # Single-pair 12-day measurements must not have annualized velocity
+            assert vel is None, f"Cell {cell_id} is a single pair but has annualized velocity {vel}"
+            available_displacements.append((cell_id, float(cum_disp)))
+            if coh is not None:
+                available_coherences.append((cell_id, float(coh)))
+
+    # Invariant 2: No two independent locations may have byte-identical deformation
+    # (Guwahati is the only verified AVAILABLE cell currently)
+    disp_values = [v for _, v in available_displacements]
+    assert len(disp_values) == len(set(disp_values)), (
+        f"Suspicious repeated deformation detected across independent cells: {available_displacements}"
+    )
+
+
+def test_multitemporal_sbas_network_evaluation():
+    """
+    Multi-Temporal PSI/SBAS (Phase 5): Verifies that small baseline networks
+    are evaluated scientifically and strictly reject insufficient acquisitions.
+    """
+    from workers.insar.pipeline import MultiTemporalInSarProcessor
+    processor = MultiTemporalInSarProcessor(min_acquisitions=20, min_timespan_days=365)
+
+    # Case A: Insufficient repeat acquisitions (< 20 epochs)
+    short_catalog = [
+        {"time": "2024-01-01T11:57:30", "b_perp_m": 25.0},
+        {"time": "2024-01-13T11:57:30", "b_perp_m": 35.0},
+        {"time": "2024-01-25T11:57:30", "b_perp_m": 20.0},
+    ]
+    eval_short = processor.evaluate_network_suitability(short_catalog)
+    assert eval_short["status"] == "INSUFFICIENT_TEMPORAL_SAR_ACQUISITIONS"
+    assert eval_short["can_solve_velocity"] is False
+    assert eval_short["acquisition_count"] == 3
+
+    # Case B: Sufficient 24-epoch multi-temporal stack spanning 2 years (730 days)
+    epochs = [f"2024-{m:02d}-15T12:00:00" for m in range(1, 13)] + [f"2025-{m:02d}-15T12:00:00" for m in range(1, 13)]
+    full_catalog = [{"time": ep, "b_perp_m": float(i * 5 % 100)} for i, ep in enumerate(epochs)]
+    eval_full = processor.evaluate_network_suitability(full_catalog, max_b_perp_m=150.0, max_dt_days=65.0)
+    assert eval_full["status"] == "VALID_STACK"
+    assert eval_full["can_solve_velocity"] is True
+    assert eval_full["acquisition_count"] == 24
+    assert eval_full["timespan_days"] >= 365
+
+    # Test SBAS inversion on 3 epochs
+    test_epochs = ["2024-01-01", "2024-06-01", "2024-12-01"]
+    test_ifgs = [
+        {"master_idx": 0, "slave_idx": 1, "unwrapped_phase_rad": 1.25},
+        {"master_idx": 1, "slave_idx": 2, "unwrapped_phase_rad": 1.40},
+        {"master_idx": 0, "slave_idx": 2, "unwrapped_phase_rad": 2.65},
+    ]
+    inv_res = processor.invert_sbas_network(test_epochs, test_ifgs)
+    assert "mean_velocity_mm_year" in inv_res
+    assert "velocity_uncertainty_mm_year" in inv_res
+    assert len(inv_res["displacement_timeseries_mm"]) == 3
+    assert inv_res["velocity_uncertainty_mm_year"] >= 0.0
+
+
+def test_provenance_completeness():
+    """
+    Provenance Enforcement (Phase 2): Every AVAILABLE product must have full provenance.
+    """
+    import psycopg2
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        pytest.skip("DATABASE_URL not configured")
+
+    conn = psycopg2.connect(db_url)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT cell_id, status, sensor, orbit_pass, processing_pipeline, observation_start, observation_end, temporal_baseline_days "
+        "FROM public.insar_deformation_products WHERE status = 'AVAILABLE';"
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    assert len(rows) > 0, "Expected at least one AVAILABLE product (Guwahati) in DB"
+    for r in rows:
+        cell_id, status, sensor, orbit_pass, pipeline, obs_start, obs_end, dt = r
+        assert sensor == "Sentinel-1 C-SAR"
+        assert orbit_pass in ("ASCENDING", "DESCENDING")
+        assert "ISCE2/SNAPHU" in pipeline or "PS-InSAR" in pipeline
+        assert obs_start is not None
+        assert obs_end is not None
+        assert dt is not None
+

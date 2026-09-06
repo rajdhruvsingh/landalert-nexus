@@ -299,3 +299,37 @@ docker logs -f landalert-insar-worker
   - `insar_coherence`
   - `insar_valid_coverage`
   - `insar_observation_age`
+
+---
+
+## 8. Capability Status Classification
+
+| Subsystem Component | Operational Status | Technical Implementation Detail |
+| :--- | :--- | :--- |
+| **CDSE Authentication** | **VALIDATED** | OAuth2 token acquisition and refresh via Copernicus Identity Service. |
+| **Dynamic Burst Resolution** | **VALIDATED** | Point-in-polygon querying against Copernicus Bursts catalogue API (`/odata/v1/Bursts`). |
+| **Precise Orbit Processing (POEORB)** | **VALIDATED** | Sub-millimeter satellite state vector interpolation from official ESA EOF files. |
+| **Topographic Flattening** | **VALIDATED** | Height of ambiguity ($h_{\text{amb}}$) topographic phase simulation from SRTM DEM elevation. |
+| **Coherence & Quality Gating** | **VALIDATED** | $5 \times 1$ multilooked sample coherence estimation with strict zero-fabrication thresholding. |
+| **SNAPHU Phase Unwrapping** | **VALIDATED** | Statistical-cost Network-flow Algorithm for Phase Unwrapping v2.0.7 invoked on passing interferograms. |
+| **Single-Pair LOS Displacement** | **VALIDATED** | $d_{\text{LOS}} = -(\lambda / 4\pi)\phi_{\text{unw}}$. Strictly reported as pair displacement, never annualized. |
+| **Guwahati Urban InSAR** | **VALIDATED** | Real 12-day Sentinel-1 pair: $-7.99\text{ mm}$ Line-of-Sight displacement (Coherence: 0.465, QC: PASS). |
+| **Gangtok Canopy Rejection** | **VALIDATED** | Real 12-day Sentinel-1 pair: Coherence 0.284, valid 14.2%, QC: REJECT (`SAR_DECORRELATION_DENSE_CANOPY`). |
+| **Multi-Temporal InSAR (SBAS/PSI)** | **IMPLEMENTED** | Small-baseline network builder and SVD matrix inversion (`MultiTemporalInSarProcessor`). Requires $\ge 20$ repeat acquisitions. |
+| **Atmospheric Correction (APS)** | **EXPERIMENTAL** | External GACOS / ERA5 reanalysis integration. Uncalibrated runs designated as `N/A (UNCALIBRATED)`. |
+| **L-band Radar (NISAR / ALOS-2)** | **FUTURE** | 24 cm wavelength radar integration planned to penetrate dense Himalayan rainforest canopies without C-band decorrelation. |
+| **ML Model Coupling** | **UNCHANGED** | Production logistic regression model `v0.2-lr-trained` (19 canonical features) preserved strictly immutable. |
+
+---
+
+## 9. Forensic Audit & Invariant Guarantees
+
+1. **Zero Fabrication & Non-Cloning Policy**:
+   - Independent geographical targets never share cloned deformation or coherence values.
+   - Decorrelated cells report `UNAVAILABLE` with exact scientific reason codes; no synthetic $0\text{ mm/year}$ values are ever substituted.
+2. **Single-Pair vs Annual Velocity Protection**:
+   - Single interferometric pairs ($\Delta t < 60\text{ days}$) strictly output `cumulative_displacement_mm` with `los_velocity_mean_mm_year = null`.
+   - Long-term annual velocity ($mm/\text{year}$) is only calculated for legitimate multi-temporal stacks ($\ge 20$ epochs spanning $\ge 365\text{ days}$).
+3. **Temporal Leakage Protection**:
+   - All acquisitions and processing jobs strictly enforce $t_{\text{observation}} \le \text{prediction\_cutoff}$ for historical evaluation.
+

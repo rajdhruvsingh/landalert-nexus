@@ -236,7 +236,11 @@ export default function RiskMap({
                   <div className="text-[0.65rem] text-muted-foreground">Susceptibility: {(c.static_susceptibility * 100).toFixed(0)}% · Elev: {c.elevation_m}m · Slope: {c.slope_deg}°</div>
                   {hasInSar ? (
                     <div className="text-[0.68rem] text-violet-400 font-bold mt-0.5 border-t border-border/40 pt-0.5">
-                      🛰 InSAR: {c.provenance.satellite_deformation!.los_velocity_mean_mm_year} mm/yr ({c.provenance.satellite_deformation!.sensor})
+                      🛰 InSAR:{" "}
+                      {c.provenance.satellite_deformation!.los_velocity_mean_mm_year !== null
+                        ? `${c.provenance.satellite_deformation!.los_velocity_mean_mm_year} mm/yr (Velocity)`
+                        : `${c.provenance.satellite_deformation!.cumulative_displacement_mm} mm (Pair LOS)`}{" "}
+                      ({c.provenance.satellite_deformation!.sensor})
                     </div>
                   ) : (
                     <div className="text-[0.62rem] text-muted-foreground/70 mt-0.5 border-t border-border/30 pt-0.5">

@@ -85,23 +85,8 @@ export interface InSarTimeseriesPoint {
 const jobMemoryStore = new Map<string, SatelliteProcessingJob>();
 const timeseriesMemoryStore = new Map<string, InSarTimeseriesPoint[]>();
 
-// Pre-populate Gangtok and Guwahati time-series baselines
-timeseriesMemoryStore.set("cell-27.25-88.50", [
-  { observation_date: "2024-01-05", displacement_mm: 0.0, coherence: 0.68, is_outlier: false },
-  { observation_date: "2024-05-18", displacement_mm: -6.2, coherence: 0.64, is_outlier: false },
-  { observation_date: "2024-10-12", displacement_mm: -14.8, coherence: 0.60, is_outlier: false },
-  { observation_date: "2025-04-20", displacement_mm: -22.4, coherence: 0.62, is_outlier: false },
-  { observation_date: "2025-09-15", displacement_mm: -29.8, coherence: 0.58, is_outlier: false },
-  { observation_date: "2025-12-28", displacement_mm: -35.5, coherence: 0.62, is_outlier: false },
-]);
+// Zero-fabrication: timeseriesMemoryStore starts clean and only records genuine multi-temporal inversions
 
-timeseriesMemoryStore.set("cell-26.25-91.75", [
-  { observation_date: "2024-03-12", displacement_mm: 0.0, coherence: 0.76, is_outlier: false },
-  { observation_date: "2024-08-20", displacement_mm: -2.1, coherence: 0.74, is_outlier: false },
-  { observation_date: "2025-02-14", displacement_mm: -5.4, coherence: 0.72, is_outlier: false },
-  { observation_date: "2025-07-10", displacement_mm: -7.8, coherence: 0.75, is_outlier: false },
-  { observation_date: "2025-11-30", displacement_mm: -10.2, coherence: 0.74, is_outlier: false },
-]);
 
 /**
  * Computes deterministic fingerprint for an InSAR job to enforce idempotency.

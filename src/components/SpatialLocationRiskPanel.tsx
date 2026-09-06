@@ -278,15 +278,26 @@ export default function SpatialLocationRiskPanel({
                 <span className="text-base font-bold font-mono text-foreground">
                   {deformVelocity !== null && deformVelocity !== undefined
                     ? `${deformVelocity > 0 ? "+" : ""}${deformVelocity}`
+                    : deformDisplacement !== null && deformDisplacement !== undefined
+                    ? `${deformDisplacement > 0 ? "+" : ""}${deformDisplacement}`
                     : "—"}
                 </span>
-                <span className="text-xs font-mono text-muted-foreground">mm/year (LOS deformation)</span>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {deformVelocity !== null && deformVelocity !== undefined
+                    ? "mm/year (Multi-temporal LOS velocity)"
+                    : "mm (Pair LOS displacement)"}
+                </span>
               </div>
-              {deformDisplacement !== null && deformDisplacement !== undefined && (
+              {deformVelocity === null && deformDisplacement !== null && (
+                <div className="text-[0.65rem] text-muted-foreground italic">
+                  Single-pair interferometric displacement; long-term velocity not annualized.
+                </div>
+              )}
+              {deformVelocity !== null && deformDisplacement !== null && deformDisplacement !== undefined && (
                 <div className="text-[0.68rem] text-muted-foreground font-mono flex items-center justify-between">
                   <span>Cumulative: {deformDisplacement > 0 ? "+" : ""}{deformDisplacement} mm</span>
                   <span className="text-[0.62rem] px-1 py-0.2 rounded bg-violet-500/10 text-violet-400 font-sans font-semibold">
-                    Trend: Active Creep
+                    Trend: Multi-epoch Stack
                   </span>
                 </div>
               )}

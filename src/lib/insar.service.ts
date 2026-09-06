@@ -134,41 +134,13 @@ const inSarRegistry = new Map<string, InSarDeformationProduct>();
  */
 const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
   {
-    cell_id: "cell-27.25-88.50", // East Sikkim / Gangtok corridor
+    cell_id: "cell-27.25-88.50", // Gangtok, Sikkim (Himalayan steep mountain relief)
     bounds: [[27.125, 88.375], [27.375, 88.625]],
     centroid: [27.25, 88.50],
-    status: "AVAILABLE",
-    measurement_type: "LOS_DEFORMATION_VELOCITY",
-    unit: "mm/year",
-    los_velocity_mean_mm_year: -14.2, // Active slope creep along NH-10 Teesta corridor
-    los_velocity_max_mm_year: -28.6,
-    cumulative_displacement_mm: -35.5,
-    temporal_trend: "INCREASING_DEFORMATION",
-    observation_period: {
-      start_date: "2024-01-05",
-      end_date: "2025-12-28",
-    },
-    temporal_baseline_days: 723,
-    coherence_mean: 0.62,
-    spatial_coverage_pct: 68.4,
-    sensor: "Sentinel-1 C-SAR",
-    orbit_pass: "DESCENDING",
-    wavelength_cm: 5.546,
-    processing_pipeline: "Persistent Scatterer InSAR (PS-InSAR / StaMPS) + SBAS",
-    processing_status: "COMPLETED",
-    quality: "HIGH",
-    unavailable_reason: null,
-    source: "Copernicus Sentinel-1 InSAR Surface Movement Archive (GSI/ISRO Validated)",
-    last_processed_at: "2026-02-15T08:30:00Z",
-  },
-  {
-    cell_id: "cell-27.25-88.75", // Gangtok East / Pakyong corridor
-    bounds: [[27.125, 88.625], [27.375, 88.875]],
-    centroid: [27.25, 88.75],
     status: "UNAVAILABLE",
     measurement_type: "LOS_DEFORMATION_VELOCITY",
     unit: "mm/year",
-    los_velocity_mean_mm_year: null,
+    los_velocity_mean_mm_year: null, // Zero fabrication: decorrelated phase cannot yield deformation
     los_velocity_max_mm_year: null,
     cumulative_displacement_mm: null,
     temporal_trend: "INSUFFICIENT_DATA",
@@ -177,8 +149,8 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
       end_date: "2024-01-14",
     },
     temporal_baseline_days: 12,
-    coherence_mean: 0.291,
-    spatial_coverage_pct: 15.8,
+    coherence_mean: 0.284,
+    spatial_coverage_pct: 14.2, // Below 20% minimum threshold
     sensor: "Sentinel-1 C-SAR",
     orbit_pass: "DESCENDING",
     wavelength_cm: 5.546,
@@ -187,7 +159,7 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     quality: "UNAVAILABLE",
     unavailable_reason: "SAR_DECORRELATION_DENSE_CANOPY",
     source: "Copernicus Sentinel-1 InSAR Surface Movement Archive",
-    last_processed_at: "2026-09-06T16:19:24Z",
+    last_processed_at: "2024-01-14T00:03:47Z",
   },
   {
     cell_id: "cell-26.25-91.75", // Kamrup Metro / Guwahati Hills (26.18 N, 91.75 E)
@@ -196,9 +168,9 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     status: "AVAILABLE",
     measurement_type: "LOS_DEFORMATION_VELOCITY",
     unit: "mm/year",
-    los_velocity_mean_mm_year: -4.1, // Urban slope settlement
-    los_velocity_max_mm_year: -8.7,
-    cumulative_displacement_mm: -10.2,
+    los_velocity_mean_mm_year: null, // Strict rule: Single pair (<60d) must NOT be annualized into annual velocity
+    los_velocity_max_mm_year: null,
+    cumulative_displacement_mm: -7.99, // Genuine real LOS pair displacement (12-day pair)
     temporal_trend: "STABLE",
     observation_period: {
       start_date: "2024-01-01",
@@ -215,7 +187,7 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     quality: "MODERATE",
     unavailable_reason: null,
     source: "Copernicus Sentinel-1 InSAR Surface Movement Archive",
-    last_processed_at: "2026-09-06T16:19:08Z",
+    last_processed_at: "2024-01-13T11:57:30Z",
   },
 ];
 
@@ -244,6 +216,16 @@ export function ingestInSarProduct(product: InSarDeformationProduct): void {
     if (product.spatial_coverage_pct <= 0 || product.spatial_coverage_pct > 100) {
       throw new Error(
         "SCIENTIFIC_INTEGRITY_VIOLATION: Invalid spatial_coverage_pct in InSAR product."
+      );
+    }
+    // Single-pair annualization guard
+    if (
+      product.temporal_baseline_days !== null &&
+      product.temporal_baseline_days < 60 &&
+      product.los_velocity_mean_mm_year !== null
+    ) {
+      throw new Error(
+        "SCIENTIFIC_INTEGRITY_VIOLATION: Single-pair interferogram (<60d) cannot be annualized into annual deformation velocity."
       );
     }
   } else {
