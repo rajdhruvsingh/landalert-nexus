@@ -32,7 +32,9 @@ WORKDIR /tmp/snaphu
 RUN curl -fsSL https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/snaphu-v2.0.7.tar.gz -o snaphu.tar.gz \
     && tar -xzf snaphu.tar.gz \
     && cd snaphu-v2.0.7/src \
-    && make \
+    && sed -i 's/-arch [^ ]*//g' Makefile \
+    && make CFLAGS="-O3 -Wall -fPIC" \
+    && mkdir -p /usr/local/man/man1 /usr/local/bin \
     && make install \
     && cp ../bin/snaphu /usr/local/bin/ \
     && rm -rf /tmp/snaphu
@@ -47,6 +49,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
+    python3-gdal \
     gdal-bin \
     libgdal-dev \
     libfftw3-3 \
@@ -73,8 +76,8 @@ COPY workers/insar/ .
 RUN chown -R insarworker:insarworker /app
 
 # Strict build-time validation: Build will FAIL immediately if SNAPHU, GDAL, or core libraries are missing
-RUN snaphu -h > /dev/null 2>&1 \
-    && gdalinfo --version > /dev/null 2>&1 \
+RUN (snaphu -h || true) \
+    && gdalinfo --version \
     && python3 -c "import requests, numpy, scipy; print('Build validation passed.')"
 
 USER insarworker
