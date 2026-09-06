@@ -10,8 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { ZoneRow, ObservationRow } from "@/lib/monitoring.functions";
-import { Eye, FilePlus, Search, MapPin, Calendar, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Eye, FilePlus, Search, MapPin, Calendar, ArrowLeft, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
 import { FieldObservationDialog } from "./FieldObservationDialog";
+import {
+  getObservationStatusMeta,
+  matchesObservationStatusFilter,
+  type ObservationFilterGroup,
+} from "@/lib/observation-status";
+import type { AppUserRole } from "@/lib/auth-domains";
 
 interface Props {
   observations: ObservationRow[];
@@ -22,6 +28,10 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   onSelectZone?: (zoneId: number) => void;
   onSuccess?: () => void;
+  /** Role of the currently logged-in user — controls visibility of review actions. */
+  viewerRole?: AppUserRole;
+  /** Supabase session access_token — forwarded as Bearer in review API calls. */
+  accessToken?: string | null;
 }
 
 export function ObservationDetailsDialog({
@@ -33,12 +43,21 @@ export function ObservationDetailsDialog({
   onOpenChange: setControlledOpen,
   onSelectZone,
   onSuccess,
+  viewerRole,
+  accessToken,
 }: Props) {
   const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const [activeObsId, setActiveObsId] = useState<number | string | null>(selectedObservationId ?? null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<ObservationFilterGroup>("all");
+
+  // Review action state
+  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -69,16 +88,64 @@ export function ObservationDetailsDialog({
         (z && z.district.toLowerCase().includes(q)) ||
         (z && z.state.toLowerCase().includes(q));
 
-      const status = obs.review_status || (obs as any).status || "PENDING";
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "verified" && (status === "APPROVED" || status === "OFFICIAL_VERIFIED")) ||
-        (statusFilter === "pending" && (status === "PENDING" || status === "UNVERIFIED")) ||
-        (statusFilter === "rejected" && status === "REJECTED");
+      const status = (obs as any).status ?? (obs as any).review_status;
+      const matchesStatus = matchesObservationStatusFilter(status, statusFilter);
 
       return matchesQuery && matchesStatus;
     });
   }, [observations, searchQuery, statusFilter, zoneMap]);
+
+  // Whether the viewer has permission to approve/reject
+  const canReview =
+    viewerRole === "VERIFIED_OFFICIAL" ||
+    viewerRole === "DISPATCHER" ||
+    viewerRole === "ADMIN";
+
+  async function submitReview(obsId: number | string, newStatus: "VERIFIED" | "REJECTED") {
+    if (!accessToken) {
+      setReviewNotice({ type: "error", msg: "You are not signed in. Please sign in to review observations." });
+      return;
+    }
+    if (newStatus === "REJECTED" && reviewNotes.trim().length < 5) {
+      setReviewNotice({ type: "error", msg: "Please provide a rejection reason (at least 5 characters)." });
+      return;
+    }
+    setReviewBusy(true);
+    setReviewNotice(null);
+    try {
+      const res = await fetch("/api/observations/review", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          observation_id: obsId,
+          new_status: newStatus,
+          verification_notes: reviewNotes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setReviewNotice({ type: "error", msg: data?.error ?? `Request failed (${res.status})` });
+      } else {
+        setReviewNotice({
+          type: "success",
+          msg: newStatus === "VERIFIED"
+            ? "Observation approved and marked Verified."
+            : "Observation rejected.",
+        });
+        setReviewAction(null);
+        setReviewNotes("");
+        // Propagate cache invalidation to parent
+        onSuccess?.();
+      }
+    } catch (err) {
+      setReviewNotice({ type: "error", msg: err instanceof Error ? err.message : "Network error." });
+    } finally {
+      setReviewBusy(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -136,17 +203,16 @@ export function ObservationDetailsDialog({
                 <span>{t("observations.back_to_list", "Back to all observations")}</span>
               </button>
 
-              <span
-                className={`inline-block px-2.5 py-0.5 rounded border text-[0.68rem] font-mono font-semibold ${
-                  activeObs.review_status === "APPROVED" || (activeObs as any).status === "OFFICIAL_VERIFIED"
-                    ? "bg-risk-low/15 text-risk-low border-risk-low/40"
-                    : activeObs.review_status === "REJECTED" || (activeObs as any).status === "REJECTED"
-                      ? "bg-secondary/50 text-muted-foreground border-border"
-                      : "bg-risk-moderate/15 text-risk-moderate border-risk-moderate/40"
-                }`}
-              >
-                {activeObs.review_status || (activeObs as any).status || "PENDING REVIEW"}
-              </span>
+              {(() => {
+                const statusMeta = getObservationStatusMeta((activeObs as any).status ?? (activeObs as any).review_status);
+                return (
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded border text-[0.68rem] font-mono font-semibold ${statusMeta.badgeClass}`}
+                  >
+                    {statusMeta.label}
+                  </span>
+                );
+              })()}
             </div>
 
             {/* Detailed metadata grid */}
@@ -275,6 +341,135 @@ export function ObservationDetailsDialog({
               )}
             </div>
 
+            {/* ── Official Review Card (role-gated) ── */}
+            {canReview && (
+              <div className="rounded border border-primary/30 bg-primary/5 p-4 space-y-3 shadow-xs">
+                <div className="flex items-center gap-2 text-xs font-bold font-display uppercase tracking-wider text-primary">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>{t("observations.official_review_title", "Official Review")}</span>
+                  <span className="ml-auto text-[0.65rem] font-normal text-muted-foreground uppercase tracking-wide">
+                    {viewerRole}
+                  </span>
+                </div>
+
+                {/* Toast notice */}
+                {reviewNotice && (
+                  <div
+                    className={`rounded px-3 py-2 text-xs font-medium ${
+                      reviewNotice.type === "success"
+                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                        : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                    }`}
+                  >
+                    {reviewNotice.msg}
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                {reviewAction === null && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="obs-review-approve-btn"
+                      type="button"
+                      disabled={reviewBusy}
+                      onClick={() => { setReviewAction("approve"); setReviewNotes(""); setReviewNotice(null); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {t("observations.approve_btn", "Approve")}
+                    </button>
+                    <button
+                      id="obs-review-reject-btn"
+                      type="button"
+                      disabled={reviewBusy}
+                      onClick={() => { setReviewAction("reject"); setReviewNotes(""); setReviewNotice(null); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-zinc-600 hover:bg-zinc-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      {t("observations.reject_btn", "Reject")}
+                    </button>
+                  </div>
+                )}
+
+                {/* Approve panel — optional notes */}
+                {reviewAction === "approve" && (
+                  <div className="space-y-2">
+                    <label className="text-[0.7rem] text-muted-foreground uppercase font-semibold">
+                      {t("observations.approve_notes_label", "Verification notes (optional)")}
+                    </label>
+                    <textarea
+                      id="obs-approve-notes"
+                      rows={2}
+                      value={reviewNotes}
+                      onChange={(e) => setReviewNotes(e.target.value)}
+                      placeholder={t("observations.approve_notes_placeholder", "e.g. Field visit confirmed slope crack at chainage 12+400…")}
+                      className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary resize-none"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        id="obs-approve-submit-btn"
+                        type="button"
+                        disabled={reviewBusy}
+                        onClick={() => submitReview(activeObs.id, "VERIFIED")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {reviewBusy ? t("common.saving", "Saving…") : t("observations.confirm_approve", "Confirm Approve")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setReviewAction(null); setReviewNotes(""); setReviewNotice(null); }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {t("common.cancel", "Cancel")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reject panel — required reason */}
+                {reviewAction === "reject" && (
+                  <div className="space-y-2">
+                    <label className="text-[0.7rem] text-muted-foreground uppercase font-semibold">
+                      {t("observations.reject_reason_label", "Rejection reason (required)")}
+                    </label>
+                    <textarea
+                      id="obs-reject-notes"
+                      rows={3}
+                      value={reviewNotes}
+                      onChange={(e) => setReviewNotes(e.target.value)}
+                      placeholder={t("observations.reject_reason_placeholder", "e.g. No physical evidence found during site inspection — possible misidentification.")}
+                      className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary resize-none"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        id="obs-reject-submit-btn"
+                        type="button"
+                        disabled={reviewBusy || reviewNotes.trim().length < 5}
+                        onClick={() => submitReview(activeObs.id, "REJECTED")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-zinc-600 hover:bg-zinc-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        {reviewBusy ? t("common.saving", "Saving…") : t("observations.confirm_reject", "Confirm Reject")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setReviewAction(null); setReviewNotes(""); setReviewNotice(null); }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {t("common.cancel", "Cancel")}
+                      </button>
+                    </div>
+                    {reviewNotes.trim().length > 0 && reviewNotes.trim().length < 5 && (
+                      <p className="text-[0.68rem] text-rose-400">
+                        {t("observations.reject_reason_min", "Reason must be at least 5 characters.")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-2">
               {(() => {
                 const z = zoneMap.get(activeObs.zone_id);
@@ -332,6 +527,17 @@ export function ObservationDetailsDialog({
                 </button>
                 <button
                   type="button"
+                  onClick={() => setStatusFilter("actionable")}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    statusFilter === "actionable"
+                      ? "bg-orange-600 text-white font-semibold"
+                      : "bg-secondary/40 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t("observations.filter_actionable", "Actionable")}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setStatusFilter("pending")}
                   className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                     statusFilter === "pending"
@@ -340,6 +546,17 @@ export function ObservationDetailsDialog({
                   }`}
                 >
                   {t("observations.filter_pending", "Pending")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("rejected")}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    statusFilter === "rejected"
+                      ? "bg-zinc-600 text-white font-semibold"
+                      : "bg-secondary/40 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t("observations.filter_rejected", "Rejected")}
                 </button>
               </div>
 
@@ -374,9 +591,7 @@ export function ObservationDetailsDialog({
                     const typeLabel =
                       obs.visual_signs ||
                       (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
-                    const status = obs.review_status || (obs as any).status || "PENDING";
-                    const isVerified = status === "APPROVED" || status === "OFFICIAL_VERIFIED";
-                    const isRejected = status === "REJECTED";
+                    const statusMeta = getObservationStatusMeta((obs as any).status ?? (obs as any).review_status);
 
                     return (
                       <tr key={obs.id} className="hover:bg-secondary/20 transition-colors">
@@ -399,15 +614,9 @@ export function ObservationDetailsDialog({
                         </td>
                         <td className="py-2.5 px-3 whitespace-nowrap">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded border font-display text-[0.65rem] font-semibold ${
-                              isVerified
-                                ? "bg-risk-low/15 text-risk-low border-risk-low/40"
-                                : isRejected
-                                  ? "bg-secondary/50 text-muted-foreground border-border"
-                                  : "bg-risk-moderate/15 text-risk-moderate border-risk-moderate/40"
-                            }`}
+                            className={`inline-block px-2 py-0.5 rounded border font-display text-[0.65rem] font-semibold ${statusMeta.badgeClass}`}
                           >
-                            {isVerified ? "Verified" : isRejected ? "Rejected" : "Pending"}
+                            {statusMeta.label}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-right">
@@ -421,6 +630,7 @@ export function ObservationDetailsDialog({
                         </td>
                       </tr>
                     );
+
                   })}
                   {filteredObservations.length === 0 && (
                     <tr>
