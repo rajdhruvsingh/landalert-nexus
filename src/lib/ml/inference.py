@@ -47,8 +47,90 @@ _raw_db_url = os.getenv("DATABASE_URL")
 DATABASE_URL = _raw_db_url.strip() if _raw_db_url and _raw_db_url.strip() else None
 _is_production = os.getenv("NODE_ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
 
+# Fallback artifact path when registry is unreachable
+_FALLBACK_ARTIFACT_PATH = "models/v0.2-lr-trained.json"
+
+def get_active_artifact_path_from_registry(db_url: str = None) -> str:
+    """
+    Queries the registry (public.risk_model_config) for the sole authorized
+    production model (is_active=TRUE, status='active') and returns its
+    artifact_path.
+
+    Rules enforced:
+      - Exactly one row with is_active=TRUE must exist.
+      - status MUST be 'active' (not 'validated', 'scientifically_blocked', etc.)
+      - artifact_path must exist on disk.
+
+    If the registry is unreachable, falls back to _FALLBACK_ARTIFACT_PATH.
+    NEVER silently falls back to a scientifically-blocked or candidate model.
+    """
+    url = db_url or DATABASE_URL
+    if not url:
+        return _FALLBACK_ARTIFACT_PATH
+
+    try:
+        conn = psycopg2.connect(url, connect_timeout=3)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT model_version, artifact_path, status
+            FROM public.risk_model_config
+            WHERE is_active = true
+            LIMIT 2
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not rows:
+            # No active model in registry — fall back gracefully
+            warnings.warn(
+                "[inference] No active model in registry; using fallback artifact.",
+                stacklevel=2,
+            )
+            return _FALLBACK_ARTIFACT_PATH
+
+        if len(rows) > 1:
+            raise RuntimeError(
+                f"Registry integrity violation: {len(rows)} active models found. "
+                "Exactly one must be active."
+            )
+
+        ver, art_path, status = rows[0]
+
+        if status != "active":
+            raise RuntimeError(
+                f"Registry model '{ver}' has is_active=TRUE but status='{status}'. "
+                "A production-active model must have status='active'. "
+                "Run: python3 scripts/ml_registry.py gate <version> to re-evaluate."
+            )
+
+        if not art_path or not os.path.isfile(art_path):
+            raise RuntimeError(
+                f"Registry active model '{ver}' artifact path '{art_path}' not found on disk."
+            )
+
+        return art_path
+
+    except psycopg2.Error:
+        # DB connectivity failure — fall back, do not fail inference
+        warnings.warn(
+            "[inference] DB unreachable; using fallback artifact path for inference.",
+            stacklevel=2,
+        )
+        return _FALLBACK_ARTIFACT_PATH
+
+
 class LandslideRiskInferenceEngine:
-    def __init__(self, artifact_path: str = "models/v0.2-lr-trained.json"):
+    def __init__(self, artifact_path: str = None):
+        """
+        Initialize the inference engine.
+
+        artifact_path: explicit artifact path. If None, reads the active model
+            from the registry via get_active_artifact_path_from_registry().
+            Use the explicit path only for testing or manual override.
+        """
+        if artifact_path is None:
+            artifact_path = get_active_artifact_path_from_registry()
         self.artifact_path = artifact_path
         self.artifact = load_model_artifact(artifact_path)
 
@@ -243,7 +325,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LandAlert-Nexus Canonical ML Inference CLI")
     parser.add_argument("--zone", type=int, required=True, help="Zone ID (1-15)")
     parser.add_argument("--as-of", type=str, default=None, help="As-of ISO date (e.g. 2024-06-15)")
-    parser.add_argument("--artifact", type=str, default="models/v0.2-lr-trained.json", help="Path to model artifact")
+    parser.add_argument("--artifact", type=str, default=None,
+                        help="Path to model artifact. If omitted, reads from active registry entry.")
     parser.add_argument("--persist", action="store_true", help="Persist prediction record to database")
     args = parser.parse_args()
 

@@ -135,12 +135,15 @@ def test_scenario_h_candidate_model_gating_and_rollback():
         """, (test_ver,))
         conn.commit()
 
-        # 5. Gating should now pass and mark as validated
+        # 5. Gating evaluates software and scientific gates:
+        # Software gate passes (valid artifact, 19 weights, PR-AUC >= floor),
+        # but authoritative scientific gate BLOCKS because real events (22) < 200.
         passed, reasons = verify_model_candidate(test_ver, conn=conn)
-        assert passed is True, f"Gate failed unexpectedly: {reasons}"
+        assert passed is False, "Candidate must be blocked when real events < 200"
+        assert any("SCIENTIFIC GATE BLOCKED" in r for r in reasons)
 
         cur.execute("SELECT status FROM public.risk_model_config WHERE model_version = %s;", (test_ver,))
-        assert cur.fetchone()[0] == "validated"
+        assert cur.fetchone()[0] == "scientifically_blocked"
 
     finally:
         # Clean up test row

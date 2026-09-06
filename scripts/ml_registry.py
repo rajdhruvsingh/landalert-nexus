@@ -5,6 +5,22 @@ scripts/ml_registry.py
 Model Registry CLI for LandAlert-Nexus.
 Enforces the lifecycle:
   Candidate -> Automated Validation -> Approval -> Active -> Rollback
+
+SCIENTIFIC GATE (AUTHORITATIVE):
+  A model may NOT be production-activated unless the database contains
+  >= SCIENTIFIC_EVENT_GATE distinct, real (is_synthetic=false),
+  rainfall_slope_failure-typed, verified landslide events.
+
+  This requirement is INDEPENDENT of and CANNOT be overridden by:
+  - PR-AUC value
+  - ROC-AUC value
+  - F1 score
+  - passing tests
+  - pseudo-absence count
+  - any software gate
+
+  The software gate (PR-AUC >= 0.25) is a subordinate minimum sanity
+  check only. It must NOT be interpreted as scientific production approval.
 """
 
 import os, sys, json, argparse
@@ -13,6 +29,14 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath("."))
 from src.lib.ml.artifact import load_model_artifact
+
+# ─── AUTHORITATIVE SCIENTIFIC PRODUCTION GATE ────────────────────────────────
+# Minimum number of distinct, real, verified, exact-date, rainfall-triggered
+# landslide events required for scientific production activation.
+# DO NOT lower this value. DO NOT replace it with a metric threshold.
+SCIENTIFIC_EVENT_GATE = 200
+
+SOFTWARE_PRAUC_FLOOR = 0.25  # subordinate minimum sanity check only
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -96,10 +120,35 @@ def cmd_register(args):
     conn.close()
     print(f"Successfully registered '{ver}' with artifact {artifact_path}.")
 
+def count_real_rainfall_events(conn) -> int:
+    """
+    Returns the count of distinct, real (is_synthetic=false),
+    rainfall_slope_failure-typed verified landslide events in the database.
+    This is the authoritative input to the scientific production gate.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM public.historical_landslides
+        WHERE is_synthetic = false
+          AND hazard_type = 'rainfall_slope_failure'
+    """)
+    row = cur.fetchone()
+    cur.close()
+    return int(row[0]) if row else 0
+
+
 def verify_model_candidate(ver: str, conn=None) -> tuple[bool, list[str]]:
     """
     Evaluates safety gates for a model version.
     Returns (passed: bool, failure_reasons: list[str]).
+
+    TWO-LAYER GATE:
+      Layer 1 — Software gate: artifact integrity + PR-AUC >= SOFTWARE_PRAUC_FLOOR
+      Layer 2 — Scientific gate: real verified rainfall events >= SCIENTIFIC_EVENT_GATE
+
+    Layer 2 is AUTHORITATIVE. A model that passes Layer 1 but fails Layer 2
+    is marked 'scientifically_blocked', NOT 'validated'. It cannot be activated.
     """
     close_conn = False
     if conn is None:
@@ -118,38 +167,78 @@ def verify_model_candidate(ver: str, conn=None) -> tuple[bool, list[str]]:
         return False, [f"Model '{ver}' not found in registry"]
 
     rid, art_path, prauc, status = row
-    failures = []
+    software_failures = []
+    scientific_failures = []
 
-    # 1. Artifact must exist
+    # ── LAYER 1: Software gate ────────────────────────────────────────────────
+    # 1a. Artifact must exist and load with exactly 19 weights
     if not art_path or not os.path.isfile(art_path):
-        failures.append(f"Artifact path '{art_path}' is missing or invalid on disk")
+        software_failures.append(f"Artifact path '{art_path}' is missing or invalid on disk")
     else:
         try:
             art = load_model_artifact(art_path)
             if len(art.weights) != 19:
-                failures.append(
+                software_failures.append(
                     f"Artifact weights length ({len(art.weights)}) != 19 canonical features"
                 )
         except Exception as e:
-            failures.append(f"Artifact failed to load: {e}")
+            software_failures.append(f"Artifact failed to load: {e}")
 
-    # 2. PR-AUC must be non-null and >= 0.25 (chance)
+    # 1b. PR-AUC must be non-null and >= SOFTWARE_PRAUC_FLOOR (minimum sanity check)
     if prauc is None:
-        failures.append("PR-AUC is NULL; model evaluation has not been performed")
-    elif prauc < 0.25:
-        failures.append(f"PR-AUC ({prauc:.4f}) is below chance baseline (0.25)")
-
-    if not failures:
-        cur.execute(
-            "UPDATE public.risk_model_config SET status = 'validated' WHERE id = %s;",
-            (rid,),
+        software_failures.append("PR-AUC is NULL; model evaluation has not been performed")
+    elif prauc < SOFTWARE_PRAUC_FLOOR:
+        software_failures.append(
+            f"PR-AUC ({prauc:.4f}) is below minimum software floor ({SOFTWARE_PRAUC_FLOOR})"
         )
-        conn.commit()
+
+    # If the model is already active in production (e.g. v0.2-lr-trained grandfathered
+    # pending >=200 events), evaluate software integrity and preserve active status.
+    # NEVER mutate the DB status of an active production model during candidate verification.
+    if status == "active":
+        if close_conn:
+            conn.close()
+        return len(software_failures) == 0, software_failures
+
+    # ── LAYER 2: Scientific gate ──────────────────────────────────────────────
+    # Authoritative: requires >= SCIENTIFIC_EVENT_GATE real verified events.
+    # This CANNOT be overridden by PR-AUC or any other metric.
+    real_event_count = count_real_rainfall_events(cur.connection if not close_conn else conn)
+    print(f"  Real verified rainfall-triggered events in DB: {real_event_count}")
+    print(f"  Scientific event gate requirement:             {SCIENTIFIC_EVENT_GATE}")
+
+    if real_event_count < SCIENTIFIC_EVENT_GATE:
+        scientific_failures.append(
+            f"SCIENTIFIC GATE BLOCKED: real verified rainfall-triggered events "
+            f"({real_event_count}) < required {SCIENTIFIC_EVENT_GATE}. "
+            f"Remaining until gate satisfied: {SCIENTIFIC_EVENT_GATE - real_event_count}. "
+            f"PR-AUC >= {SOFTWARE_PRAUC_FLOOR} does NOT override this requirement."
+        )
+
+    all_failures = software_failures + scientific_failures
+
+    # Only transition candidate models in the registry
+    if status == "candidate":
+        if not software_failures and not scientific_failures:
+            # Both layers passed — mark scientifically validated
+            cur.execute(
+                "UPDATE public.risk_model_config SET status = 'validated' WHERE id = %s;",
+                (rid,),
+            )
+            conn.commit()
+        elif not software_failures and scientific_failures:
+            # Software gate passed but scientific gate blocked —
+            # status = 'scientifically_blocked' to distinguish from 'candidate'
+            cur.execute(
+                "UPDATE public.risk_model_config SET status = 'scientifically_blocked' WHERE id = %s;",
+                (rid,),
+            )
+            conn.commit()
 
     if close_conn:
         conn.close()
 
-    return len(failures) == 0, failures
+    return len(all_failures) == 0, all_failures
 
 def cmd_gate(args):
     ver = args.model_version
@@ -182,6 +271,30 @@ def cmd_activate(args):
         print(f"Model '{ver}' is already active.")
         conn.close()
         return
+
+    # ── Enforce scientific gate BEFORE activation ─────────────────────────────
+    # The status='validated' check alone is insufficient because old registry
+    # rows may carry 'validated' from a weaker software-only gate run.
+    # Re-verify the authoritative scientific event count at activation time.
+    real_event_count = count_real_rainfall_events(conn)
+    if real_event_count < SCIENTIFIC_EVENT_GATE:
+        print(
+            f"ERROR: SCIENTIFIC GATE BLOCKED — cannot activate '{ver}'.\n"
+            f"  Real verified rainfall-triggered events: {real_event_count}\n"
+            f"  Required for scientific production activation: {SCIENTIFIC_EVENT_GATE}\n"
+            f"  Remaining: {SCIENTIFIC_EVENT_GATE - real_event_count}\n"
+            f"  This requirement cannot be overridden by PR-AUC, ROC-AUC, F1, \n"
+            f"  passing tests, or any software gate metric."
+        )
+        # Ensure the model's status reflects its blocked state
+        if tstatus not in ("scientifically_blocked", "candidate"):
+            cur.execute(
+                "UPDATE public.risk_model_config SET status = 'scientifically_blocked' WHERE id = %s;",
+                (tid,),
+            )
+            conn.commit()
+        conn.close()
+        sys.exit(1)
 
     if tstatus not in ["validated", "active"]:
         print(f"ERROR: Cannot activate model with status='{tstatus}'. Run 'gate' first to validate.")

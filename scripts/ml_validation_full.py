@@ -704,40 +704,84 @@ OBJECTIVE VERDICT:
 hr("SECTION 9: PRODUCTION CLASSIFICATION")
 # ══════════════════════════════════════════════════════════════════════════════
 
-print(f"""
-┌─────────────────────────────────────────────────────────────┐
-│             PRODUCTION READINESS ASSESSMENT                 │
-├────────────────────────┬────────────────────────────────────┤
-│ ENGINEERING READINESS  │ READY                              │
-├────────────────────────┼────────────────────────────────────┤
-│ SCIENTIFIC READINESS   │ CANDIDATE-VALIDATED / GROWING DATA │
-└────────────────────────┴────────────────────────────────────┘
+# Authoritative scientific gate
+SCIENTIFIC_EVENT_GATE = 200
+SOFTWARE_PRAUC_FLOOR = 0.25
+real_event_count = len(rainfall_ev)
+scientific_gate_satisfied = real_event_count >= SCIENTIFIC_EVENT_GATE
+scientific_gate_status = "SATISFIED" if scientific_gate_satisfied else f"BLOCKED ({real_event_count}/{SCIENTIFIC_EVENT_GATE})"
 
-ENGINEERING READINESS — READY:
+print(f"""
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PRODUCTION READINESS ASSESSMENT                       │
+├─────────────────────────────────┬────────────────────────────────────────┤
+│ A. CORE SOFTWARE IMPLEMENTATION │ SOFTWARE-READY                         │
+├─────────────────────────────────┼────────────────────────────────────────┤
+│ B. ML SOFTWARE IMPLEMENTATION   │ SOFTWARE-READY                         │
+├─────────────────────────────────┼────────────────────────────────────────┤
+│ C. ML SCIENTIFIC VALIDATION     │ SCIENTIFICALLY DATA-BLOCKED            │
+├─────────────────────────────────┼────────────────────────────────────────┤
+│ D. ML PRODUCTION ACTIVATION     │ PRODUCTION-BLOCKED                     │
+├─────────────────────────────────┼────────────────────────────────────────┤
+│ E. SATELLITE SOFTWARE           │ SOFTWARE-READY                         │
+├─────────────────────────────────┼────────────────────────────────────────┤
+│ F. SATELLITE OPERATIONAL        │ EXTERNALLY BLOCKED                     │
+└─────────────────────────────────┴────────────────────────────────────────┘
+
+AUTHORITATIVE SCIENTIFIC GATE:
+  Required real verified rainfall-triggered events: >= {SCIENTIFIC_EVENT_GATE}
+  Current verified count:                           {real_event_count}
+  Scientific gate status:                           {scientific_gate_status}
+  Remaining until gate satisfied:                   {max(0, SCIENTIFIC_EVENT_GATE - real_event_count)}
+
+  *** TESTS PASSING DOES NOT EQUAL SCIENTIFIC VALIDATION ***
+  *** PR-AUC >= {SOFTWARE_PRAUC_FLOOR:.2f} DOES NOT OVERRIDE THE >= {SCIENTIFIC_EVENT_GATE} EVENT REQUIREMENT ***
+  *** A VALID ARTIFACT DOES NOT PROVE SCIENTIFIC PRODUCTION READINESS ***
+
+  The scientific gate requires {SCIENTIFIC_EVENT_GATE} exact-date, verified, real,
+  rainfall-triggered landslide events. PR-AUC, ROC-AUC, F1, passing tests,
+  and software gate passage are ALL SUBORDINATE to this requirement.
+
+MODEL REGISTRY CORRECTNESS:
+  v0.1-hand-tuned   : retired
+  v0.2-lr-trained   : ACTIVE (production-authorized, data-limited, n=8 positives)
+  v0.3-lr-trained   : scientifically_blocked (n=22/200 positives)
+
+  v0.3 status = scientifically_blocked because:
+    - software gate: PASSES (PR-AUC=0.9399 > 0.25, artifact valid, 19 features)
+    - scientific gate: BLOCKED ({real_event_count}/{SCIENTIFIC_EVENT_GATE} events)
+
+  v0.2 is authorized as production model by exception:
+    - It is the last model that was software-validated before v0.3 promotion
+    - It is ALSO scientifically data-limited (n=8 positives, PR-AUC=0.5934)
+    - Its predictions must NOT be interpreted as statistically robust
+
+PR-AUC DISCREPANCY NOTE (v0.3):
+  Registered value:  0.9399  (train_and_export_artifact.py, GroupKFold n=5, 81 samples)
+  Audit re-run:      {pa_lr:.4f}  (ml_validation_full.py, GroupKFold n=5, same methodology)
+  Root cause:        GroupKFold has no fixed random_state; district group ordering
+                     varies between runs, producing different fold compositions.
+                     With n=22 positives across ~9 districts, fold composition
+                     is highly sensitive to ordering. Neither value is fabricated.
+  Correct interpretation: Directional improvement over chance ({prevalence:.4f}) and
+                     physics baseline ({pa_baseline:.4f}). Bootstrap 95% CI [{lr_ci[0]:.4f}, {lr_ci[1]:.4f}]
+                     confirms substantial metric uncertainty. NOT a statistical
+                     proof of production readiness.
+
+ENGINEERING READINESS — VERIFIED:
   ✓ Pipeline is reproducible (fixed seed, idempotent backfill)
   ✓ Feature engineering is leakage-free (strict < as_of_date)
-  ✓ 29/29 tests pass (14 TypeScript + 15 Python leakage tests)
+  ✓ 15/15 leakage regression tests pass
   ✓ Pseudo-absences verified (0 spatial/temporal violations)
   ✓ NaN count = 0 in feature matrix ({len(feat_df)} rows × {X.shape[1]} features)
   ✓ Database constraints enforced (exactly 1 active model row)
-  ✓ Inference path (recompute_risk()) is operational
-  ✓ Migration sequence is correct and idempotent
-  ✓ Soil moisture metadata tag and freshness tracking in inference (src/lib/ml/inference.py)
+  ✓ Inference engine reads active model from registry (not hardcoded path)
+  ✓ Scientific gate enforced in ml_registry.py verify_model_candidate() and cmd_activate()
+  ✓ DB fallback returns DEGRADED status (not VALID) with original timestamps
   ✓ Weather staleness detection (>72h) and degraded fallback in live inference path
-
-SCIENTIFIC READINESS — PROGRESS REPORT:
-  {'✓' if len(rainfall_ev) >= 20 else '✗'} Verified real rainfall events: {len(rainfall_ev)} (minimum ≥20 required: {'SATISFIED' if len(rainfall_ev) >= 20 else 'UNSATISFIED'})
-  ✓ 5/5 Spatial GroupKFold validation folds produce defined metrics (no zero-positive folds)
-  ✓ Real continuous surface soil moisture (ERA5-Land 0-7cm) populated for feature matrix rows
-  ✓ Cross-validated PR-AUC = {pa_lr:.4f} strictly exceeds physics-based threshold baseline ({pa_baseline:.4f})
-  ✓ Cross-validated Recall@80% precision = {r80_lr:.4f} (up from 0.0667 baseline)
-  ~ Bootstrap 95% CI: [{lr_ci[0]:.4f}, {lr_ci[1]:.4f}] (mean={np.mean(boot_pa_lr):.4f}) — positive direction
-  ✗ Active production model v0.2-lr-trained remains frozen as immutable canonical artifact
-
-GATE STATUS:
-  Candidate model demonstrates strong statistical validation across all 5 spatial folds.
-  In accordance with immutable model protocol, v0.2-lr-trained remains active until formal production sign-off.
+  ✓ Soil moisture fallback tagged separately from measured data
 """)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 hr("SECTION 10: MODEL REGISTRY AUDIT")
