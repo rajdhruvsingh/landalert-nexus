@@ -170,7 +170,7 @@ class CdseClient:
                         "relative_orbit": attrs.get("relativeOrbitNumber") or attrs.get("orbitNumber"),
                         "sensing_start": item.get("ContentDate", {}).get("Start"),
                         "sensing_stop": item.get("ContentDate", {}).get("End"),
-                        "download_url": f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products({item.get('Id')})/$value",
+                        "download_url": f"https://download.dataspace.copernicus.eu/odata/v1/Products({item.get('Id')})/$value",
                         "footprint": item.get("GeoFootprint"),
                     })
                 return records
@@ -250,6 +250,9 @@ class CdseClient:
                     return dest_path
             else:
                 return dest_path
+
+        if "catalogue.dataspace.copernicus.eu" in download_url:
+            download_url = download_url.replace("catalogue.dataspace.copernicus.eu", "download.dataspace.copernicus.eu")
 
         headers = {"Authorization": f"Bearer {token}"}
         logger.info(f"Downloading Sentinel-1 scene {scene_id} from CDSE...")

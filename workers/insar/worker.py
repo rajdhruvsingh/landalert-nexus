@@ -24,6 +24,7 @@ import argparse
 import subprocess
 from typing import Dict, Any, Optional, List
 import requests
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from cdse_client import CdseClient
 from orbit_client import OrbitClient

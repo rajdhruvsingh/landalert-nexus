@@ -14,7 +14,12 @@ import re
 import time
 import logging
 from typing import Optional
+import sys
 import requests
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cdse_client import CdseClient, _load_env_fallback
+
+_load_env_fallback()
 
 logger = logging.getLogger("insar_worker.orbit")
 
@@ -70,10 +75,28 @@ class OrbitClient:
                 products = data.get("value", [])
                 if products:
                     prod = products[0]
-                    file_name = f"{prod['Name']}.EOF"
+                    file_name = prod['Name'] if prod['Name'].endswith('.EOF') else f"{prod['Name']}.EOF"
                     dest_path = os.path.join(self.cache_dir, file_name)
 
-                    # In production with CDSE OAuth, download authenticated
+                    if not os.path.exists(dest_path):
+                        download_url = f"https://download.dataspace.copernicus.eu/odata/v1/Products({prod['Id']})/$value"
+                        token = None
+                        try:
+                            from cdse_client import CdseClient
+                            client = CdseClient()
+                            if client.is_configured():
+                                token = client.get_access_token()
+                        except Exception:
+                            pass
+                        headers = {"Authorization": f"Bearer {token}"} if token else {}
+                        r = requests.get(download_url, headers=headers, timeout=30)
+                        if r.status_code == 200:
+                            with open(dest_path, "wb") as f:
+                                f.write(r.content)
+                            logger.info(f"Downloaded POD ephemeris: {file_name} ({len(r.content)} bytes)")
+                        else:
+                            logger.warning(f"Could not download POD file HTTP {r.status_code}")
+
                     logger.info(f"Found POD ephemeris: {file_name}")
                     return dest_path
         except Exception as e:
