@@ -3,16 +3,26 @@
  * =====================
  * Comprehensive automated verification of Satellite InSAR Ground Deformation pipeline:
  *
- * 1. Satellite InSAR product ingestion and schema validity.
- * 2. Units verification (mm/year for velocity, mm for displacement, days for baseline).
- * 3. Spatial grid mapping (bounds and centroid intersection).
- * 4. Distinct geographic cells retrieve their own specific deformation data (no constant reuse).
+ * 1. Canonical 10-step SAR interferometric processing pipeline specification.
+ * 2. InSAR product ingestion and schema validity.
+ * 3. Units verification (mm/year for velocity, mm for displacement, days for baseline).
+ * 4. Scientific integrity: Zero fallback prohibition (fake "0 mm/yr" or ungrounded values rejected).
  * 5. Missing satellite coverage explicitly reported as UNAVAILABLE with technical reason.
- * 6. Scientific integrity: Zero fallback prohibition (fake "0 mm/yr" or ungrounded values rejected).
+ * 6. Distinct geographic cells retrieve their own specific deformation data (no constant reuse).
  * 7. REST API router exposes /api/satellite/deformation with full provenance.
  * 8. ML model versioning: Option A (Independent Indicator) strictly enforced without modifying
  *    the active 19-feature model vector.
  * 9. Multi-location end-to-end proof across all 8 NER states.
+ * 10. Sentinel-1 STAC acquisition searching and spatial bounding box queries.
+ * 11. Acquisition ingestion and duplicate avoidance / idempotency.
+ * 12. Asynchronous InSAR processing job lifecycle (QUEUED -> PROCESSING -> COMPLETED).
+ * 13. Temporal trend derivation (STABLE, INCREASING_DEFORMATION, INSUFFICIENT_DATA).
+ * 14. Quality filtering based on mean coherence thresholds.
+ * 15. Strict temporal data leakage protection (t_observation <= t_event_cutoff).
+ * 16. REST API /api/satellite/coverage endpoint.
+ * 17. REST API /api/satellite/acquisitions endpoint.
+ * 18. REST API /api/satellite/jobs endpoint (POST 202 Accepted & GET polling).
+ * 19. REST API /api/satellite/timeseries endpoint with trend evaluation.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -26,6 +36,22 @@ import {
   CANONICAL_SAR_PIPELINE_STEPS,
   type InSarDeformationProduct,
 } from "./insar.service";
+import {
+  searchSentinel1Acquisitions,
+  ingestAcquisitions,
+  getAcquisitionsForCell,
+  type Sentinel1AcquisitionRecord,
+} from "./sentinel-acquisition.service";
+import {
+  createInSarProcessingJob,
+  getJobStatus,
+  executeJobPipeline,
+  deriveTemporalTrend,
+  filterObservationsBeforeCutoff,
+  getTimeseriesForCell,
+  saveTimeseriesForCell,
+  type InSarTimeseriesPoint,
+} from "./insar-processor.service";
 import { handleApiRequest } from "./api.router";
 import { deriveLocationSpatialRisk } from "./spatial-risk.service";
 import fs from "node:fs";
@@ -144,7 +170,6 @@ describe("Satellite InSAR Ground Deformation Pipeline", () => {
   });
 
   it("5: Missing InSAR coverage returns honest UNAVAILABLE record with explicit reason", () => {
-    // Unmonitored remote cell in Arunachal rainforest
     const remoteCell = getCellDeformation("cell-28.50-94.50", [[28.375, 94.375], [28.625, 94.625]], [28.50, 94.50]);
     expect(remoteCell.status).toBe("UNAVAILABLE");
     expect(remoteCell.los_velocity_mean_mm_year).toBeNull();
@@ -158,22 +183,18 @@ describe("Satellite InSAR Ground Deformation Pipeline", () => {
     const dibrugarhAssessment = getLocationDeformation(27.47, 94.91, "Dibrugarh", "Dibrugarh", "Assam");
     const shillongAssessment = getLocationDeformation(25.57, 91.89, "Shillong", "East Khasi Hills", "Meghalaya");
 
-    // 1. Coordinates and cells must differ
     expect(gangtokAssessment.associated_cell_id).not.toBe(dibrugarhAssessment.associated_cell_id);
     expect(gangtokAssessment.associated_cell_id).not.toBe(shillongAssessment.associated_cell_id);
 
-    // 2. Gangtok has registered active InSAR slope monitoring
     expect(gangtokAssessment.deformation.status).toBe("AVAILABLE");
     expect(gangtokAssessment.deformation.los_velocity_mean_mm_year).toBe(-14.2);
     expect(gangtokAssessment.deformation.sensor).toBe("Sentinel-1 C-SAR");
     expect(gangtokAssessment.deformation.quality).toBe("HIGH");
 
-    // 3. Dibrugarh has no active InSAR processing -> honest UNAVAILABLE
     expect(dibrugarhAssessment.deformation.status).toBe("UNAVAILABLE");
     expect(dibrugarhAssessment.deformation.los_velocity_mean_mm_year).toBeNull();
     expect(dibrugarhAssessment.deformation.unavailable_reason).toBe("PENDING_SAR_INTERFEROMETRIC_PROCESSING");
 
-    // 4. Deformation values must not be equal or constant
     expect(gangtokAssessment.deformation.los_velocity_mean_mm_year).not.toBe(
       dibrugarhAssessment.deformation.los_velocity_mean_mm_year
     );
@@ -226,13 +247,11 @@ describe("Satellite InSAR Ground Deformation Pipeline", () => {
   });
 
   it("8: Proves Option A ML isolation: Active ML model feature vector contains exactly 19 features without deformation", () => {
-    // Scientific Integrity check: Production model v0.2-lr-trained was trained on 19 canonical features.
     expect(CANONICAL_FEATURES.length).toBe(19);
     expect(CANONICAL_FEATURES).not.toContain("satellite_deformation");
     expect(CANONICAL_FEATURES).not.toContain("insar_velocity");
     expect(CANONICAL_FEATURES).not.toContain("sar_displacement");
 
-    // Location spatial risk assessment explicitly documents Option A
     const locRisk = deriveLocationSpatialRisk("Gangtok", "city", "East Sikkim", "Sikkim", [27.33, 88.61]);
     expect(locRisk.model_provenance).toBeDefined();
     expect(locRisk.model_provenance?.satellite_feature_integration).toBe("OPTION_A_INDEPENDENT_INDICATOR");
@@ -288,5 +307,192 @@ describe("Satellite InSAR Ground Deformation Pipeline", () => {
         expect(r.reason).not.toBeNull();
       }
     }
+  });
+
+  it("10: Searches Sentinel-1 acquisitions via spatial bounding box and filters correctly", async () => {
+    // Search around Sikkim bbox [88.0, 27.0, 89.0, 28.0]
+    const acqs = await searchSentinel1Acquisitions({
+      bbox: [88.0, 27.0, 89.0, 28.0],
+      productType: "SLC",
+    });
+
+    expect(acqs.length).toBeGreaterThan(0);
+    const first = acqs[0];
+    expect(first.satellite).toMatch(/Sentinel-1[A-C]/);
+    expect(first.sensor).toBe("C-SAR");
+    expect(first.mode).toBe("IW");
+    expect(first.product_type).toBe("SLC");
+    expect(first.sensing_start).toBeDefined();
+    expect(first.footprint_geojson).toBeDefined();
+  });
+
+  it("11: Ingestion prevents duplicate Sentinel-1 scene records (idempotent)", async () => {
+    const customScene: Sentinel1AcquisitionRecord = {
+      scene_id: "S1A_IW_SLC__CUSTOM_TEST_0001",
+      satellite: "Sentinel-1A",
+      sensor: "C-SAR",
+      mode: "IW",
+      polarization: "VV+VH",
+      product_type: "SLC",
+      orbit_direction: "DESCENDING",
+      relative_orbit: 121,
+      sensing_start: "2025-05-01T00:00:00Z",
+      sensing_stop: "2025-05-01T00:00:27Z",
+      footprint_geojson: { type: "Polygon", coordinates: [[[88.5, 27.0], [89.0, 27.0], [89.0, 27.5], [88.5, 27.5], [88.5, 27.0]]] },
+      download_url: null,
+      checksum_sha256: "testchecksum12345",
+      source: "Copernicus STAC",
+    };
+
+    // First ingestion should insert
+    const res1 = await ingestAcquisitions([customScene]);
+    expect(res1.inserted).toBe(1);
+    expect(res1.duplicatesSkipped).toBe(0);
+
+    // Second ingestion should identify duplicate and skip
+    const res2 = await ingestAcquisitions([customScene]);
+    expect(res2.inserted).toBe(0);
+    expect(res2.duplicatesSkipped).toBe(1);
+  });
+
+  it("12: Creates and executes asynchronous InSAR processing jobs with lifecycle stages", async () => {
+    const job = await createInSarProcessingJob("cell-27.25-88.50");
+    expect(job.id).toMatch(/^job-/);
+    expect(job.status).toBe("QUEUED");
+    expect(job.progress_pct).toBe(0);
+
+    // Poll status immediately
+    const polledJob = await getJobStatus(job.id);
+    expect(polledJob).not.toBeNull();
+    expect(polledJob?.status).toBe("QUEUED");
+
+    // Execute job through pipeline stages
+    const executedJob = await executeJobPipeline(job.id);
+    expect(executedJob.status).toBe("COMPLETED");
+    expect(executedJob.progress_pct).toBe(100);
+    expect(executedJob.worker_id).toBeDefined();
+    expect(executedJob.completed_at).toBeDefined();
+  });
+
+  it("13: Accurately derives temporal trends and rates from multi-temporal InSAR displacement points", () => {
+    // A. Stable points (|v| < 2.0 mm/yr)
+    const stablePoints: InSarTimeseriesPoint[] = [
+      { observation_date: "2024-01-01", displacement_mm: 0.0, coherence: 0.70, is_outlier: false },
+      { observation_date: "2024-07-01", displacement_mm: -0.5, coherence: 0.68, is_outlier: false },
+      { observation_date: "2025-01-01", displacement_mm: -1.0, coherence: 0.72, is_outlier: false },
+    ];
+    const stableResult = deriveTemporalTrend(stablePoints);
+    expect(stableResult.trend).toBe("STABLE");
+    expect(stableResult.quality).toBe("HIGH");
+
+    // B. Increasing deformation (active subsidence / movement away: v <= -5.0 mm/yr)
+    const activePoints: InSarTimeseriesPoint[] = [
+      { observation_date: "2024-01-01", displacement_mm: 0.0, coherence: 0.65, is_outlier: false },
+      { observation_date: "2024-06-01", displacement_mm: -8.0, coherence: 0.62, is_outlier: false },
+      { observation_date: "2025-01-01", displacement_mm: -18.0, coherence: 0.60, is_outlier: false },
+    ];
+    const activeResult = deriveTemporalTrend(activePoints);
+    expect(activeResult.trend).toBe("INCREASING_DEFORMATION");
+    expect(activeResult.meanVelocityMmYear).toBeLessThan(-10);
+
+    // C. Insufficient points (< 3)
+    const fewPoints: InSarTimeseriesPoint[] = [
+      { observation_date: "2024-01-01", displacement_mm: 0.0, coherence: 0.70, is_outlier: false },
+      { observation_date: "2024-07-01", displacement_mm: -2.0, coherence: 0.68, is_outlier: false },
+    ];
+    const insufficientResult = deriveTemporalTrend(fewPoints);
+    expect(insufficientResult.trend).toBe("INSUFFICIENT_DATA");
+    expect(insufficientResult.meanVelocityMmYear).toBeNull();
+  });
+
+  it("14: Quality filtering rejects low coherence (< 0.40) or dense canopy decorrelation", () => {
+    const decorrelatedPoints: InSarTimeseriesPoint[] = [
+      { observation_date: "2024-01-01", displacement_mm: 0.0, coherence: 0.25, is_outlier: false },
+      { observation_date: "2024-07-01", displacement_mm: -4.0, coherence: 0.30, is_outlier: false },
+      { observation_date: "2025-01-01", displacement_mm: -8.0, coherence: 0.28, is_outlier: false },
+    ];
+    const result = deriveTemporalTrend(decorrelatedPoints);
+    expect(result.trend).toBe("INSUFFICIENT_DATA");
+    expect(result.quality).toBe("UNAVAILABLE");
+    expect(result.meanVelocityMmYear).toBeNull();
+  });
+
+  it("15: Enforces temporal data leakage protection (t_observation <= t_event_cutoff)", () => {
+    const timeseries: InSarTimeseriesPoint[] = [
+      { observation_date: "2024-01-10", displacement_mm: -1.2, coherence: 0.7, is_outlier: false },
+      { observation_date: "2024-06-15", displacement_mm: -4.5, coherence: 0.7, is_outlier: false },
+      { observation_date: "2024-11-20", displacement_mm: -8.1, coherence: 0.7, is_outlier: false },
+      { observation_date: "2025-05-30", displacement_mm: -14.0, coherence: 0.7, is_outlier: false }, // Future point
+    ];
+
+    const cutoffDate = "2024-12-01";
+    const filtered = filterObservationsBeforeCutoff(timeseries, cutoffDate);
+
+    expect(filtered.length).toBe(3);
+    for (const point of filtered) {
+      expect(new Date(point.observation_date).getTime()).toBeLessThanOrEqual(new Date(cutoffDate).getTime());
+    }
+  });
+
+  it("16: REST API /api/satellite/coverage returns regional coverage metrics", async () => {
+    const req = new Request("http://localhost:3000/api/satellite/coverage", { method: "GET" });
+    const res = await handleApiRequest(req);
+    expect(res?.status).toBe(200);
+    const data = await res?.json();
+    expect(data.status).toBe("success");
+    expect(data.coverage).toBeDefined();
+    expect(data.coverage.total_monitored_cells).toBeGreaterThan(0);
+    expect(data.coverage.active_insar_cells).toBeGreaterThan(0);
+  });
+
+  it("17: REST API /api/satellite/acquisitions handles bbox queries", async () => {
+    const req = new Request("http://localhost:3000/api/satellite/acquisitions?bbox=88.0,27.0,89.0,28.0", {
+      method: "GET",
+    });
+    const res = await handleApiRequest(req);
+    expect(res?.status).toBe(200);
+    const data = await res?.json();
+    expect(data.status).toBe("success");
+    expect(Array.isArray(data.acquisitions)).toBe(true);
+    expect(data.acquisitions.length).toBeGreaterThan(0);
+  });
+
+  it("18: REST API /api/satellite/jobs creates async job with 202 and returns job status via GET", async () => {
+    // Create job via POST
+    const postReq = new Request("http://localhost:3000/api/satellite/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cellId: "cell-27.25-88.50" }),
+    });
+    const postRes = await handleApiRequest(postReq);
+    expect(postRes?.status).toBe(202);
+    const postData = await postRes?.json();
+    expect(postData.status).toBe("accepted");
+    expect(postData.job.id).toBeDefined();
+
+    // Query job via GET
+    const getReq = new Request(`http://localhost:3000/api/satellite/jobs?jobId=${postData.job.id}`, {
+      method: "GET",
+    });
+    const getRes = await handleApiRequest(getReq);
+    expect(getRes?.status).toBe(200);
+    const getData = await getRes?.json();
+    expect(getData.status).toBe("success");
+    expect(getData.job.id).toBe(postData.job.id);
+  });
+
+  it("19: REST API /api/satellite/timeseries retrieves multi-temporal epochs and derived trend", async () => {
+    const req = new Request("http://localhost:3000/api/satellite/timeseries?cellId=cell-27.25-88.50", {
+      method: "GET",
+    });
+    const res = await handleApiRequest(req);
+    expect(res?.status).toBe(200);
+    const data = await res?.json();
+    expect(data.status).toBe("success");
+    expect(data.cell_id).toBe("cell-27.25-88.50");
+    expect(Array.isArray(data.timeseries)).toBe(true);
+    expect(data.timeseries.length).toBeGreaterThanOrEqual(3);
+    expect(data.analysis.trend).toBe("INCREASING_DEFORMATION");
+    expect(data.mean_velocity_mm_year).toBeLessThan(-5);
   });
 });

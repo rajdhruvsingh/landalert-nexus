@@ -26,6 +26,18 @@ import {
   getAllInSarProducts,
   CANONICAL_SAR_PIPELINE_STEPS,
 } from "./insar.service";
+import {
+  searchSentinel1Acquisitions,
+  getAcquisitionsForCell,
+  ingestAcquisitions,
+} from "./sentinel-acquisition.service";
+import {
+  createInSarProcessingJob,
+  getJobStatus,
+  executeJobPipeline,
+  getTimeseriesForCell,
+  deriveTemporalTrend,
+} from "./insar-processor.service";
 import { processIMDTelemetry } from "./integrations/imd.adapter";
 import { processSensorTelemetry } from "./integrations/sensors.adapter";
 import { processRoadStatusUpdate } from "./integrations/road-status.adapter";
@@ -803,6 +815,155 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         scientific_integrity: {
           zero_fabrication_prohibited: true,
           uncalibrated_features_excluded_from_ml: true,
+        },
+      }, 200, cors);
+    }
+
+    // 12c. Satellite InSAR Coverage Lookup
+    if (pathname === "/api/satellite/coverage" && request.method === "GET") {
+      const cellIdParam = url.searchParams.get("cellId");
+      const latParam = url.searchParams.get("lat");
+      const lngParam = url.searchParams.get("lng");
+      const cityName = url.searchParams.get("city") || "";
+
+      if (cellIdParam) {
+        const deformation = getCellDeformation(cellIdParam.trim());
+        return jsonResponse({
+          status: "success",
+          cell_id: cellIdParam,
+          coverage_status: deformation.status,
+          coverage_pct: deformation.spatial_coverage_pct,
+          quality: deformation.quality,
+          sensor: deformation.sensor,
+          unavailable_reason: deformation.unavailable_reason,
+        }, 200, cors);
+      }
+
+      if (latParam && lngParam) {
+        const lat = parseFloat(latParam);
+        const lng = parseFloat(lngParam);
+        const assessment = getLocationDeformation(lat, lng, cityName);
+        return jsonResponse({
+          status: "success",
+          city: assessment.city_name,
+          coordinates: assessment.coordinates,
+          associated_cell_id: assessment.associated_cell_id,
+          coverage_status: assessment.deformation.status,
+          coverage_pct: assessment.deformation.spatial_coverage_pct,
+          quality: assessment.deformation.quality,
+          sensor: assessment.deformation.sensor,
+          unavailable_reason: assessment.deformation.unavailable_reason,
+        }, 200, cors);
+      }
+
+      // Regional overview summary when no specific location is queried
+      const allProducts = getAllInSarProducts();
+      const activeProducts = allProducts.filter((p) => p.status === "AVAILABLE");
+      return jsonResponse({
+        status: "success",
+        coverage: {
+          total_monitored_cells: allProducts.length,
+          active_insar_cells: activeProducts.length,
+          coverage_pct: Math.round((activeProducts.length / Math.max(1, allProducts.length)) * 1000) / 10,
+          sensor: "Sentinel-1 C-SAR",
+          region: "Northeastern Region (NER), India",
+          supported_states: 8,
+        },
+      }, 200, cors);
+    }
+
+    // 12d. Official Copernicus Sentinel-1 STAC Acquisitions Catalog
+    if (pathname === "/api/satellite/acquisitions" && request.method === "GET") {
+      const minLng = parseFloat(url.searchParams.get("minLng") || "88.0");
+      const minLat = parseFloat(url.searchParams.get("minLat") || "26.0");
+      const maxLng = parseFloat(url.searchParams.get("maxLng") || "93.0");
+      const maxLat = parseFloat(url.searchParams.get("maxLat") || "28.0");
+      const latParam = url.searchParams.get("lat");
+      const lngParam = url.searchParams.get("lng");
+
+      let bbox: [number, number, number, number] = [minLng, minLat, maxLng, maxLat];
+      if (latParam && lngParam) {
+        const lat = parseFloat(latParam);
+        const lng = parseFloat(lngParam);
+        bbox = [lng - 0.25, lat - 0.25, lng + 0.25, lat + 0.25];
+      }
+
+      const acquisitions = await searchSentinel1Acquisitions({ bbox, limit: 20 });
+      return jsonResponse({
+        status: "success",
+        count: acquisitions.length,
+        bbox,
+        acquisitions,
+        source: "Copernicus Data Space Ecosystem (CDSE) STAC API",
+      }, 200, cors);
+    }
+
+    // 12e. Asynchronous InSAR Processing Jobs Status & Dispatch
+    if (pathname === "/api/satellite/jobs") {
+      if (request.method === "GET") {
+        const jobId = url.searchParams.get("jobId");
+        if (jobId) {
+          const job = await getJobStatus(jobId);
+          if (!job) {
+            return errorResponse("InSAR processing job not found", "JOB_NOT_FOUND", 404, cors);
+          }
+          return jsonResponse({ status: "success", job }, 200, cors);
+        }
+        return jsonResponse({
+          status: "success",
+          active_workers: 1,
+          queue_policy: "ASYNCHRONOUS_DECOUPLED_RENDER_COMPATIBLE",
+        }, 200, cors);
+      }
+
+      if (request.method === "POST") {
+        try {
+          const body = await request.json();
+          const cellId = body.cell_id || body.cellId;
+          if (!cellId) {
+            return errorResponse("Missing required cell_id parameter", "INVALID_PARAMS", 400, cors);
+          }
+          const job = await createInSarProcessingJob(cellId);
+          // Execute pipeline asynchronously
+          executeJobPipeline(job.id).catch(() => {});
+
+          return jsonResponse({
+            status: "accepted",
+            message: "InSAR processing job queued successfully",
+            job,
+          }, 202, cors);
+        } catch (err) {
+          return errorResponse(
+            err instanceof Error ? err.message : "Failed to create InSAR processing job",
+            "JOB_DISPATCH_ERROR",
+            400,
+            cors
+          );
+        }
+      }
+    }
+
+    // 12f. InSAR Multi-temporal Displacement Time-Series
+    if (pathname === "/api/satellite/timeseries" && request.method === "GET") {
+      const cellIdParam = url.searchParams.get("cellId") || "cell-27.25-88.50";
+      const timeseries = getTimeseriesForCell(cellIdParam.trim());
+      const trendAnalysis = deriveTemporalTrend(timeseries);
+
+      return jsonResponse({
+        status: "success",
+        cell_id: cellIdParam,
+        total_observations: timeseries.length,
+        temporal_trend: trendAnalysis.trend,
+        mean_velocity_mm_year: trendAnalysis.meanVelocityMmYear,
+        cumulative_displacement_mm: trendAnalysis.cumulativeDisplacementMm,
+        quality: trendAnalysis.quality,
+        analysis: trendAnalysis,
+        timeseries,
+        measurement_type: "LOS_DEFORMATION_VELOCITY",
+        unit: "mm/year",
+        scientific_integrity: {
+          zero_fallback_prohibited: true,
+          no_synthetic_data: true,
         },
       }, 200, cors);
     }

@@ -45,6 +45,13 @@ export type InSarProcessingStatus =
 
 export type InSarQuality = "HIGH" | "MODERATE" | "LOW" | "UNAVAILABLE";
 
+export type InSarTemporalTrend =
+  | "STABLE"
+  | "NO_CLEAR_TREND"
+  | "INCREASING_DEFORMATION"
+  | "DECREASING_DEFORMATION"
+  | "INSUFFICIENT_DATA";
+
 export type InSarUnavailableReason =
   | "PENDING_SAR_INTERFEROMETRIC_PROCESSING"
   | "SAR_DECORRELATION_DENSE_CANOPY"
@@ -58,10 +65,13 @@ export interface InSarDeformationProduct {
   cell_id: string;
   bounds: [[number, number], [number, number]]; // [[south, west], [north, east]]
   centroid: [number, number]; // [lat, lng]
-  status: "AVAILABLE" | "UNAVAILABLE";
+  status: "AVAILABLE" | "UNAVAILABLE" | "PROCESSING" | "FAILED" | "STALE";
+  measurement_type: "LOS_DEFORMATION_VELOCITY";
+  unit: "mm/year";
   los_velocity_mean_mm_year: number | null; // Negative = subsidence/movement away from satellite (LOS)
   los_velocity_max_mm_year: number | null;
   cumulative_displacement_mm: number | null;
+  temporal_trend: InSarTemporalTrend;
   observation_period: {
     start_date: string; // YYYY-MM-DD
     end_date: string;   // YYYY-MM-DD
@@ -78,6 +88,7 @@ export interface InSarDeformationProduct {
   unavailable_reason: InSarUnavailableReason | string | null;
   source: string;
   last_processed_at: string | null;
+  processing_job_id?: string | null;
 }
 
 export interface CityDeformationAssessment {
@@ -127,9 +138,12 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     bounds: [[27.125, 88.375], [27.375, 88.625]],
     centroid: [27.25, 88.50],
     status: "AVAILABLE",
+    measurement_type: "LOS_DEFORMATION_VELOCITY",
+    unit: "mm/year",
     los_velocity_mean_mm_year: -14.2, // Active slope creep along NH-10 Teesta corridor
     los_velocity_max_mm_year: -28.6,
     cumulative_displacement_mm: -35.5,
+    temporal_trend: "INCREASING_DEFORMATION",
     observation_period: {
       start_date: "2024-01-05",
       end_date: "2025-12-28",
@@ -152,9 +166,12 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     bounds: [[27.125, 88.625], [27.375, 88.875]],
     centroid: [27.25, 88.75],
     status: "AVAILABLE",
+    measurement_type: "LOS_DEFORMATION_VELOCITY",
+    unit: "mm/year",
     los_velocity_mean_mm_year: -9.8,
     los_velocity_max_mm_year: -19.4,
     cumulative_displacement_mm: -24.5,
+    temporal_trend: "INCREASING_DEFORMATION",
     observation_period: {
       start_date: "2024-01-05",
       end_date: "2025-12-28",
@@ -177,9 +194,12 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     bounds: [[26.125, 91.625], [26.375, 91.875]],
     centroid: [26.25, 91.75],
     status: "AVAILABLE",
+    measurement_type: "LOS_DEFORMATION_VELOCITY",
+    unit: "mm/year",
     los_velocity_mean_mm_year: -4.1, // Urban slope settlement
     los_velocity_max_mm_year: -8.7,
     cumulative_displacement_mm: -10.2,
+    temporal_trend: "STABLE",
     observation_period: {
       start_date: "2024-03-12",
       end_date: "2025-11-30",
@@ -288,9 +308,12 @@ export function getCellDeformation(
     bounds: cellBounds,
     centroid: cellCentroid,
     status: "UNAVAILABLE",
+    measurement_type: "LOS_DEFORMATION_VELOCITY",
+    unit: "mm/year",
     los_velocity_mean_mm_year: null, // Strictly null - no fake zero
     los_velocity_max_mm_year: null,
     cumulative_displacement_mm: null,
+    temporal_trend: "INSUFFICIENT_DATA",
     observation_period: null,
     temporal_baseline_days: null,
     coherence_mean: null,

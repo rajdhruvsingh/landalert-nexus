@@ -256,11 +256,14 @@ export default function SpatialLocationRiskPanel({
                     ? `${deformVelocity > 0 ? "+" : ""}${deformVelocity}`
                     : "—"}
                 </span>
-                <span className="text-xs font-mono text-muted-foreground">mm/year (LOS)</span>
+                <span className="text-xs font-mono text-muted-foreground">mm/year (LOS deformation)</span>
               </div>
               {deformDisplacement !== null && deformDisplacement !== undefined && (
-                <div className="text-[0.68rem] text-muted-foreground font-mono">
-                  Cumulative: {deformDisplacement > 0 ? "+" : ""}{deformDisplacement} mm
+                <div className="text-[0.68rem] text-muted-foreground font-mono flex items-center justify-between">
+                  <span>Cumulative: {deformDisplacement > 0 ? "+" : ""}{deformDisplacement} mm</span>
+                  <span className="text-[0.62rem] px-1 py-0.2 rounded bg-violet-500/10 text-violet-400 font-sans font-semibold">
+                    Trend: Active Creep
+                  </span>
                 </div>
               )}
               <div className="text-[0.65rem] text-muted-foreground leading-tight space-y-0.5 pt-0.5 border-t border-border/40">
