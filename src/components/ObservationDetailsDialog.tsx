@@ -180,13 +180,13 @@ export function ObservationDetailsDialog({
           <DialogDescription className="text-xs text-muted-foreground">
             {activeObs
               ? t(
-                  "observations.details_desc",
-                  "Detailed on-ground inspection record submitted by field observers, patrol teams, or district officers.",
-                )
+                "observations.details_desc",
+                "Detailed on-ground inspection record submitted by field observers, patrol teams, or district officers.",
+              )
               : t(
-                  "observations.browser_desc",
-                  "Verified ground telemetry, slope crack reports, and field inspections across 8 North Eastern states.",
-                )}
+                "observations.browser_desc",
+                "Verified ground telemetry, slope crack reports, and field inspections across 8 North Eastern states.",
+              )}
           </DialogDescription>
         </DialogHeader>
 
@@ -355,11 +355,10 @@ export function ObservationDetailsDialog({
                 {/* Toast notice */}
                 {reviewNotice && (
                   <div
-                    className={`rounded px-3 py-2 text-xs font-medium ${
-                      reviewNotice.type === "success"
+                    className={`rounded px-3 py-2 text-xs font-medium ${reviewNotice.type === "success"
                         ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
                         : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                    }`}
+                      }`}
                   >
                     {reviewNotice.msg}
                   </div>
@@ -506,55 +505,50 @@ export function ObservationDetailsDialog({
                 <button
                   type="button"
                   onClick={() => setStatusFilter("all")}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === "all"
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "all"
                       ? "bg-primary text-primary-foreground font-semibold"
                       : "bg-secondary/40 text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {t("observations.filter_all", "All ({{count}})", { count: observations.length })}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter("verified")}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === "verified"
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "verified"
                       ? "bg-emerald-600 text-white font-semibold"
                       : "bg-secondary/40 text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {t("observations.filter_verified", "Verified")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter("actionable")}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === "actionable"
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "actionable"
                       ? "bg-orange-600 text-white font-semibold"
                       : "bg-secondary/40 text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {t("observations.filter_actionable", "Actionable")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter("pending")}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === "pending"
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "pending"
                       ? "bg-amber-600 text-white font-semibold"
                       : "bg-secondary/40 text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {t("observations.filter_pending", "Pending")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter("rejected")}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === "rejected"
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "rejected"
                       ? "bg-zinc-600 text-white font-semibold"
                       : "bg-secondary/40 text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {t("observations.filter_rejected", "Rejected")}
                 </button>
