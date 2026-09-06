@@ -704,7 +704,7 @@ OBJECTIVE VERDICT:
 hr("SECTION 9: PRODUCTION CLASSIFICATION")
 # ══════════════════════════════════════════════════════════════════════════════
 
-print("""
+print(f"""
 ┌─────────────────────────────────────────────────────────────┐
 │             PRODUCTION READINESS ASSESSMENT                 │
 ├────────────────────────┬────────────────────────────────────┤
@@ -722,11 +722,11 @@ ENGINEERING READINESS — READY:
   ✓ Database constraints enforced (exactly 1 active model row)
   ✓ Inference path (recompute_risk()) is operational
   ✓ Migration sequence is correct and idempotent
-  ✗ Soil moisture metadata tag not yet in inference response (needs implementation)
-  ✗ No staleness detection in live inference path
+  ✓ Soil moisture metadata tag and freshness tracking in inference (src/lib/ml/inference.py)
+  ✓ Weather staleness detection (>72h) and degraded fallback in live inference path
 
 SCIENTIFIC READINESS — DATA-LIMITED / INCONCLUSIVE:
-  ✗ Only 8 positive events — below minimum for statistically sound evaluation
+  ✗ Only {len(rainfall_ev)} positive events — below minimum for statistically sound evaluation (minimum ≥20 required)
   ✗ Bootstrap CIs span the chance baseline — improvement not confirmed
   ✗ Soil moisture is non-informative (constant fallback)
   ✗ Multiple folds produce undefined PR-AUC (zero positives in validation)

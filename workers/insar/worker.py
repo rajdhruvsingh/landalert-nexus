@@ -22,6 +22,7 @@ import logging
 import socket
 import argparse
 import subprocess
+import threading
 from typing import Dict, Any, Optional, List, Tuple
 import requests
 import numpy as np
@@ -44,6 +45,14 @@ logger = logging.getLogger("insar_worker")
 WORKER_ID = f"insar-worker-{socket.gethostname()}-{os.getpid()}"
 POLL_INTERVAL_SECONDS = 5
 PIPELINE_VERSION = "v1.2.0-isce2-snaphu"
+
+# Heartbeat configuration ─────────────────────────────────────────────────────
+# Interval (seconds) between heartbeat writes to the jobs table.
+HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("INSAR_HEARTBEAT_INTERVAL", "30"))
+# Jobs RUNNING for longer than this with no heartbeat are considered crashed.
+HEARTBEAT_TIMEOUT_SECONDS  = int(os.environ.get("INSAR_HEARTBEAT_TIMEOUT",  "900"))  # 15 min
+# Absolute wall-clock cap per job (SNAPHU can hang). 0 = disabled.
+JOB_TIMEOUT_SECONDS        = int(os.environ.get("INSAR_JOB_TIMEOUT",        "7200")) # 2 h
 
 
 def _load_env_fallback():
@@ -97,6 +106,9 @@ class InSarWorkerDaemon:
         self.storage = StorageManager()
         self.pipeline = InSarPipeline(workspace_root=self.storage.workspace_dir)
         self.qc = QualityController()
+        # Heartbeat state (set per-job by _start_heartbeat / _stop_heartbeat)
+        self._heartbeat_stop_event: Optional[threading.Event] = None
+        self._heartbeat_thread:     Optional[threading.Thread]  = None
 
     def run_self_test(self) -> Dict[str, Any]:
         """
@@ -154,6 +166,105 @@ class InSarWorkerDaemon:
         logger.info(f"Operational Readiness: {results['operational_readiness']}")
         logger.info("==================================================")
         return results
+
+    # ── Operational resilience ───────────────────────────────────────────────
+
+    def _recover_stale_jobs(self):
+        """
+        Called once at daemon startup. Marks any RUNNING jobs whose last_heartbeat_at
+        is older than HEARTBEAT_TIMEOUT_SECONDS as FAILED so they are visible to
+        operators and can be re-enqueued.  A job without a heartbeat column
+        (schema not yet migrated) is also considered stale if started_at is old.
+
+        This prevents a crashed worker from leaving jobs permanently stuck in
+        RUNNING state.
+        """
+        sql = """
+        UPDATE public.satellite_processing_jobs
+        SET status = 'FAILED',
+            stage  = 'FAILED',
+            error_message = COALESCE(
+                error_message,
+                'Worker crash detected: heartbeat timed out. Re-enqueue to retry.'
+            )
+        WHERE status = 'RUNNING'
+          AND (
+                -- Has heartbeat column: stale if last beat > timeout
+                (last_heartbeat_at IS NOT NULL
+                 AND last_heartbeat_at < NOW() - INTERVAL '%s seconds')
+                OR
+                -- No heartbeat column / never set: fall back to started_at
+                (last_heartbeat_at IS NULL
+                 AND started_at < NOW() - INTERVAL '%s seconds')
+              )
+        RETURNING id;
+        """
+        rows = self._execute_sql(sql, (HEARTBEAT_TIMEOUT_SECONDS, HEARTBEAT_TIMEOUT_SECONDS))
+        if rows:
+            ids = [str(r[0]) for r in rows]
+            logger.warning(
+                f"Stale job recovery: {len(ids)} job(s) marked FAILED "
+                f"(heartbeat/started_at older than {HEARTBEAT_TIMEOUT_SECONDS}s): {ids}"
+            )
+        else:
+            logger.info("Stale job recovery: no stale RUNNING jobs found.")
+
+    def _start_heartbeat(self, job_id: str, job_start_time: float) -> None:
+        """
+        Starts a background daemon thread that writes last_heartbeat_at to the
+        satellite_processing_jobs row every HEARTBEAT_INTERVAL_SECONDS seconds.
+
+        If JOB_TIMEOUT_SECONDS > 0 and the job has exceeded the limit, the thread
+        marks the job FAILED and raises a flag for the processing thread to detect
+        via the stop event.
+        """
+        self._heartbeat_stop_event = threading.Event()
+        stop_event = self._heartbeat_stop_event  # local alias for closure
+
+        def _heartbeat_loop():
+            while not stop_event.is_set():
+                stop_event.wait(timeout=HEARTBEAT_INTERVAL_SECONDS)
+                if stop_event.is_set():
+                    break
+                # Write heartbeat
+                self._execute_sql(
+                    "UPDATE public.satellite_processing_jobs "
+                    "SET last_heartbeat_at = NOW() WHERE id = %s;",
+                    (job_id,),
+                )
+                # Enforce wall-clock timeout
+                if JOB_TIMEOUT_SECONDS > 0:
+                    elapsed = time.time() - job_start_time
+                    if elapsed > JOB_TIMEOUT_SECONDS:
+                        logger.error(
+                            f"Job {job_id} exceeded wall-clock timeout "
+                            f"({JOB_TIMEOUT_SECONDS}s). Marking FAILED."
+                        )
+                        self._execute_sql(
+                            "UPDATE public.satellite_processing_jobs "
+                            "SET status='FAILED', stage='FAILED', "
+                            "error_message='JOB_TIMEOUT: exceeded %s second wall-clock limit.' "
+                            "WHERE id = %%s AND status='RUNNING';" % JOB_TIMEOUT_SECONDS,
+                            (job_id,),
+                        )
+                        stop_event.set()
+                        break
+
+        self._heartbeat_thread = threading.Thread(
+            target=_heartbeat_loop, name=f"heartbeat-{job_id[:8]}", daemon=True
+        )
+        self._heartbeat_thread.start()
+        logger.debug(f"Heartbeat thread started for job {job_id} (interval={HEARTBEAT_INTERVAL_SECONDS}s).")
+
+    def _stop_heartbeat(self) -> None:
+        """Signals the heartbeat thread to stop and waits for it to exit cleanly."""
+        if self._heartbeat_stop_event is not None:
+            self._heartbeat_stop_event.set()
+        if self._heartbeat_thread is not None and self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.join(timeout=5.0)
+        self._heartbeat_stop_event = None
+        self._heartbeat_thread = None
+
 
     def _execute_sql(self, sql: str, params: tuple = ()):
         """Executes direct SQL against local/remote PostgreSQL if configured."""
@@ -285,6 +396,11 @@ class InSarWorkerDaemon:
         """
         Executes genuine end-to-end Sentinel-1 InSAR processing for arbitrary target coordinates.
         Automatically resolves target-to-burst geometry and valid interferometric pair via CDSE OData.
+
+        Operational safeguards:
+        - A heartbeat thread writes last_heartbeat_at every HEARTBEAT_INTERVAL_SECONDS so that
+          a crashed worker is detectable by _recover_stale_jobs() on next startup.
+        - JOB_TIMEOUT_SECONDS provides a hard wall-clock cap (SNAPHU can hang on large scenes).
         """
         import uuid
         job_id = str(uuid.uuid4())
@@ -294,6 +410,7 @@ class InSarWorkerDaemon:
         job_dir = os.path.join(self.storage.workspace_dir, job_id)
         os.makedirs(job_dir, exist_ok=True)
 
+        self._start_heartbeat(job_id, start_time)
         try:
             # Stage 1: DOWNLOADING & Dynamic Target-to-Burst Pair Discovery
             logger.info(f"Resolving real Sentinel-1 IW burst pair for ({target_lat} N, {target_lon} E) via CDSE OData...")
@@ -571,13 +688,19 @@ class InSarWorkerDaemon:
                 "duration_seconds": round(total_duration, 1),
             }
 
+        except Exception as job_exc:
+            # Ensure the heartbeat is stopped even on unexpected exceptions before re-raising
+            self._stop_heartbeat()
+            raise job_exc
         finally:
+            self._stop_heartbeat()  # idempotent: no-op if already stopped
             self.pipeline.cleanup_temporary_rasters(job_dir)
 
     def run_forever(self):
         """Main worker loop: polls QUEUED jobs and processes them using DB-supplied cell geometry."""
         logger.info(f"Starting InSAR Processing Worker Daemon ({WORKER_ID})...")
         self.run_self_test()
+        self._recover_stale_jobs()
 
         while True:
             try:
