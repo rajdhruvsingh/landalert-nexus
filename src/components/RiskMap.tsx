@@ -1,9 +1,10 @@
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Rectangle, CircleMarker, Tooltip, useMap } from "react-leaflet";
 import { useEffect, useState } from "react";
 import type { ZoneRow, SlideRow } from "@/lib/monitoring.functions";
 import { riskColor, zonePolygon } from "@/lib/risk";
 import { useTranslation } from "react-i18next";
+import type { CellRiskEvaluation } from "@/lib/spatial-risk.service";
 
 function MapResizeHandler({
   selectedZone,
@@ -63,6 +64,8 @@ type Props = {
   onSelect?: (id: number) => void;
   center?: [number, number];
   zoom?: number;
+  spatialCells?: CellRiskEvaluation[];
+  onSelectCell?: (cell: CellRiskEvaluation) => void;
 };
 
 export default function RiskMap({
@@ -72,6 +75,8 @@ export default function RiskMap({
   onSelect,
   center = [25.6, 92.8],
   zoom = 7,
+  spatialCells = [],
+  onSelectCell,
 }: Props) {
   const { t } = useTranslation();
   const [satelliteStatus, setSatelliteStatus] = useState<{
@@ -81,6 +86,7 @@ export default function RiskMap({
   } | null>(null);
   const [showTrueColor, setShowTrueColor] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
+  const [showSpatialGrid, setShowSpatialGrid] = useState(true);
 
   const selectedZone = zones.find((z) => z.id === selectedId) ?? null;
 
@@ -96,43 +102,63 @@ export default function RiskMap({
 
   return (
     <div className="relative w-full h-full min-h-[460px]">
-      {/* Satellite Imagery Layer Controls (Gracefully hidden if not configured in environment) */}
-      {hasSatellite && (
-        <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 rounded border border-border/80 bg-background/90 p-2.5 shadow-lg backdrop-blur text-xs font-mono">
-          <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 mb-1">
-            <span className="font-semibold text-primary uppercase text-[0.68rem] tracking-wider">
-              {t("risk_map.sentinel_visuals", "🛰 Sentinel-2 Visuals")}
-            </span>
-            <span
-              className="text-[0.65rem] text-muted-foreground cursor-help"
-              title={t("risk_map.visual_only_title", "Supplementary visual context only — not automated landslide scar detection or hazard prediction.")}
-            >
-              {t("risk_map.visual_only", "ℹ Visual Only")}
-            </span>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showTrueColor}
-              onChange={(e) => setShowTrueColor(e.target.checked)}
-              className="rounded border-border text-primary"
-            />
-            <span className="text-[0.72rem]">{t("risk_map.true_color", "True-Color Imagery")}</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showNdvi}
-              onChange={(e) => setShowNdvi(e.target.checked)}
-              className="rounded border-border text-primary"
-            />
-            <span className="text-[0.72rem]">{t("risk_map.ndvi_vegetation", "NDVI Vegetation Index")}</span>
-          </label>
-          <div className="text-[0.62rem] text-muted-foreground/80 pt-0.5 border-t border-border/30">
-            {t("risk_map.sentinel_attribution", "Copernicus Sentinel data 2026")}
-          </div>
+      {/* Layer Controls Panel (Satellite & Spatial Grid) */}
+      <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 rounded border border-border/80 bg-background/95 p-2.5 shadow-lg backdrop-blur text-xs font-mono">
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 mb-1">
+          <span className="font-semibold text-primary uppercase text-[0.68rem] tracking-wider">
+            {t("risk_map.layers_title", "Layers & Grid")}
+          </span>
+          <span
+            className="text-[0.65rem] text-muted-foreground cursor-help"
+            title={t("risk_map.spatial_coverage_info", "Continuous 0.25° spatial landslide risk prediction grid across all 8 Northeast states.")}
+          >
+            {spatialCells.length} cells
+          </span>
         </div>
-      )}
+
+        {/* Spatial Grid Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showSpatialGrid}
+            onChange={(e) => setShowSpatialGrid(e.target.checked)}
+            className="rounded border-border text-primary"
+          />
+          <span className="text-[0.72rem] font-semibold text-foreground">
+            {t("risk_map.show_spatial_surface", "8-State Spatial Risk Surface")}
+          </span>
+        </label>
+
+        {/* Satellite Imagery Layer Controls */}
+        {hasSatellite && (
+          <>
+            <div className="border-t border-border/40 pt-1 mt-0.5 text-[0.65rem] uppercase text-muted-foreground font-semibold">
+              {t("risk_map.sentinel_visuals", "🛰 Sentinel-2 Visuals")}
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showTrueColor}
+                onChange={(e) => setShowTrueColor(e.target.checked)}
+                className="rounded border-border text-primary"
+              />
+              <span className="text-[0.72rem]">{t("risk_map.true_color", "True-Color Imagery")}</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showNdvi}
+                onChange={(e) => setShowNdvi(e.target.checked)}
+                className="rounded border-border text-primary"
+              />
+              <span className="text-[0.72rem]">{t("risk_map.ndvi_vegetation", "NDVI Vegetation Index")}</span>
+            </label>
+            <div className="text-[0.62rem] text-muted-foreground/80 pt-0.5 border-t border-border/30">
+              {t("risk_map.sentinel_attribution", "Copernicus Sentinel data 2026")}
+            </div>
+          </>
+        )}
+      </div>
 
       <MapContainer
         center={center}
@@ -166,6 +192,31 @@ export default function RiskMap({
             opacity={0.65}
           />
         )}
+        {/* Continuous 8-State Spatial Prediction Grid Surface */}
+        {showSpatialGrid && spatialCells.map((c) => (
+          <Rectangle
+            key={c.cell_id}
+            bounds={c.bounds}
+            pathOptions={{
+              color: riskColor(c.risk_level),
+              weight: 0.6,
+              fillColor: riskColor(c.risk_level),
+              fillOpacity: 0.22,
+            }}
+            eventHandlers={{
+              click: () => onSelectCell?.(c),
+            }}
+          >
+            <Tooltip direction="top" opacity={0.95}>
+              <div className="font-mono text-xs leading-snug">
+                <div className="font-bold">{c.district}, {c.state} <span className="font-normal opacity-70">({c.cell_id})</span></div>
+                <div>Risk: <span className="font-semibold">{t(`risk_levels.${c.risk_level}`, c.risk_level)}</span> (Score: {c.final_risk_score}/100)</div>
+                <div className="text-[0.65rem] text-muted-foreground">Susceptibility: {(c.static_susceptibility * 100).toFixed(0)}% · Elev: {c.elevation_m}m · Slope: {c.slope_deg}°</div>
+              </div>
+            </Tooltip>
+          </Rectangle>
+        ))}
+
       {zones.map((z) => {
         const active = selectedId === z.id;
         return (

@@ -10,8 +10,15 @@ import {
   getRiskPredictionServerFn,
   getZoneWeatherRiskForecastServerFn,
   getResponsePrioritizationServerFn,
+  getSpatialGridServerFn,
   type ZoneRow,
 } from "@/lib/monitoring.functions";
+import {
+  deriveLocationSpatialRisk,
+  type LocationSpatialRisk,
+  type CellRiskEvaluation,
+} from "@/lib/spatial-risk.service";
+import SpatialLocationRiskPanel from "@/components/SpatialLocationRiskPanel";
 import { MapCanvas } from "@/components/MapCanvas";
 import {
   RiskBadge,
@@ -85,6 +92,8 @@ function Dashboard() {
   const { data } = useSuspenseQuery(overviewQuery);
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedSpatialLocation, setSelectedSpatialLocation] = useState<LocationSpatialRisk | null>(null);
+  const [selectedCellRisk, setSelectedCellRisk] = useState<CellRiskEvaluation | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("All");
   const [districtFilter, setDistrictFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -107,6 +116,19 @@ function Dashboard() {
     state: string;
   } | null>(null);
 
+  // Continuous 8-State Spatial Prediction Grid query
+  const spatialGridQuery = useQuery({
+    queryKey: ["spatial-grid", stateFilter, districtFilter],
+    queryFn: () =>
+      getSpatialGridServerFn({
+        data: {
+          stateName: stateFilter === "All" ? undefined : stateFilter,
+          districtName: districtFilter === "All" ? undefined : districtFilter,
+        },
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Listen to header search query, modal trigger events, and URL hash scrolling
   useEffect(() => {
     const handleSearch = (e: Event) => {
@@ -128,13 +150,23 @@ function Dashboard() {
         }
         if (item.zoneId) {
           setSelectedId(item.zoneId);
+          setSelectedSpatialLocation(null);
+          setSelectedCellRisk(null);
+          setShowZoneDetails(true);
           setUninstrumentedLocationNotice(null);
-        } else if (item.type === "city" || item.type === "town" || item.type === "locality" || item.type === "district") {
-          setUninstrumentedLocationNotice({
-            name: item.name,
-            district: item.districtName || item.name,
-            state: item.stateName || "",
-          });
+        } else if (item.centroid) {
+          const locRisk = deriveLocationSpatialRisk(
+            item.name,
+            item.type || "city",
+            item.districtName || item.name,
+            item.stateName || "",
+            item.centroid,
+            data.zones,
+          );
+          setSelectedSpatialLocation(locRisk);
+          setSelectedCellRisk(null);
+          setShowZoneDetails(false);
+          setUninstrumentedLocationNotice(null);
         }
       }
     };
@@ -194,13 +226,23 @@ function Dashboard() {
           if (item.districtName) setDistrictFilter(item.districtName);
           if (item.zoneId) {
             setSelectedId(item.zoneId);
+            setSelectedSpatialLocation(null);
+            setSelectedCellRisk(null);
+            setShowZoneDetails(true);
             setUninstrumentedLocationNotice(null);
-          } else if (item.type === "city" || item.type === "town" || item.type === "locality" || item.type === "district") {
-            setUninstrumentedLocationNotice({
-              name: item.name,
-              district: item.districtName || item.name,
-              state: item.stateName || "",
-            });
+          } else if (item.centroid) {
+            const locRisk = deriveLocationSpatialRisk(
+              item.name,
+              item.type || "city",
+              item.districtName || item.name,
+              item.stateName || "",
+              item.centroid,
+              data.zones,
+            );
+            setSelectedSpatialLocation(locRisk);
+            setSelectedCellRisk(null);
+            setShowZoneDetails(false);
+            setUninstrumentedLocationNotice(null);
           }
         } catch {}
       }
@@ -463,7 +505,7 @@ function Dashboard() {
                     </select>
                   )}
 
-                  {(stateFilter !== "All" || districtFilter !== "All" || customCenter !== null) && (
+                  {(stateFilter !== "All" || districtFilter !== "All" || customCenter !== null || selectedSpatialLocation !== null || selectedCellRisk !== null) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -472,6 +514,8 @@ function Dashboard() {
                         setCustomCenter(null);
                         setCustomZoom(null);
                         setUninstrumentedLocationNotice(null);
+                        setSelectedSpatialLocation(null);
+                        setSelectedCellRisk(null);
                         setSearchQuery("");
                       }}
                       className="h-8 rounded border border-border bg-secondary/50 px-2 text-[0.68rem] font-mono text-muted-foreground hover:text-foreground cursor-pointer"
@@ -534,9 +578,17 @@ function Dashboard() {
                   selectedId={selected?.id ?? null}
                   center={mapCenterAndZoom.center}
                   zoom={mapCenterAndZoom.zoom}
+                  spatialCells={spatialGridQuery.data?.cells ?? []}
                   onSelect={(id) => {
                     setSelectedId(id);
+                    setSelectedSpatialLocation(null);
+                    setSelectedCellRisk(null);
                     setShowZoneDetails(true);
+                  }}
+                  onSelectCell={(cell) => {
+                    setSelectedCellRisk(cell);
+                    setSelectedSpatialLocation(null);
+                    setShowZoneDetails(false);
                   }}
                 />
 
@@ -572,8 +624,20 @@ function Dashboard() {
               </div>
             </div>
 
+            {/* Spatial Location Risk Panel (for Searched/Selected Cities or Districts) or Direct Cell Evaluation */}
+            {(selectedSpatialLocation || selectedCellRisk) && (
+              <SpatialLocationRiskPanel
+                locationRisk={selectedSpatialLocation}
+                cellRisk={selectedCellRisk}
+                onClose={() => {
+                  setSelectedSpatialLocation(null);
+                  setSelectedCellRisk(null);
+                }}
+              />
+            )}
+
             {/* Expandable Zone Operational Drawer & Scientific Decision Support */}
-            {selected && showZoneDetails && (
+            {selected && showZoneDetails && !selectedSpatialLocation && !selectedCellRisk && (
               <div id="zone-details-brief" className="panel p-4 space-y-4 border-l-4 border-l-primary animate-in fade-in duration-200">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
                   <div>
@@ -762,8 +826,8 @@ function Dashboard() {
 
                 {/* Regional Scope Clarification */}
                 <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[0.68rem] text-muted-foreground font-mono">
-                  <span>{t("overview.coverage_scope", "Coverage: 8 NER States · 130 Official Districts")}</span>
-                  <span className="font-semibold text-primary">{data.zones.length} {t("overview.operational_zones", "Operational Telemetry Stations")}</span>
+                  <span>{t("overview.coverage_scope", "Coverage: 8 NER States · 130 Districts · 479 Spatial Grid Cells")}</span>
+                  <span className="font-semibold text-primary">{data.zones.length} {t("overview.operational_zones", "Priority Telemetry Stations")}</span>
                 </div>
 
                 {/* 6 Metrics Grid with subtle vertical separators */}

@@ -521,6 +521,67 @@ export const getRiskPredictionServerFn = createServerFn({ method: "GET" })
     return getRiskPrediction(data.zoneId, data.asOfDate);
   });
 
+export const getSpatialGridServerFn = createServerFn({ method: "GET" })
+  .validator((data?: { stateName?: string | undefined; districtName?: string | undefined }) => ({
+    stateName: data?.stateName,
+    districtName: data?.districtName,
+  }))
+  .handler(async ({ data }) => {
+    const { getAllSpatialCells, getSpatialCellsByState, getSpatialCellsByDistrict, evaluateCellRisk } = await import(
+      "./spatial-risk.service"
+    );
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+    const activeZones = zonesData ?? [];
+
+    let cells = getAllSpatialCells();
+    if (data?.stateName && data.stateName !== "All") {
+      cells = getSpatialCellsByState(data.stateName);
+    } else if (data?.districtName && data.districtName !== "All") {
+      cells = getSpatialCellsByDistrict(data.districtName);
+    }
+
+    const evaluations = cells.map((c) => evaluateCellRisk(c, activeZones));
+    return {
+      cells: evaluations,
+      count: evaluations.length,
+      model_version: "v0.3-spatial-surface",
+      evaluated_at: new Date().toISOString(),
+    };
+  });
+
+export const getLocationSpatialRiskServerFn = createServerFn({ method: "GET" })
+  .validator(
+    (data: {
+      name: string;
+      type?: "city" | "town" | "locality" | "district";
+      district: string;
+      state: string;
+      coordinates: [number, number];
+    }) => ({
+      name: data.name,
+      type: data.type || ("city" as const),
+      district: data.district,
+      state: data.state,
+      coordinates: data.coordinates,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { deriveLocationSpatialRisk } = await import("./spatial-risk.service");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+    const activeZones = zonesData ?? [];
+
+    return deriveLocationSpatialRisk(
+      data.name,
+      data.type || "city",
+      data.district,
+      data.state,
+      data.coordinates,
+      activeZones,
+    );
+  });
+
 export const getSystemHealthServerFn = createServerFn({ method: "GET" }).handler(async () => {
   const { getSystemHealth } = await import("./health.service");
   return getSystemHealth();

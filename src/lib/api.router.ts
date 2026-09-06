@@ -39,7 +39,16 @@ import {
   getAllZones,
   getCompleteHierarchy,
   searchGeography,
+  getAllCities,
+  getCityById,
 } from "./geography";
+import {
+  getAllSpatialCells,
+  getSpatialCellsByState,
+  getSpatialCellsByDistrict,
+  evaluateCellRisk,
+  deriveLocationSpatialRisk,
+} from "./spatial-risk.service";
 
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
 
@@ -902,6 +911,129 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       const q = url.searchParams.get("q") ?? "";
       const results = searchGeography(q);
       return jsonResponse({ query: q, results, count: results.length }, 200, cors);
+    }
+
+    // ==========================================
+    // SPATIAL PREDICTION GRID REST API ENDPOINTS
+    // ==========================================
+
+    // GET /api/spatial/cells - Returns spatial prediction cells across all 8 NER states
+    if (pathname === "/api/spatial/cells" && request.method === "GET") {
+      const stateName = url.searchParams.get("state");
+      const districtName = url.searchParams.get("district");
+      let cells = getAllSpatialCells();
+      if (stateName) {
+        cells = getSpatialCellsByState(stateName);
+      } else if (districtName) {
+        cells = getSpatialCellsByDistrict(districtName);
+      }
+      return jsonResponse({ cells, count: cells.length }, 200, cors);
+    }
+
+    // GET /api/spatial/risk - Evaluates spatial risk for cells or specific coordinates
+    if (pathname === "/api/spatial/risk" && request.method === "GET") {
+      const latParam = url.searchParams.get("lat");
+      const lngParam = url.searchParams.get("lng");
+      const cityName = url.searchParams.get("city");
+      const districtName = url.searchParams.get("district");
+      const stateName = url.searchParams.get("state") || "";
+
+      let activeZones: any[] = [];
+      try {
+        const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+        activeZones = zonesData ?? [];
+      } catch {
+        activeZones = [];
+      }
+
+      if (latParam && lngParam) {
+        const lat = parseFloat(latParam);
+        const lng = parseFloat(lngParam);
+        if (isNaN(lat) || isNaN(lng)) {
+          return errorResponse("Invalid lat/lng coordinates", "INVALID_COORDINATES", 400, cors);
+        }
+        const spatialRisk = deriveLocationSpatialRisk(
+          cityName || "Custom Coordinate",
+          cityName ? "city" : "point",
+          districtName || "Regional",
+          stateName || "NER",
+          [lat, lng],
+          activeZones
+        );
+        return jsonResponse(spatialRisk, 200, cors);
+      }
+
+      // If city name is provided, look up city
+      if (cityName) {
+        const allCities = getAllCities();
+        const found = allCities.find(
+          (c) =>
+            c.name.toLowerCase() === cityName.trim().toLowerCase() &&
+            (!stateName || c.stateName.toLowerCase() === stateName.trim().toLowerCase())
+        );
+        if (found) {
+          const spatialRisk = deriveLocationSpatialRisk(
+            found.name,
+            found.type,
+            found.districtName,
+            found.stateName,
+            found.centroid,
+            activeZones
+          );
+          return jsonResponse(spatialRisk, 200, cors);
+        }
+      }
+
+      // Return regional spatial risk summary across representative cells
+      const cells = getAllSpatialCells();
+      const evaluations = cells.map((c) => evaluateCellRisk(c, activeZones));
+      return jsonResponse({
+        status: "success",
+        evaluated_cells_count: evaluations.length,
+        model_version: "v0.3-spatial-surface",
+        cells: evaluations,
+      }, 200, cors);
+    }
+
+    // GET /api/spatial/city-risk - Dedicated city-level risk endpoint
+    if (pathname === "/api/spatial/city-risk" && request.method === "GET") {
+      const cityId = url.searchParams.get("cityId");
+      const cityName = url.searchParams.get("name");
+      const stateName = url.searchParams.get("state") || "";
+
+      let city = null;
+      if (cityId) {
+        city = getCityById(cityId);
+      } else if (cityName) {
+        const allCities = getAllCities();
+        city = allCities.find(
+          (c) =>
+            c.name.toLowerCase() === cityName.trim().toLowerCase() &&
+            (!stateName || c.stateName.toLowerCase() === stateName.trim().toLowerCase())
+        ) || null;
+      }
+
+      if (!city) {
+        return errorResponse("City not found in NER geographic registry", "CITY_NOT_FOUND", 404, cors);
+      }
+
+      let activeZones: any[] = [];
+      try {
+        const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+        activeZones = zonesData ?? [];
+      } catch {
+        activeZones = [];
+      }
+
+      const spatialRisk = deriveLocationSpatialRisk(
+        city.name,
+        city.type,
+        city.districtName,
+        city.stateName,
+        city.centroid,
+        activeZones
+      );
+      return jsonResponse(spatialRisk, 200, cors);
     }
 
     return errorResponse(`Endpoint not found: ${pathname}`, "NOT_FOUND", 404, cors);
