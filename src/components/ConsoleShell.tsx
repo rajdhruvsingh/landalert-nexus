@@ -65,13 +65,21 @@ export function ConsoleNav() {
     setShowSearchDropdown(false);
     if (typeof window !== "undefined") {
       if (currentPath === "/") {
-        window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: item.name.toLowerCase() } }));
+        window.dispatchEvent(
+          new CustomEvent("landalert-filter", {
+            detail: {
+              query: item.name.toLowerCase(),
+              item,
+            },
+          }),
+        );
         const mapEl = document.getElementById("risk-map");
         if (mapEl) {
           mapEl.scrollIntoView({ behavior: "smooth" });
         }
       } else {
         sessionStorage.setItem("landalert_pending_search", item.name.toLowerCase());
+        sessionStorage.setItem("landalert_pending_search_item", JSON.stringify(item));
         navigate({ to: "/", hash: "risk-map" });
       }
     }
@@ -326,8 +334,9 @@ export function ConsoleNav() {
             </button>
             {showSearchDropdown && searchResults.length > 0 && (
               <div className="absolute top-full right-0 mt-1 w-72 sm:w-80 rounded border border-border bg-surface shadow-xl z-[300] overflow-hidden text-left">
-                <div className="px-2.5 py-1.5 border-b border-border/60 bg-secondary/30 text-[0.65rem] font-mono uppercase text-muted-foreground">
-                  Geographic Matches ({searchResults.length})
+                <div className="px-2.5 py-1.5 border-b border-border/60 bg-secondary/30 text-[0.65rem] font-mono uppercase text-muted-foreground flex justify-between items-center">
+                  <span>{t("search.header_matches", "Geographic Matches")}</span>
+                  <span>({searchResults.length})</span>
                 </div>
                 <div className="max-h-60 overflow-y-auto divide-y divide-border/40">
                   {searchResults.map((item) => (
@@ -342,7 +351,15 @@ export function ConsoleNav() {
                         <div className="text-[0.68rem] text-muted-foreground truncate">{item.description}</div>
                       </div>
                       <span className="shrink-0 font-mono text-[0.62rem] uppercase px-1.5 py-0.5 rounded bg-secondary border border-border text-primary font-bold">
-                        {item.type}
+                        {item.type === "city" || item.type === "town"
+                          ? t("search.city_town", "City/Town")
+                          : item.type === "district"
+                          ? t("search.district", "District")
+                          : item.type === "state"
+                          ? t("search.state", "State")
+                          : item.type === "zone"
+                          ? t("search.monitored_station", "Station")
+                          : item.type}
                       </span>
                     </button>
                   ))}

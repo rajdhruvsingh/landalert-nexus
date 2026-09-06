@@ -99,12 +99,35 @@ function Dashboard() {
   const recompute = useServerFn(recomputeAll);
   const ingest = useServerFn(ingestLiveRainfall);
 
+  const [customCenter, setCustomCenter] = useState<[number, number] | null>(null);
+  const [customZoom, setCustomZoom] = useState<number | null>(null);
+  const [uninstrumentedLocationNotice, setUninstrumentedLocationNotice] = useState<string | null>(null);
+
   // Listen to header search query, modal trigger events, and URL hash scrolling
   useEffect(() => {
     const handleSearch = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (typeof detail?.query === "string") {
         setSearchQuery(detail.query);
+      }
+      if (detail?.item) {
+        const item = detail.item;
+        if (item.centroid) {
+          setCustomCenter(item.centroid);
+          setCustomZoom(item.type === "city" || item.type === "town" || item.type === "locality" ? 11 : item.type === "district" ? 9 : 8);
+        }
+        if (item.stateName) {
+          setStateFilter(item.stateName);
+        }
+        if (item.districtName) {
+          setDistrictFilter(item.districtName);
+        }
+        if (item.zoneId) {
+          setSelectedId(item.zoneId);
+          setUninstrumentedLocationNotice(null);
+        } else if (item.type === "city" || item.type === "town" || item.type === "locality" || item.type === "district") {
+          setUninstrumentedLocationNotice(`${item.name} (${item.stateName})`);
+        }
       }
     };
     const handleOpenRoads = () => setRoadDialogOpen(true);
@@ -146,9 +169,23 @@ function Dashboard() {
       }
 
       const pendingSearch = sessionStorage.getItem("landalert_pending_search");
+      const pendingSearchItemStr = sessionStorage.getItem("landalert_pending_search_item");
       if (pendingSearch) {
         sessionStorage.removeItem("landalert_pending_search");
         setSearchQuery(pendingSearch);
+      }
+      if (pendingSearchItemStr) {
+        sessionStorage.removeItem("landalert_pending_search_item");
+        try {
+          const item = JSON.parse(pendingSearchItemStr);
+          if (item.centroid) {
+            setCustomCenter(item.centroid);
+            setCustomZoom(item.type === "city" || item.type === "town" || item.type === "locality" ? 11 : 9);
+          }
+          if (item.stateName) setStateFilter(item.stateName);
+          if (item.districtName) setDistrictFilter(item.districtName);
+          if (item.zoneId) setSelectedId(item.zoneId);
+        } catch {}
       }
     };
 
@@ -177,6 +214,9 @@ function Dashboard() {
   }, [stateFilter]);
 
   const mapCenterAndZoom = useMemo<{ center: [number, number]; zoom: number }>(() => {
+    if (customCenter) {
+      return { center: customCenter, zoom: customZoom ?? 10 };
+    }
     if (districtFilter !== "All" && stateFilter !== "All") {
       const dist = getDistrictByName(districtFilter, stateFilter);
       if (dist) {
@@ -190,7 +230,7 @@ function Dashboard() {
       }
     }
     return { center: [25.6, 92.8], zoom: 7 };
-  }, [stateFilter, districtFilter]);
+  }, [stateFilter, districtFilter, customCenter, customZoom]);
 
   const filteredZones = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -406,33 +446,53 @@ function Dashboard() {
                     </select>
                   )}
 
-                  {(stateFilter !== "All" || districtFilter !== "All") && (
+                  {(stateFilter !== "All" || districtFilter !== "All" || customCenter !== null) && (
                     <button
                       type="button"
                       onClick={() => {
                         setStateFilter("All");
                         setDistrictFilter("All");
+                        setCustomCenter(null);
+                        setCustomZoom(null);
+                        setUninstrumentedLocationNotice(null);
+                        setSearchQuery("");
                       }}
                       className="h-8 rounded border border-border bg-secondary/50 px-2 text-[0.68rem] font-mono text-muted-foreground hover:text-foreground cursor-pointer"
                     >
-                      Reset
+                      {t("map_panel.reset", "Reset")}
                     </button>
                   )}
                 </div>
               </div>
 
+              {/* Notice for Searched Location without active telemetry */}
+              {uninstrumentedLocationNotice && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                  <span>
+                    <strong>{uninstrumentedLocationNotice}:</strong> {t("map_panel.location_uninstrumented_notice", "This location has no direct slope telemetry station installed. Regional satellite and weather coverage active.")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUninstrumentedLocationNotice(null)}
+                    className="text-[0.68rem] font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100"
+                  >
+                    {t("common.close", "Dismiss")}
+                  </button>
+                </div>
+              )}
+
               {/* Notice for Districts without active monitored zones */}
               {districtFilter !== "All" && filteredZones.length === 0 && (
                 <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
                   <span>
-                    No active monitored telemetry stations registered in {districtFilter}. District territory is monitored under regional coverage.
+                    {t("map_panel.uninstrumented_district_notice", `No active monitored telemetry stations registered in ${districtFilter}. District territory is monitored under regional coverage.`)}
                   </span>
                   <button
                     type="button"
                     onClick={() => setDistrictFilter("All")}
                     className="text-[0.68rem] font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100"
                   >
-                    View All {stateFilter} Districts
+                    {t("map_panel.view_all_state_districts", `View All ${stateFilter} Districts`)}
                   </button>
                 </div>
               )}
@@ -571,7 +631,7 @@ function Dashboard() {
                         </div>
                         <div className="grid grid-cols-3 gap-2 mt-2">
                           <div className="rounded border border-border p-2 text-center bg-surface">
-                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">24 Hours</div>
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">{t("weather_forecast.hours_24", "24 Hours")}</div>
                             <div className="my-1 flex justify-center">
                               <ForecastRiskBadge
                                 level={selectedForecast.forecastWindows["24h"].projectedRiskLevel}
@@ -582,7 +642,7 @@ function Dashboard() {
                             <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["24h"].forecastRainfallMm.toFixed(1)} mm</div>
                           </div>
                           <div className="rounded border border-border p-2 text-center bg-surface">
-                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">48 Hours</div>
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">{t("weather_forecast.hours_48", "48 Hours")}</div>
                             <div className="my-1 flex justify-center">
                               <ForecastRiskBadge
                                 level={selectedForecast.forecastWindows["48h"].projectedRiskLevel}
@@ -593,7 +653,7 @@ function Dashboard() {
                             <div className="font-mono text-xs font-semibold">{selectedForecast.forecastWindows["48h"].forecastRainfallMm.toFixed(1)} mm</div>
                           </div>
                           <div className="rounded border border-border p-2 text-center bg-surface">
-                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">72 Hours</div>
+                            <div className="text-[0.62rem] font-bold text-muted-foreground uppercase">{t("weather_forecast.hours_72", "72 Hours")}</div>
                             <div className="my-1 flex justify-center">
                               <ForecastRiskBadge
                                 level={selectedForecast.forecastWindows["72h"].projectedRiskLevel}
@@ -626,7 +686,7 @@ function Dashboard() {
                             type="button"
                             className="w-full rounded border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer"
                           >
-                            + Report Observation for {selected.zone_name}
+                            + {t("dashboard.report_observation_for_zone", "Report Observation for {{zone}}", { zone: selected.zone_name })}
                           </button>
                         }
                         onSuccess={() => qc.invalidateQueries()}

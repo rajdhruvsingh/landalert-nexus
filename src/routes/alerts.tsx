@@ -54,6 +54,31 @@ const TEMPLATES: Record<
     render: (zone, level) =>
       `${zone} मा पहिरोको ${level === "Severe" ? "गम्भीर" : "उच्च"} जोखिम। भिरालो सडक नजानुहोस्। चिरा वा पहिरो देखिए जिल्ला नियन्त्रण कक्षलाई खबर गर्नुहोस्।`,
   },
+  hi: {
+    label: "हिन्दी (Hindi)",
+    render: (zone, level) =>
+      `${zone} में भूस्खलन का ${level === "Severe" ? "अति गंभीर" : "उच्च"} जोखिम। ढलान वाले मार्गों पर जाने से बचें। दरारें दिखने पर जिला नियंत्रण कक्ष को तुरंत सूचित करें।`,
+  },
+  mni: {
+    label: "মণিপুরী (Manipuri)",
+    render: (zone, level) =>
+      `${zone} দা চীংহায়বগী ${level === "Severe" ? "য়াম্না ৱাংবা" : "অকনবা"} খুদোংথীবা লৈরে। চীংগী লম্বী চৎপদা চেকশিনবীয়ু। মফম চৎহায়বা উবদা ডিষ্ট্রিক্ট কন্ত্রোল রুমদা পাউ পীবীয়ু।`,
+  },
+  lus: {
+    label: "Mizo (Mizo)",
+    render: (zone, level) =>
+      `${zone}-ah lei min hlauhawmna a ${level === "Severe" ? "sang tawpkhawk" : "sang"}. Chhengchhe kawngah fimkhur rawh. Lei khi i hmuh chuan district control room hriattir vat rawh.`,
+  },
+  kha: {
+    label: "Khasi (Khasi)",
+    render: (zone, level) =>
+      `Ka jingtwap khyndew ha ${zone} ka long kaba ${level === "Severe" ? "jur bha" : "ma"}. Kyntait ban iaid lynti lum. Lada lap ba pait khyndew pyntip kloi sha district control room.`,
+  },
+  grt: {
+    label: "Garo (Garo)",
+    render: (zone, level) =>
+      `${zone}-o a·a bel·ani ${level === "Severe" ? "kenbegnibegipa" : "kengipa"} obosta donga. A·bri ramarango re·rurana simsakbo. A·a bretako nikode district control room-ona paratbo.`,
+  },
 };
 
 export const Route = createFileRoute("/alerts")({

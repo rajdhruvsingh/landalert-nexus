@@ -39,7 +39,11 @@
     "observation_trust": "Observation Trust: Official Review Required",
     "status_unknown_desc": "Status Unknown — system data unavailable.",
     "no_roads": "No road segments mapped yet.",
-    "no_alerts": "No alerts dispatched yet."
+    "no_alerts": "No alerts dispatched yet.",
+    "report_observation_for_zone": "+ Report Observation for {{zone}}",
+    "ml_risk": "ML Risk",
+    "residents": "residents",
+    "mean_slope": "mean slope"
   },
   "risk_levels": {
     "Low": "Low",
@@ -252,7 +256,10 @@
     "trend_improving": "Easing",
     "disclaimer": "Advisory forecast guidance only. Operational alerts require authoritative current computation.",
     "forecast_guidance": "Forecast Guidance",
-    "open_meteo_guidance": "Open-Meteo Guidance"
+    "open_meteo_guidance": "Open-Meteo Guidance",
+    "hours_24": "24 Hours",
+    "hours_48": "48 Hours",
+    "hours_72": "72 Hours"
   },
   "response_prioritization": {
     "section_title": "Emergency Response Prioritisation",
@@ -412,7 +419,11 @@
     "subtitle": "Real-time risk assessment across North Eastern Region",
     "filter_region": "North East India",
     "risk_level": "Risk level",
-    "scale_km": "100 km"
+    "scale_km": "100 km",
+    "reset": "Reset",
+    "uninstrumented_district_notice": "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
+    "view_all_state_districts": "View All {{state}} Districts",
+    "location_uninstrumented_notice": "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active."
   },
   "operational_tables": {
     "latest_alerts_title": "Latest Alerts",
@@ -544,5 +555,16 @@
     "no_records": "No observations found matching the search filter.",
     "footer_count": "Showing {{count}} ground observations",
     "client_recorded": "Client recorded:"
+  },
+  "search": {
+    "placeholder": "Search zone, district, city or town...",
+    "no_locations": "No locations found matching '{{query}}'",
+    "city_town": "City / Town",
+    "district": "District",
+    "state": "State",
+    "monitored_station": "Monitored Station",
+    "telemetry_active": "Telemetry Active",
+    "regional_coverage": "Regional Coverage",
+    "locality": "Locality"
   }
 }
