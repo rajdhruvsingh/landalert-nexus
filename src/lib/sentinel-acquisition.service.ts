@@ -157,7 +157,7 @@ export async function searchSentinel1Acquisitions(
   fetchClient: typeof fetch = fetch
 ): Promise<Sentinel1AcquisitionRecord[]> {
   const [minLng, minLat, maxLng, maxLat] = params.bbox;
-  const stacUrl = process.env.SENTINEL_STAC_API_URL || "https://catalogue.dataspace.copernicus.eu/stac/search";
+  const stacUrl = process.env["SENTINEL_STAC_API_URL"] || "https://catalogue.dataspace.copernicus.eu/stac/search";
 
   const mode = params.mode || "IW";
   const productType = params.productType || "SLC";

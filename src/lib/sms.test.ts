@@ -80,7 +80,7 @@ describe("SMS Gateway Subsystem & MSG91 Provider", () => {
 
   it("dispatches real HTTP payload to MSG91 when configured and sandbox is disabled", async () => {
     let capturedUrl = "";
-    let capturedOptions: RequestInit | undefined = undefined;
+    let capturedOptions: any = undefined;
 
     // Test-only mock HTTP client
     const MOCK_TEST_FETCH = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

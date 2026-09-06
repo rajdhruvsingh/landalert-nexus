@@ -56,7 +56,7 @@ export async function processSensorTelemetry(
   payloads: SensorTelemetryPayload[],
   authHeader?: string | null,
 ): Promise<SensorIngestionResult> {
-  const expectedSecret = process.env.SENSOR_INGESTION_SECRET;
+  const expectedSecret = process.env["SENSOR_INGESTION_SECRET"];
   if (!expectedSecret || expectedSecret.trim() === "") {
     throw new Error(
       "SENSOR_INGESTION_UNCONFIGURED: SENSOR_INGESTION_SECRET is not configured in server environment. Physical sensor deployment required.",
@@ -126,6 +126,7 @@ export async function processSensorTelemetry(
           rainfall_mm: 0,
           soil_moisture_pct: Number(avgMoisture.toFixed(1)),
           source: `Physical-Sensor-${p.device_id} (In-situ probe)`,
+          station_id: p.device_id,
         },
         { onConflict: "zone_id,reading_time" },
       );

@@ -18,7 +18,7 @@ import {
 import { handleApiRequest } from "./api.router";
 import type { ZoneRow } from "./monitoring.functions";
 
-const SAMPLE_ZONES: ZoneRow[] = [
+const SAMPLE_ZONES: any[] = [
   {
     id: 1,
     zone_name: "Guwahati Hills",

@@ -50,8 +50,8 @@ export interface RiskPredictionResult {
   };
   canonical_features?: Record<string, number>;
   data_freshness: {
-    latest_weather_timestamp?: string | null;
-    weather_age_hours?: number;
+    latest_weather_timestamp?: string | null | undefined;
+    weather_age_hours?: number | undefined;
     soil_moisture_status: "measured" | "stale" | "missing" | "fallback";
   };
   inference_timestamp: string;
@@ -268,7 +268,6 @@ export async function getDatabaseFallbackPrediction(zoneId: number): Promise<Ris
       "Status Unknown: system data unavailable — inference engine and telemetry database offline.",
     data_freshness: {
       latest_weather_timestamp: null,
-      weather_age_hours: undefined,
       soil_moisture_status: "fallback",
     },
     inference_timestamp: new Date().toISOString(),

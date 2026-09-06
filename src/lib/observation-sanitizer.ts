@@ -92,7 +92,7 @@ export function parseObservationVisualSigns(rawVisualSigns?: string | null): Par
 export function sanitizeObservationRecord<T extends Record<string, any>>(obs: T): T {
   if (!obs) return obs;
 
-  const rawSigns = obs.visual_signs || "";
+  const rawSigns = obs["visual_signs"] || "";
   const { cleanVisualSigns, metadata } = parseObservationVisualSigns(rawSigns);
 
   const sanitized: any = {

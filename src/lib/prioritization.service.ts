@@ -35,12 +35,12 @@ export interface ZonePrioritizationInput {
     status: "open" | "restricted" | "blocked" | string;
   }>;
   fieldObservations?: Array<{
-    id?: number | string;
-    reviewStatus?: string;
-    roadStatus?: string;
-    visualSigns?: string;
-    rainfallMm?: number;
-  }>;
+    id?: number | string | undefined;
+    reviewStatus?: string | undefined;
+    roadStatus?: string | undefined;
+    visualSigns?: string | undefined;
+    rainfallMm?: number | undefined;
+  }> | undefined;
 }
 
 export interface FactorBreakdown {

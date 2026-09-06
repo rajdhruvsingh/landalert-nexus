@@ -62,6 +62,7 @@ export function SyncQueueDialog({
         window.removeEventListener("landalert-queue-updated", reloadItems);
       };
     }
+    return undefined;
   }, [reloadItems]);
 
   const handleSyncNow = async () => {

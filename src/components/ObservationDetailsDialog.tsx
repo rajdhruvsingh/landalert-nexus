@@ -87,7 +87,8 @@ export function ObservationDetailsDialog({
 
     const loadBlobs = async () => {
       const urls: Record<string, string> = {};
-      for (const meta of activeObs.media_metadata!) {
+      const mediaList = (Array.isArray(activeObs.media_metadata) ? activeObs.media_metadata : []) as any[];
+      for (const meta of mediaList) {
         if (meta.id && !meta.url) {
           try {
             const stored = await getOfflineMedia(meta.id);
@@ -126,7 +127,7 @@ export function ObservationDetailsDialog({
         (z && z.district.toLowerCase().includes(q)) ||
         (z && z.state.toLowerCase().includes(q));
 
-      const status = obs.review_status || (obs as any).status || "PENDING";
+      const status = String(obs.review_status || (obs as any).status || "PENDING");
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "verified" && (status === "APPROVED" || status === "OFFICIAL_VERIFIED")) ||
@@ -308,7 +309,7 @@ export function ObservationDetailsDialog({
               {/* Attached Evidence Media (URLs, Offline Blobs, or Metadata) */}
               {(() => {
                 const mediaUrls = activeObs.media_urls || [];
-                const mediaMeta = activeObs.media_metadata || [];
+                const mediaMeta = (Array.isArray(activeObs.media_metadata) ? activeObs.media_metadata : []) as any[];
                 const hasAnyMedia = mediaUrls.length > 0 || mediaMeta.length > 0;
 
                 if (!hasAnyMedia) return null;
@@ -512,7 +513,7 @@ export function ObservationDetailsDialog({
                     const typeLabel =
                       obs.visual_signs ||
                       (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
-                    const status = obs.review_status || (obs as any).status || "PENDING";
+                    const status = String(obs.review_status || (obs as any).status || "PENDING");
                     const isVerified = status === "APPROVED" || status === "OFFICIAL_VERIFIED";
                     const isRejected = status === "REJECTED";
 

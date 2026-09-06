@@ -7,9 +7,9 @@ describe("Honest Scaffolding & Pending Integrations Adapters", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    delete process.env.IMD_API_KEY;
-    delete process.env.SENSOR_INGESTION_SECRET;
-    delete process.env.ROAD_STATUS_API_KEY;
+    delete process.env["IMD_API_KEY"];
+    delete process.env["SENSOR_INGESTION_SECRET"];
+    delete process.env["ROAD_STATUS_API_KEY"];
   });
 
   afterEach(() => {
@@ -34,7 +34,7 @@ describe("Honest Scaffolding & Pending Integrations Adapters", () => {
     });
 
     it("rejects unauthorized telemetry submission when key does not match", async () => {
-      process.env.IMD_API_KEY = "valid-secret-imd-token";
+      process.env["IMD_API_KEY"] = "valid-secret-imd-token";
       await expect(
         processIMDTelemetry(
           [
@@ -69,7 +69,7 @@ describe("Honest Scaffolding & Pending Integrations Adapters", () => {
     });
 
     it("rejects unauthorized sensor ingestion when token does not match", async () => {
-      process.env.SENSOR_INGESTION_SECRET = "sensor-auth-token-123";
+      process.env["SENSOR_INGESTION_SECRET"] = "sensor-auth-token-123";
       await expect(
         processSensorTelemetry(
           [
@@ -87,7 +87,7 @@ describe("Honest Scaffolding & Pending Integrations Adapters", () => {
     });
 
     it("validates physical constraints and detects impossible tilt readings", async () => {
-      process.env.SENSOR_INGESTION_SECRET = "sensor-auth-token-123";
+      process.env["SENSOR_INGESTION_SECRET"] = "sensor-auth-token-123";
       const res = await processSensorTelemetry(
         [
           {
@@ -106,7 +106,7 @@ describe("Honest Scaffolding & Pending Integrations Adapters", () => {
     });
 
     it("triggers critical alarms when high-hazard tilt threshold is crossed", async () => {
-      process.env.SENSOR_INGESTION_SECRET = "sensor-auth-token-123";
+      process.env["SENSOR_INGESTION_SECRET"] = "sensor-auth-token-123";
       const res = await processSensorTelemetry(
         [
           {
@@ -140,7 +140,7 @@ describe("Honest Scaffolding & Pending Integrations Adapters", () => {
     });
 
     it("rejects unauthorized road status updates", async () => {
-      process.env.ROAD_STATUS_API_KEY = "road-secret-xyz";
+      process.env["ROAD_STATUS_API_KEY"] = "road-secret-xyz";
       await expect(
         processRoadStatusUpdate(
           [

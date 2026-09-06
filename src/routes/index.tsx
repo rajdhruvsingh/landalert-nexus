@@ -301,11 +301,11 @@ function Dashboard() {
       q
         ? data.roads
             .filter(
-              (r) =>
+              (r: any) =>
                 r.road_name.toLowerCase().includes(q) ||
                 r.segment_label.toLowerCase().includes(q),
             )
-            .map((r) => r.zone_id)
+            .map((r: any) => r.zone_id)
         : [],
     );
 

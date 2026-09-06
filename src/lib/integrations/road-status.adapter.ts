@@ -34,7 +34,7 @@ export async function processRoadStatusUpdate(
   updates: RoadStatusUpdatePayload[],
   apiKey?: string | null,
 ): Promise<RoadIngestionResult> {
-  const expectedKey = process.env.ROAD_STATUS_API_KEY;
+  const expectedKey = process.env["ROAD_STATUS_API_KEY"];
   if (!expectedKey || expectedKey.trim() === "") {
     throw new Error(
       "ROAD_STATUS_UNCONFIGURED: ROAD_STATUS_API_KEY is not configured in server environment. BRO/PWD data-sharing agreement required.",

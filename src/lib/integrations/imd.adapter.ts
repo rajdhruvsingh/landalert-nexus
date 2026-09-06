@@ -54,7 +54,7 @@ export async function processIMDTelemetry(
   records: IMDWeatherPayload[],
   apiKey?: string,
 ): Promise<IMDIngestionResult> {
-  const expectedKey = process.env.IMD_API_KEY;
+  const expectedKey = process.env["IMD_API_KEY"];
   if (!expectedKey || expectedKey.trim() === "") {
     throw new Error(
       "IMD_ADAPTER_UNCONFIGURED: IMD_API_KEY is not configured in the server environment. Institutional MOU with IMD required.",
@@ -96,12 +96,14 @@ export async function processIMDTelemetry(
       }
 
       // Find closest zone within 50km
-      let nearestZone = zones[0];
+      const firstZone = zones[0];
+      if (!firstZone) continue;
+      let nearestZone = firstZone;
       let minDistance = haversineKm(
         record.latitude,
         record.longitude,
-        zones[0].centroid_lat,
-        zones[0].centroid_lng,
+        firstZone.centroid_lat,
+        firstZone.centroid_lng,
       );
 
       for (const z of zones.slice(1)) {
@@ -115,13 +117,14 @@ export async function processIMDTelemetry(
       const rainMm = record.rainfall_1h_mm ?? (record.rainfall_24h_mm ? record.rainfall_24h_mm / 24 : 0);
       const readingTime = new Date(record.timestamp).toISOString();
 
-      const { error: insertErr } = await supabaseAdmin.from("weather_readings").upsert(
+      const { error: insertErr } = await (supabaseAdmin.from("weather_readings") as any).upsert(
         {
           zone_id: nearestZone.id,
           reading_time: readingTime,
           rainfall_mm: Number(rainMm.toFixed(2)),
           temperature_c: record.temp_c ?? null,
           humidity_pct: record.relative_humidity_pct ?? null,
+          station_id: record.station_id,
           source: `IMD-AWS-${record.station_id} (Dist: ${Math.round(minDistance)}km)`,
         },
         { onConflict: "zone_id,reading_time" },

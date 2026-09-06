@@ -41,8 +41,8 @@ describe("Observation Sanitizer & Metadata Recovery", () => {
     expect(parsed.metadata?.geo_lat).toBe(28.67438);
     expect(parsed.metadata?.geo_lng).toBe(77.50341);
     expect(parsed.metadata?.geo_accuracy_m).toBe(35);
-    expect(parsed.metadata?.media_metadata?.[0].name).toBe("c47ab090-5a88-462f-ac87-5a50e213970c.png");
-    expect(parsed.metadata?.media_metadata?.[0].size).toBe(1897874);
+    expect(parsed.metadata?.media_metadata?.[0]?.name).toBe("c47ab090-5a88-462f-ac87-5a50e213970c.png");
+    expect(parsed.metadata?.media_metadata?.[0]?.size).toBe(1897874);
   });
 
   it("promotes recovered metadata onto the sanitized observation record", () => {
@@ -62,14 +62,14 @@ describe("Observation Sanitizer & Metadata Recovery", () => {
       media_metadata: [],
     };
 
-    const sanitized = sanitizeObservationRecord(rawRecord);
+    const sanitized: any = sanitizeObservationRecord(rawRecord);
     expect(sanitized.visual_signs).toBe("Tension cracks on slope");
     expect(sanitized.raw_visual_signs).toBe(rawRecord.visual_signs);
     expect(sanitized.geo_lat).toBe(28.67438);
     expect(sanitized.geo_lng).toBe(77.50341);
     expect(sanitized.geo_accuracy_m).toBe(35);
     expect(sanitized.media_metadata).toHaveLength(1);
-    expect(sanitized.media_metadata?.[0].name).toBe("c47ab090-5a88-462f-ac87-5a50e213970c.png");
+    expect(sanitized.media_metadata?.[0]?.name).toBe("c47ab090-5a88-462f-ac87-5a50e213970c.png");
     expect(sanitized.consent_given).toBe(true);
     expect(sanitized.review_status).toBe("PENDING_REVIEW");
   });
@@ -86,10 +86,10 @@ describe("Observation Sanitizer & Metadata Recovery", () => {
       },
     ];
 
-    const sanitizedList = sanitizeObservationList(list);
+    const sanitizedList: any[] = sanitizeObservationList(list);
     expect(sanitizedList).toHaveLength(2);
-    expect(sanitizedList[0].visual_signs).toBe("Rockfall debris on highway");
-    expect(sanitizedList[0].geo_lat).toBe(26.15);
-    expect(sanitizedList[1].visual_signs).toBe("No movement observed");
+    expect(sanitizedList[0]?.visual_signs).toBe("Rockfall debris on highway");
+    expect(sanitizedList[0]?.geo_lat).toBe(26.15);
+    expect(sanitizedList[1]?.visual_signs).toBe("No movement observed");
   });
 });

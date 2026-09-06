@@ -728,7 +728,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
 
       try {
         const { buffer, contentType, cached } = await fetchSatelliteTile(layerParam as "TRUE-COLOR" | "NDVI", z, x, y);
-        return new Response(buffer, {
+        return new Response(new Uint8Array(buffer), {
           status: 200,
           headers: {
             "Content-Type": contentType,
@@ -776,7 +776,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
               quality: dbProd.quality,
               unavailable_reason: dbProd.unavailable_reason,
               sensor: dbProd.sensor || "Sentinel-1 C-SAR",
-              orbit_pass: dbProd.orbit_pass,
+              orbit_pass: dbProd.orbit_pass as ("ASCENDING" | "DESCENDING" | "COMBINED" | null),
               temporal_baseline_days: dbProd.temporal_baseline_days,
               temporal_trend: dbProd.temporal_trend || deformation.temporal_trend,
               processing_pipeline: dbProd.processing_pipeline || deformation.processing_pipeline,
@@ -827,7 +827,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
               quality: dbProd.quality,
               unavailable_reason: dbProd.unavailable_reason,
               sensor: dbProd.sensor || "Sentinel-1 C-SAR",
-              orbit_pass: dbProd.orbit_pass,
+              orbit_pass: dbProd.orbit_pass as ("ASCENDING" | "DESCENDING" | "COMBINED" | null),
               temporal_baseline_days: dbProd.temporal_baseline_days,
               temporal_trend: dbProd.temporal_trend || cityDeform.deformation.temporal_trend,
               processing_pipeline: dbProd.processing_pipeline || cityDeform.deformation.processing_pipeline,
@@ -883,7 +883,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
                 quality: dbProd.quality,
                 unavailable_reason: dbProd.unavailable_reason,
                 sensor: dbProd.sensor || "Sentinel-1 C-SAR",
-                orbit_pass: dbProd.orbit_pass,
+                orbit_pass: dbProd.orbit_pass as ("ASCENDING" | "DESCENDING" | "COMBINED" | null),
                 temporal_baseline_days: dbProd.temporal_baseline_days,
                 temporal_trend: dbProd.temporal_trend || cityDeform.deformation.temporal_trend,
                 processing_pipeline: dbProd.processing_pipeline || cityDeform.deformation.processing_pipeline,
@@ -1036,7 +1036,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           }
           const job = await createInSarProcessingJob(cellId);
           // In test environment, execute simulated pipeline; in production, dedicated worker claims QUEUED jobs
-          if (process.env.NODE_ENV === "test") {
+          if (process.env["NODE_ENV"] === "test") {
             executeJobPipeline(job.id).catch(() => {});
           }
 

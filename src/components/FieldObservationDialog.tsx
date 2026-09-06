@@ -98,7 +98,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { isOnline, connectivityState, checkHealth } = useConnectivityStatus();
-  type FieldErrors = { zone?: string; observer?: string; rainfall?: string; general?: string };
+  type FieldErrors = { zone?: string | undefined; observer?: string | undefined; rainfall?: string | undefined; general?: string | undefined };
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   // 1. Live Zones from Database and Regional Geographic Hierarchy

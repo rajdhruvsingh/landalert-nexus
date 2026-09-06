@@ -7149,6 +7149,11 @@ export function getStateByName(name: string): StateEntity | undefined {
   return Object.values(NER_STATES).find((s) => s.name.toLowerCase() === norm);
 }
 
+/** Returns all districts in the North-Eastern Region */
+export function getAllDistricts(): DistrictEntity[] {
+  return Object.values(NER_DISTRICTS);
+}
+
 /** Returns all districts in a given state */
 export function getDistrictsByState(stateIdOrName: string): DistrictEntity[] {
   const state = getStateById(stateIdOrName) || getStateByName(stateIdOrName);
@@ -7334,10 +7339,10 @@ export interface SearchResultItem {
   type: "region" | "state" | "district" | "city" | "town" | "locality" | "zone";
   id: string | number;
   name: string;
-  stateName?: string;
-  districtName?: string;
+  stateName?: string | undefined;
+  districtName?: string | undefined;
   centroid: [number, number];
-  zoneId?: number;
+  zoneId?: number | undefined;
   description: string;
 }
 

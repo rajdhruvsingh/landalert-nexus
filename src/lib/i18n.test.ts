@@ -70,11 +70,11 @@ describe("i18n Localization Integrity", () => {
 
     for (const { code, dict } of nonEnLocales) {
       // nav.home should not be English 'Home'
-      expect(dict.nav.home).not.toBe("Home");
+      expect(dict["nav"].home).not.toBe("Home");
       // risk_levels.High should not be 'High'
-      expect(dict.risk_levels.High).not.toBe("High");
+      expect(dict["risk_levels"].High).not.toBe("High");
       // header.gov_title should not be English
-      expect(dict.header.gov_title).not.toBe("GOVERNMENT OF INDIA");
+      expect(dict["header"].gov_title).not.toBe("GOVERNMENT OF INDIA");
     }
   });
 });

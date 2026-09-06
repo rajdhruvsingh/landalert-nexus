@@ -78,7 +78,7 @@ let mockForecastOverride: Map<number, Partial<ForecastEvaluationInput>> | null =
 export function setMockForecastOverrideForTesting(
   override: Map<number, Partial<ForecastEvaluationInput>> | null,
 ): void {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env["NODE_ENV"] === "production") {
     throw new Error("PROHIBITED_IN_PRODUCTION: Mock forecast override cannot be activated in production.");
   }
   mockForecastOverride = override;
@@ -232,7 +232,7 @@ export function projectZoneRiskForecast(
 export async function getZoneWeatherForecastProjection(
   zoneId: number,
 ): Promise<ZoneForecastProjection> {
-  if (process.env.NODE_ENV !== "production" && mockForecastOverride?.has(zoneId)) {
+  if (process.env["NODE_ENV"] !== "production" && mockForecastOverride?.has(zoneId)) {
     const override = mockForecastOverride.get(zoneId)!;
     return projectZoneRiskForecast({
       zoneId,
@@ -297,8 +297,8 @@ export async function getZoneWeatherForecastProjection(
       currentRiskLevel: (zone.current_risk_level as RiskLevel) ?? "UNKNOWN",
       currentRiskScore: zone.risk_score ?? 0,
       threshold_e_mm: zone.threshold_e_mm,
-      threshold_i_coefficient: zone.threshold_i_coefficient,
-      threshold_i_exponent: zone.threshold_i_exponent,
+      threshold_i_coefficient: (zone as any).threshold_i_coefficient,
+      threshold_i_exponent: (zone as any).threshold_i_exponent,
       forecast_24h_mm: day1,
       forecast_48h_mm: day1 + day2,
       forecast_72h_mm: day1 + day2 + day3,

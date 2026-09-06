@@ -997,9 +997,9 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
           method: "GET",
         });
         const res = await handleApiRequest(req);
-        expect(res.status).toBe(200);
+        expect(res!.status).toBe(200);
 
-        const data = await res.json();
+        const data: any = await res!.json();
         expect(data.zoneId).toBe(1);
         expect(data.currentRiskLevel).toBeDefined();
         expect(data.forecastWindows).toBeDefined();
@@ -1035,8 +1035,8 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       const evaluated = evaluateEmergencyPrioritization([unknownZone]);
       expect(evaluated.rankedZones.length).toBe(0);
       expect(evaluated.unrankedZones.length).toBe(1);
-      expect(evaluated.unrankedZones[0].zoneId).toBe(99);
-      expect(evaluated.unrankedZones[0].reason).toContain("UNKNOWN");
+      expect(evaluated.unrankedZones[0]?.zoneId).toBe(99);
+      expect(evaluated.unrankedZones[0]?.reason).toContain("UNKNOWN");
     });
 
     it("verifies ranking order responds correctly to changes in each input factor according to documented weights", async () => {
@@ -1099,10 +1099,10 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       ]);
 
       expect(rankedResult.rankedZones.length).toBe(5);
-      expect(rankedResult.rankedZones[0].rank).toBe(1);
+      expect(rankedResult.rankedZones[0]?.rank).toBe(1);
       for (let i = 0; i < rankedResult.rankedZones.length - 1; i++) {
-        expect(rankedResult.rankedZones[i].priorityScore).toBeGreaterThanOrEqual(
-          rankedResult.rankedZones[i + 1].priorityScore,
+        expect(rankedResult.rankedZones[i]!.priorityScore).toBeGreaterThanOrEqual(
+          rankedResult.rankedZones[i + 1]!.priorityScore,
         );
       }
     });
@@ -1141,9 +1141,9 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
     it("verifies prioritization REST API returns decision-support envelope with unranked zones segregated", async () => {
       const req = new Request("http://localhost/api/response/prioritization", { method: "GET" });
       const res = await handleApiRequest(req);
-      expect(res.status).toBe(200);
+      expect(res!.status).toBe(200);
 
-      const json = await res.json();
+      const json: any = await res!.json();
       expect(Array.isArray(json.rankedZones)).toBe(true);
       expect(Array.isArray(json.unrankedZones)).toBe(true);
       expect(json.weights).toBeDefined();
@@ -1267,11 +1267,11 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       // Next request through API router should trigger 429
       const req = createTestReq();
       const res = await handleApiRequest(req);
-      expect(res.status).toBe(429);
-      expect(res.headers.get("Retry-After")).toBeDefined();
-      expect(Number(res.headers.get("Retry-After"))).toBeGreaterThan(0);
+      expect(res!.status).toBe(429);
+      expect(res!.headers.get("Retry-After")).toBeDefined();
+      expect(Number(res!.headers.get("Retry-After"))).toBeGreaterThan(0);
 
-      const json = await res.json();
+      const json: any = await res!.json();
       expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
       expect(json.error).toMatch(/rate limit exceeded/i);
 
@@ -1300,10 +1300,10 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
       });
 
       const res = await handleApiRequest(req);
-      expect(res.status).toBe(429);
-      expect(res.headers.get("Retry-After")).toBeDefined();
+      expect(res!.status).toBe(429);
+      expect(res!.headers.get("Retry-After")).toBeDefined();
 
-      const json = await res.json();
+      const json: any = await res!.json();
       expect(json.code).toBe("RATE_LIMIT_EXCEEDED");
 
       defaultRateLimiter.reset(clientKey);
@@ -1336,7 +1336,7 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
         body: JSON.stringify({ alertId: 101, reason: "Radar telemetry failure verified by GSI" }),
       });
       const resNoAuth = await handleApiRequest(reqNoAuth);
-      expect(resNoAuth.status).toBe(401);
+      expect(resNoAuth!.status).toBe(401);
 
       // 2. Citizen / PUBLIC_USER role -> 403
       const reqCitizen = new Request("http://localhost/api/alerts/retract", {
@@ -1348,7 +1348,7 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
         body: JSON.stringify({ alertId: 101, reason: "Unauthorized attempt" }),
       });
       const resCitizen = await handleApiRequest(reqCitizen);
-      expect(resCitizen.status).toBe(403);
+      expect(resCitizen!.status).toBe(403);
 
       // 3. Authorized DISPATCHER / system token -> 200
       const reqAuthorized = new Request("http://localhost/api/alerts/retract", {
@@ -1360,9 +1360,9 @@ describe("Production UI, Auth, and Stacking Hierarchy Regressions", () => {
         body: JSON.stringify({ alertId: 101, reason: "Slope stabilized; telemetry false-alarm" }),
       });
       const resAuthorized = await handleApiRequest(reqAuthorized);
-      expect(resAuthorized.status).toBe(200);
+      expect(resAuthorized!.status).toBe(200);
 
-      const json = await resAuthorized.json();
+      const json: any = await resAuthorized!.json();
       expect(json.success).toBe(true);
       expect(json.alertId).toBe(101);
       expect(json.reason).toContain("telemetry false-alarm");

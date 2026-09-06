@@ -139,7 +139,7 @@ function AlertsPage() {
   const [dispatchResult, setDispatchResult] = useState<string | null>(null);
 
   const alerts = useMemo(() => {
-    return data.alerts.filter((a) => {
+    return data.alerts.filter((a: any) => {
       const matchLevel = level === "All" || a.risk_level === level;
       const matchZone = selectedZoneFilter === "All" || String(a.zone_id) === selectedZoneFilter;
       return matchLevel && matchZone;
@@ -152,7 +152,7 @@ function AlertsPage() {
     setDispatchResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await dispatchAlertServerFn({
+      const res: any = await dispatchAlertServerFn({
         data: {
           zoneId: targetZoneId,
           language: targetLang,
@@ -198,7 +198,7 @@ function AlertsPage() {
         data: {
           alertId: selectedAlertToRetract,
           reason: retractionReason.trim(),
-          authToken: session?.access_token,
+          ...(session?.access_token ? { authToken: session.access_token } : {}),
         },
       });
       setRetractResult(t("alerts.retracted_success"));
@@ -275,7 +275,7 @@ function AlertsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-surface border-border max-h-56">
-                    {data.zones.map((z) => (
+                    {data.zones.map((z: any) => (
                       <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
                         Zone {z.id}: {z.zone_name} ({z.current_risk_level})
                       </SelectItem>
@@ -393,7 +393,7 @@ function AlertsPage() {
               <SelectItem value="All" className="text-xs font-mono">
                 {t("alerts.all_zones")}
               </SelectItem>
-              {data.zones.map((z) => (
+              {data.zones.map((z: any) => (
                 <SelectItem key={z.id} value={String(z.id)} className="text-xs font-mono">
                   {z.zone_name}
                 </SelectItem>
@@ -420,8 +420,8 @@ function AlertsPage() {
       </div>
 
       <div className="mt-6 space-y-4">
-        {alerts.map((a) => {
-          const zone = data.zones.find((z) => z.id === a.zone_id);
+        {alerts.map((a: any) => {
+          const zone = data.zones.find((z: any) => z.id === a.zone_id);
           const zoneName = zone ? `${zone.zone_name} (${zone.district}, ${zone.state})` : `Zone ${a.zone_id}`;
           const isDelivered = (a as { delivery_status?: string }).delivery_status === "delivered";
 

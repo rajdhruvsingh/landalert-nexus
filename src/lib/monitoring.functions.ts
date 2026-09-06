@@ -602,25 +602,19 @@ export const getZonesGeoJsonServerFn = createServerFn({ method: "GET" }).handler
   return getZonesGeoJson();
 });
 
+export interface DispatchAlertInput {
+  zoneId: number;
+  language?: "en" | "bn" | "as" | "ne" | undefined;
+  channel?: "sms" | "push" | "both" | undefined;
+  idempotencyKey?: string | undefined;
+  justification?: string | undefined;
+  userToken?: string | undefined;
+}
+
 export const dispatchAlertServerFn = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      zoneId: number;
-      language?: "en" | "as" | "bn" | "ne";
-      channel?: "sms" | "push" | "both";
-      idempotencyKey?: string;
-      justification?: string;
-      userToken?: string;
-    }) => ({
-      zoneId: Number(data.zoneId),
-      language: data.language,
-      channel: data.channel,
-      idempotencyKey: data.idempotencyKey,
-      justification: data.justification,
-      userToken: data.userToken,
-    }),
-  )
-  .handler(async ({ data }) => {
+  .validator((data: DispatchAlertInput) => data)
+  .handler(async (ctx) => {
+    const data = ctx.data;
     const { getRiskPrediction } = await import("./ml.service");
     const { evaluateAndDispatchAlert } = await import("./alert.service");
     const { authenticateToken, verifyDispatcherAuthorization } = await import("./official-auth.service");
@@ -673,13 +667,16 @@ export const submitFieldObservationsServerFn = createServerFn({ method: "POST" }
     return syncFieldObservations(data.observations);
   });
 
+export interface RetractAlertInput {
+  alertId: number;
+  reason: string;
+  authToken?: string | undefined;
+}
+
 export const retractAlertServerFn = createServerFn({ method: "POST" })
-  .validator((data: { alertId: number; reason: string; authToken?: string }) => ({
-    alertId: Number(data.alertId),
-    reason: String(data.reason || "").trim(),
-    authToken: data.authToken,
-  }))
-  .handler(async ({ data }) => {
+  .validator((data: RetractAlertInput) => data)
+  .handler(async (ctx) => {
+    const data = ctx.data;
     const { getSessionProfile } = await import("./official-auth.service");
     const profile = await getSessionProfile(data.authToken);
 

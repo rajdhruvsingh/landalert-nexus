@@ -106,8 +106,8 @@ export function computeJobFingerprint(
  */
 export function checkCdseCredentials(): { configured: boolean; missing: string[] } {
   const missing: string[] = [];
-  if (!process.env.CDSE_USERNAME) missing.push("CDSE_USERNAME");
-  if (!process.env.CDSE_PASSWORD) missing.push("CDSE_PASSWORD");
+  if (!process.env["CDSE_USERNAME"]) missing.push("CDSE_USERNAME");
+  if (!process.env["CDSE_PASSWORD"]) missing.push("CDSE_PASSWORD");
   return {
     configured: missing.length === 0,
     missing,
@@ -184,7 +184,7 @@ export async function createInSarProcessingJob(
 
   // Try DB persistence
   try {
-    await supabaseAdmin.from("satellite_processing_jobs").insert({
+    await (supabaseAdmin.from("satellite_processing_jobs") as any).insert({
       id: newJob.id,
       job_type: newJob.job_type,
       cell_id: newJob.cell_id,
@@ -342,6 +342,15 @@ export function deriveTemporalTrend(points: InSarTimeseriesPoint[]): {
 
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
+  if (!first || !last) {
+    return {
+      trend: "INSUFFICIENT_DATA",
+      meanVelocityMmYear: null,
+      cumulativeDisplacementMm: null,
+      quality: "LOW",
+      coherenceMean: 0,
+    };
+  }
 
   const totalDays =
     (new Date(last.observation_date).getTime() - new Date(first.observation_date).getTime()) /
