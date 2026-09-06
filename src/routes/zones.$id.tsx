@@ -1,8 +1,10 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getUserAuthorizationState } from "@/lib/official-auth.service";
+import { scoreZonePrioritization } from "@/lib/prioritization.service";
+import { cn } from "@/lib/utils";
 import {
   Area,
   AreaChart,
@@ -54,6 +56,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+interface ExposureSummary {
+  zoneId: number;
+  villageCount: number;
+  estimatedPopulationExposed: number;
+  populationDataCompleteness: number;
+  villagesWithPopulationData: number;
+  infrastructureCount: number;
+  infrastructureByType: {
+    hospital: number;
+    clinic: number;
+    school: number;
+    bridge: number;
+    power: number;
+  };
+  nearestVillage: {
+    name: string;
+    distance_km: number;
+  } | null;
+  nearestInfrastructure: {
+    name: string;
+    type: string;
+    distance_km: number;
+  } | null;
+}
 
 const zoneQuery = (id: number) =>
   queryOptions({
@@ -109,6 +136,114 @@ function ZonePage() {
     queryKey: ["weather-forecast", Number(id)],
     queryFn: () => getZoneWeatherRiskForecastServerFn({ data: { zoneId: Number(id) } }),
   });
+
+  const {
+    data: exposureSummary,
+    isLoading: exposureLoading,
+    error: exposureError,
+  } = useQuery<ExposureSummary>({
+    queryKey: ["infrastructure-summary", Number(id)],
+    queryFn: async () => {
+      const res = await fetch(`/api/infrastructure/summary?zoneId=${Number(id)}`);
+      if (!res.ok) {
+        throw new Error(`Failed to load exposure summary (status ${res.status})`);
+      }
+      return res.json();
+    },
+  });
+
+  const authoritativeRiskLevel = mlPrediction?.risk_level ?? zone.current_risk_level;
+  const authoritativeRiskScore = mlPrediction?.risk_score ?? zone.risk_score;
+
+  const affectedRoadSegments = useMemo(() => {
+    return (data.roads ?? []).filter(
+      (r) => r.status === "blocked" || r.status === "restricted",
+    );
+  }, [data.roads]);
+
+  const blockedRoads = useMemo(() => {
+    return affectedRoadSegments.filter((r) => r.status === "blocked");
+  }, [affectedRoadSegments]);
+
+  const prioritizationResult = useMemo(() => {
+    return scoreZonePrioritization({
+      zoneId: zone.id,
+      zoneName: zone.zone_name,
+      district: zone.district,
+      state: zone.state,
+      currentRiskLevel: authoritativeRiskLevel,
+      population: zone.population,
+      roadSegments: (data.roads ?? []).map((r) => ({
+        id: r.id,
+        roadName: r.road_name,
+        segmentLabel: r.segment_label,
+        status: r.status,
+      })),
+      fieldObservations: (data.observations ?? []).map((o: any) => ({
+        id: o.id,
+        reviewStatus: o.review_status ?? undefined,
+        roadStatus: o.road_status ?? undefined,
+        visualSigns: o.visual_signs ?? undefined,
+        rainfallMm: o.rainfall_mm ?? undefined,
+      })),
+    });
+  }, [zone, authoritativeRiskLevel, data.roads, data.observations]);
+
+  const priorityTier = useMemo(() => {
+    if (!prioritizationResult) {
+      return {
+        label: "UNRANKED",
+        sublabel: "Awaiting Telemetry",
+        toneClass: "border-border text-muted-foreground bg-secondary/50",
+      };
+    }
+    const s = prioritizationResult.score;
+    if (s >= 70) {
+      return {
+        label: "CRITICAL",
+        sublabel: "Immediate Operational Urgency",
+        toneClass: "border-risk-severe/50 bg-risk-severe/15 text-risk-severe",
+      };
+    }
+    if (s >= 50) {
+      return {
+        label: "HIGH",
+        sublabel: "Elevated Response Priority",
+        toneClass: "border-risk-high/50 bg-risk-high/15 text-risk-high",
+      };
+    }
+    if (s >= 30) {
+      return {
+        label: "MODERATE",
+        sublabel: "Advisory Monitoring",
+        toneClass: "border-risk-moderate/50 bg-risk-moderate/15 text-risk-moderate",
+      };
+    }
+    return {
+      label: "LOW",
+      sublabel: "Routine Preparedness",
+      toneClass: "border-risk-low/50 bg-risk-low/15 text-risk-low",
+    };
+  }, [prioritizationResult]);
+
+  const recommendedAction = useMemo(() => {
+    if (authoritativeRiskLevel === "UNKNOWN") {
+      return "Telemetry unavailable: dispatch ground reconnaissance team for visual verification before issuing public advisories.";
+    }
+    if (authoritativeRiskLevel === "Severe" || authoritativeRiskLevel === "High") {
+      if (blockedRoads.length > 0) {
+        return `High slope hazard with confirmed road blockage (${blockedRoads.map((r) => r.road_name).join(", ")}). Avoid transit along compromised corridors and alert district control room.`;
+      }
+      return `${authoritativeRiskLevel.toUpperCase()} landslide risk in ${zone.zone_name}. Avoid slope-cut roads. Report cracks or slumping to your district control room.`;
+    }
+    if (authoritativeRiskLevel === "Moderate") {
+      return `Moderate hazard advisory for ${zone.zone_name}. Monitor hillside drainage and maintain vigilance along road corridors.`;
+    }
+    if (authoritativeRiskLevel === "Low") {
+      return `Baseline conditions in ${zone.zone_name}. Maintain standard telemetry monitoring.`;
+    }
+    return null;
+  }, [authoritativeRiskLevel, zone.zone_name, blockedRoads]);
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertLang, setAlertLang] = useState<"en" | "as" | "bn" | "ne">("en");
@@ -554,6 +689,264 @@ function ZonePage() {
             </div>
           </div>
         )}
+      </section>
+
+      {/* Community & Infrastructure Exposure and Operational Response Panel */}
+      <section id="zone-exposure-panel" className="mt-4 panel p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="label-caps">Community & Infrastructure Exposure</span>
+            <span className="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-mono text-[0.65rem] text-sky-400">
+              OSM & Ground Telemetry
+            </span>
+          </div>
+          <span className="text-[0.68rem] text-muted-foreground italic">
+            Decision support for district disaster officers
+          </span>
+        </div>
+
+        {exposureLoading ? (
+          <div className="py-6 text-center text-xs text-muted-foreground font-mono">
+            Loading community and infrastructure exposure data…
+          </div>
+        ) : exposureError ? (
+          <div className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-mono text-amber-300">
+            ⚠ Exposure summary unavailable: {exposureError instanceof Error ? exposureError.message : "Network error"}
+          </div>
+        ) : exposureSummary ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Card 1: Authoritative Risk Level & Zone Context */}
+            <div className="rounded border border-border/80 bg-card p-3 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground font-mono">
+                  Current Hazard Tier
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <RiskBadge
+                    level={authoritativeRiskLevel}
+                    score={authoritativeRiskScore}
+                  />
+                </div>
+                <div className="mt-3">
+                  <div className="font-display font-bold text-base text-foreground">
+                    {zone.zone_name}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {zone.district} • {zone.state}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-border/50 text-[0.7rem] text-muted-foreground font-mono">
+                Census zone population:{" "}
+                <span className="text-foreground font-semibold">
+                  {zone.population.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
+
+            {/* Card 2: Community Exposure */}
+            <div className="rounded border border-border/80 bg-card p-3 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-sky-400 font-mono">
+                  Community Exposure
+                </div>
+                <div className="mt-2 space-y-1">
+                  <div className="font-display text-2xl font-bold text-foreground">
+                    {exposureSummary.villageCount}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {exposureSummary.villageCount === 1 ? "village" : "villages"}
+                    </span>
+                  </div>
+                  <div className="text-sm font-semibold text-slate-200">
+                    {exposureSummary.populationDataCompleteness < 1 ? (
+                      <>
+                        <div>
+                          {exposureSummary.estimatedPopulationExposed.toLocaleString("en-IN")}{" "}
+                          <span className="font-normal text-xs text-muted-foreground">known population</span>
+                        </div>
+                        <div className="text-[0.7rem] text-muted-foreground font-normal mt-1 leading-snug">
+                          Population data:{" "}
+                          <span className="text-slate-300 font-mono">
+                            {exposureSummary.villagesWithPopulationData} / {exposureSummary.villageCount}
+                          </span>{" "}
+                          villages (
+                          <span className="text-sky-400 font-mono">
+                            {(exposureSummary.populationDataCompleteness * 100).toFixed(1)}%
+                          </span>
+                          )
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        {exposureSummary.estimatedPopulationExposed.toLocaleString("en-IN")}{" "}
+                        <span className="font-normal text-xs text-muted-foreground">total population</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-border/50 text-[0.68rem] text-muted-foreground">
+                Assigned within 20 km zone buffer
+              </div>
+            </div>
+
+            {/* Card 3: Critical Infrastructure & Nearest Assets */}
+            <div className="rounded border border-border/80 bg-card p-3 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-red-400 font-mono flex items-center justify-between">
+                  <span>Critical Infrastructure</span>
+                  <span className="font-mono text-[0.65rem] text-muted-foreground">
+                    {exposureSummary.infrastructureCount} total
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                  <div className="flex items-center gap-1.5 text-foreground">
+                    <span>🏥</span>
+                    <span>
+                      {exposureSummary.infrastructureByType.hospital}{" "}
+                      {exposureSummary.infrastructureByType.hospital === 1 ? "Hospital" : "Hospitals"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-foreground">
+                    <span>🩺</span>
+                    <span>
+                      {exposureSummary.infrastructureByType.clinic}{" "}
+                      {exposureSummary.infrastructureByType.clinic === 1 ? "Clinic" : "Clinics"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-foreground">
+                    <span>🏫</span>
+                    <span>
+                      {exposureSummary.infrastructureByType.school}{" "}
+                      {exposureSummary.infrastructureByType.school === 1 ? "School" : "Schools"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-foreground">
+                    <span>🌉</span>
+                    <span>
+                      {exposureSummary.infrastructureByType.bridge}{" "}
+                      {exposureSummary.infrastructureByType.bridge === 1 ? "Bridge" : "Bridges"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-foreground col-span-2">
+                    <span>⚡</span>
+                    <span>
+                      {exposureSummary.infrastructureByType.power} Power
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nearest Assets */}
+              {(exposureSummary.nearestVillage || exposureSummary.nearestInfrastructure) && (
+                <div className="mt-3 pt-2 border-t border-border/50 space-y-1 text-xs">
+                  <div className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                    Nearest Assets
+                  </div>
+                  {exposureSummary.nearestVillage && (
+                    <div className="flex items-baseline justify-between gap-1 text-[0.72rem]">
+                      <span className="text-muted-foreground truncate">
+                        Village: <span className="text-foreground font-medium">{exposureSummary.nearestVillage.name}</span>
+                      </span>
+                      <span className="font-mono text-[0.7rem] text-sky-400 shrink-0">
+                        {exposureSummary.nearestVillage.distance_km.toFixed(2)} km
+                      </span>
+                    </div>
+                  )}
+                  {exposureSummary.nearestInfrastructure && (
+                    <div className="flex items-baseline justify-between gap-1 text-[0.72rem]">
+                      <span className="text-muted-foreground truncate">
+                        {exposureSummary.nearestInfrastructure.type ? (
+                          <span className="capitalize">{exposureSummary.nearestInfrastructure.type}: </span>
+                        ) : "Facility: "}
+                        <span className="text-foreground font-medium">{exposureSummary.nearestInfrastructure.name}</span>
+                      </span>
+                      <span className="font-mono text-[0.7rem] text-amber-400 shrink-0">
+                        {exposureSummary.nearestInfrastructure.distance_km.toFixed(2)} km
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Card 4: Response Priority & Recommended Action */}
+            <div className="rounded border border-border/80 bg-card p-3 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-primary font-mono flex items-center justify-between">
+                  <span>Response Priority</span>
+                  {prioritizationResult && (
+                    <span className="font-mono text-[0.65rem] text-muted-foreground">
+                      Score: <span className="font-bold text-foreground">{prioritizationResult.score.toFixed(1)}</span>/100
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded border px-2 py-0.5 font-display text-xs font-bold uppercase tracking-wider",
+                        priorityTier.toneClass,
+                      )}
+                    >
+                      {priorityTier.label}
+                    </span>
+                    <span className="text-[0.7rem] text-muted-foreground">
+                      {priorityTier.sublabel}
+                    </span>
+                  </div>
+
+                  {/* Top Drivers from Authoritative Prioritization */}
+                  {prioritizationResult?.breakdown?.topContributingDrivers && (
+                    <div className="text-[0.68rem] text-muted-foreground font-mono space-y-0.5">
+                      {prioritizationResult.breakdown.topContributingDrivers.slice(0, 2).map((driver, idx) => (
+                        <div key={idx} className="flex items-start gap-1">
+                          <span className="text-primary mt-0.5">•</span>
+                          <span className="leading-tight">{driver}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Road Impact (only when backed by real road data) */}
+                  {affectedRoadSegments.length > 0 && (
+                    <div className="text-[0.7rem] font-mono pt-1.5 border-t border-border/50">
+                      <div className="text-muted-foreground">
+                        Affected road segments:{" "}
+                        <span className="font-bold text-foreground">
+                          {affectedRoadSegments.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {affectedRoadSegments.map((r) => (
+                          <span
+                            key={r.id}
+                            className="inline-flex items-center gap-1 text-[0.62rem] rounded bg-secondary/50 px-1 py-0.5 border border-border"
+                          >
+                            <span className="text-foreground font-medium">{r.road_name}</span>
+                            <RoadBadge status={r.status} />
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Recommended Action (grounded in existing alert template logic) */}
+              {recommendedAction && (
+                <div className="mt-3 pt-2 border-t border-border/50">
+                  <div className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                    Recommended Action
+                  </div>
+                  <p className="text-xs text-foreground/90 mt-0.5 leading-snug">
+                    {recommendedAction}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
