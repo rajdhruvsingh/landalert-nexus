@@ -37,6 +37,8 @@ import {
   executeJobPipeline,
   getTimeseriesForCell,
   deriveTemporalTrend,
+  getSatellitePipelineHealth,
+  checkCdseCredentials,
 } from "./insar-processor.service";
 import { processIMDTelemetry } from "./integrations/imd.adapter";
 import { processSensorTelemetry } from "./integrations/sensors.adapter";
@@ -898,7 +900,17 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       }, 200, cors);
     }
 
-    // 12e. Asynchronous InSAR Processing Jobs Status & Dispatch
+    // 12e. Satellite Pipeline Multi-Factor Health Check
+    if (pathname === "/api/satellite/health" && request.method === "GET") {
+      const health = getSatellitePipelineHealth();
+      return jsonResponse({
+        status: "success",
+        ...health,
+        timestamp: new Date().toISOString(),
+      }, 200, cors);
+    }
+
+    // 12f. Asynchronous InSAR Processing Jobs Status & Dispatch
     if (pathname === "/api/satellite/jobs") {
       if (request.method === "GET") {
         const jobId = url.searchParams.get("jobId");

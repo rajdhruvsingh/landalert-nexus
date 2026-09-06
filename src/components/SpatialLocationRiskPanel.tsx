@@ -50,6 +50,10 @@ export default function SpatialLocationRiskPanel({
     ? cellRisk?.provenance.satellite_status === "AVAILABLE"
     : locationRisk?.components.satellite_deformation.status === "AVAILABLE";
 
+  const isDeformProcessing = isCell
+    ? cellRisk?.provenance.satellite_status === "PROCESSING"
+    : locationRisk?.components.satellite_deformation.status === "PROCESSING";
+
   const deformVelocity = isCell
     ? cellRisk?.provenance.satellite_deformation?.los_velocity_mean_mm_year
     : locationRisk?.components.satellite_deformation.velocity_mm_year;
@@ -82,6 +86,12 @@ export default function SpatialLocationRiskPanel({
     ? t("spatial_risk.sar_decorrelation", "C-band phase decorrelation (dense canopy)")
     : deformReason === "PENDING_SAR_INTERFEROMETRIC_PROCESSING"
     ? t("spatial_risk.sar_processing_pending", "SAR interferometric processing pending")
+    : deformReason === "INSUFFICIENT_ACQUISITIONS"
+    ? t("spatial_risk.sar_insufficient_acq", "Insufficient Sentinel-1 acquisitions (< 3 epochs)")
+    : deformReason === "LOW_COHERENCE"
+    ? t("spatial_risk.sar_low_coherence", "Low mean interferometric coherence (< 0.40)")
+    : deformReason === "ORBIT_DATA_UNAVAILABLE"
+    ? t("spatial_risk.sar_orbit_unavailable", "Precise orbit ephemerides (POEORB) unavailable")
     : t("spatial_risk.sar_unconfigured", "No convergent orbit acquisition");
 
   const verifiedObs = isCell
@@ -241,14 +251,28 @@ export default function SpatialLocationRiskPanel({
               className={`text-[0.62rem] font-mono px-1.5 py-0.5 rounded font-bold ${
                 isDeformAvailable
                   ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
+                  : isDeformProcessing
+                  ? "bg-amber-500/15 text-amber-500 border border-amber-500/30 animate-pulse"
                   : "bg-muted text-muted-foreground border border-border"
               }`}
             >
-              {isDeformAvailable ? "AVAILABLE" : "UNAVAILABLE"}
+              {isDeformAvailable ? "AVAILABLE" : isDeformProcessing ? "PROCESSING" : "UNAVAILABLE"}
             </span>
           </div>
 
-          {isDeformAvailable ? (
+          {isDeformProcessing ? (
+            <div className="space-y-1.5 text-xs">
+              <div className="text-[0.72rem] font-medium text-amber-500">
+                {t("spatial_risk.sar_processing_active", "SAR Processing Active")}
+              </div>
+              <div className="text-[0.68rem] text-muted-foreground leading-snug">
+                Status: InSAR dedicated worker pipeline active.
+              </div>
+              <div className="text-[0.65rem] text-muted-foreground pt-0.5 border-t border-border/40">
+                Source: <span className="font-medium text-foreground">{deformSensor}</span>
+              </div>
+            </div>
+          ) : isDeformAvailable ? (
             <div className="space-y-1 text-xs">
               <div className="flex items-baseline gap-2">
                 <span className="text-base font-bold font-mono text-foreground">
