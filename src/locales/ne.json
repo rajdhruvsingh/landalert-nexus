@@ -412,7 +412,10 @@
     "subtitle": "उत्तर-पूर्वी क्षेत्रभरि वास्तविक समयको जोखिम मूल्याङ्कन",
     "filter_region": "उत्तर-पूर्वी भारत",
     "risk_level": "जोखिम स्तर",
-    "scale_km": "१०० किमी"
+    "scale_km": "१०० किमी",
+    "location_uninstrumented_notice": "स्थान: {{name}}, {{district}}, {{state}} — यस इलाकामा कुनै सक्रिय टेलिमेट्री स्टेशन छैन। क्षेत्रीय निगरानी सक्रिय छ।",
+    "uninstrumented_district_notice": "{{district}} मा कुनै सक्रिय टेलिमेट्री स्टेशन दर्ता गरिएको छैन। जिल्ला क्षेत्र क्षेत्रीय कभरेज अन्तर्गत निगरानी गरिन्छ।",
+    "view_all_state_districts": "{{state}} का सबै जिल्लाहरू हेर्नुहोस्"
   },
   "operational_tables": {
     "latest_alerts_title": "ताजा चेतावनीहरू",
@@ -546,9 +549,9 @@
     "client_recorded": "ग्राहक दर्ता:"
   },
   "map_panel.reset": "पुनर्स्थापित गर्नुहोस्",
-  "map_panel.uninstrumented_district_notice": "यस जिल्लामा कुनै सक्रिय स्टेशन छैन। क्षेत्रीय डेटा देखाइएको छ।",
-  "map_panel.view_all_state_districts": "राज्यका सबै जिल्लाहरू हेर्नुहोस्",
-  "map_panel.location_uninstrumented_notice": "यस स्थानमा सक्रिय टेलिमेट्री छैन। नजिकैको क्षेत्रीय अनुगमन देखाइएको छ।",
+  "map_panel.uninstrumented_district_notice": "{{district}} मा कुनै सक्रिय टेलिमेट्री स्टेशन दर्ता गरिएको छैन। जिल्ला क्षेत्र क्षेत्रीय कभरेज अन्तर्गत निगरानी गरिन्छ।",
+  "map_panel.view_all_state_districts": "{{state}} का सबै जिल्लाहरू हेर्नुहोस्",
+  "map_panel.location_uninstrumented_notice": "स्थान: {{name}}, {{district}}, {{state}} — यस इलाकामा कुनै सक्रिय टेलिमेट्री स्टेशन छैन। क्षेत्रीय निगरानी सक्रिय छ।",
   "dashboard.report_observation_for_zone": "स्थानका लागि अवलोकन पेश गर्नुहोस्",
   "dashboard.ml_risk": "ML जोखिम",
   "dashboard.residents": "बासिन्दा",

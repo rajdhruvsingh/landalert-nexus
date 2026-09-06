@@ -421,9 +421,9 @@
     "risk_level": "Kynja Jingma",
     "scale_km": "Khasi 100 km",
     "reset": "Pynbha Biang",
-    "uninstrumented_district_notice": "No active monitored telemetry stations registered in {{district}}. Distrik territory is monitored under regional coverage.",
-    "view_all_state_districts": "View All {{state}} Distriks",
-    "location_uninstrumented_notice": "Jaka: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Thainal situational coverage active."
+    "uninstrumented_district_notice": "Ym pat don kor peit ha {{district}}. Ka pyni ia ki jingtip jong ka thain baroh kawei.",
+    "view_all_state_districts": "Peit baroh ki distrik jong ka {{state}}",
+    "location_uninstrumented_notice": "Jaka: {{name}}, {{district}}, {{state}} — Ym don kor peit ha kane ka jaka. Pyni ki jinglap ba hajan eh."
   },
   "operational_tables": {
     "latest_alerts_title": "Ki Jingmaham ba Thymmai",
@@ -566,5 +566,8 @@
     "telemetry_active": "Telemetry Trei Kam",
     "regional_coverage": "Thainal Coverage",
     "locality": "Khasi Locality"
-  }
+  },
+  "map_panel.location_uninstrumented_notice": "Jaka: {{name}}, {{district}}, {{state}} — Ym don kor peit ha kane ka jaka. Pyni ki jinglap ba hajan eh.",
+  "map_panel.uninstrumented_district_notice": "Ym pat don kor peit ha {{district}}. Ka pyni ia ki jingtip jong ka thain baroh kawei.",
+  "map_panel.view_all_state_districts": "Peit baroh ki distrik jong ka {{state}}"
 }

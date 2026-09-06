@@ -412,7 +412,10 @@
     "subtitle": "উত্তর-পূর্ব অঞ্চলে রিয়েল-টাইম ঝুঁকি মূল্যায়ন",
     "filter_region": "উত্তর-পূর্ব ভারত",
     "risk_level": "ঝুঁকির মাত্রা",
-    "scale_km": "১০০ কিমি"
+    "scale_km": "১০০ কিমি",
+    "location_uninstrumented_notice": "অবস্থান: {{name}}, {{district}}, {{state}} — এই এলাকায় কোন সক্রিয় টেলিমেট্রি স্টেশন নেই। আঞ্চলিক পরিস্থিতিগত পর্যবেক্ষণ সক্রিয়।",
+    "uninstrumented_district_notice": "{{district}}-এ কোন সক্রিয় টেলিমেট্রি স্টেশন নিবন্ধিত নেই। জেলা অঞ্চল আঞ্চলিক কভারেজের অধীনে পর্যবেক্ষণ করা হয়।",
+    "view_all_state_districts": "{{state}}-এর সমস্ত জেলা দেখুন"
   },
   "operational_tables": {
     "latest_alerts_title": "সর্বশেষ সতর্কতা",
@@ -546,9 +549,9 @@
     "client_recorded": "ক্লায়েন্ট রেকর্ড:"
   },
   "map_panel.reset": "পুনরায় সেট করুন",
-  "map_panel.uninstrumented_district_notice": "এই জেলায় কোন সক্রিয় পর্যবেক্ষণ কেন্দ্র নেই। আঞ্চলিক তথ্য প্রদর্শিত হচ্ছে।",
-  "map_panel.view_all_state_districts": "রাজ্যের সমস্ত জেলা দেখুন",
-  "map_panel.location_uninstrumented_notice": "এই স্থানে সক্রিয় টেলিমেট্রি নেই। নিকটবর্তী আঞ্চলিক পর্যবেক্ষণ প্রদর্শিত হচ্ছে।",
+  "map_panel.uninstrumented_district_notice": "{{district}}-এ কোন সক্রিয় টেলিমেট্রি স্টেশন নিবন্ধিত নেই। জেলা অঞ্চল আঞ্চলিক কভারেজের অধীনে পর্যবেক্ষণ করা হয়।",
+  "map_panel.view_all_state_districts": "{{state}}-এর সমস্ত জেলা দেখুন",
+  "map_panel.location_uninstrumented_notice": "অবস্থান: {{name}}, {{district}}, {{state}} — এই এলাকায় কোন সক্রিয় টেলিমেট্রি স্টেশন নেই। আঞ্চলিক পরিস্থিতিগত পর্যবেক্ষণ সক্রিয়।",
   "dashboard.report_observation_for_zone": "স্থানের জন্য পর্যবেক্ষণ জমা দিন",
   "dashboard.ml_risk": "ML ঝুঁকি",
   "dashboard.residents": "বাসিন্দা",

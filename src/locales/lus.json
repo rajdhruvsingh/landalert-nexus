@@ -421,9 +421,9 @@
     "risk_level": "Hlauhawm Chen",
     "scale_km": "Mizo 100 km",
     "reset": "A tira dah let",
-    "uninstrumented_district_notice": "Mizo No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
-    "view_all_state_districts": "Mizo View All {{state}} Districts",
-    "location_uninstrumented_notice": "Hmun: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Bialal situational coverage active."
+    "uninstrumented_district_notice": "{{district}}-ah hian khawl dah a la ni lo. Bial chhung thil awm hmuh a ni.",
+    "view_all_state_districts": "{{state}} chhung district zawng zawng en rawh",
+    "location_uninstrumented_notice": "Hmun: {{name}}, {{district}}, {{state}} — He hmunah hian telemetry station a awm lo. Bial chhung thil awm hmuh a ni."
   },
   "operational_tables": {
     "latest_alerts_title": "Warning Tharlamte",
@@ -566,5 +566,8 @@
     "telemetry_active": "Telemetry Thawk Mek",
     "regional_coverage": "Bialal Coverage",
     "locality": "Mizo Locality"
-  }
+  },
+  "map_panel.location_uninstrumented_notice": "Hmun: {{name}}, {{district}}, {{state}} — He hmunah hian telemetry station a awm lo. Bial chhung thil awm hmuh a ni.",
+  "map_panel.uninstrumented_district_notice": "{{district}}-ah hian khawl dah a la ni lo. Bial chhung thil awm hmuh a ni.",
+  "map_panel.view_all_state_districts": "{{state}} chhung district zawng zawng en rawh"
 }

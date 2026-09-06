@@ -412,7 +412,10 @@
     "subtitle": "উত্তৰ-পূব অঞ্চলৰ বাস্তৱ-সময়ৰ বিপদাশংকা মূল্যায়ন",
     "filter_region": "উত্তৰ-পূব ভাৰত",
     "risk_level": "বিপদাশংকা স্তৰ",
-    "scale_km": "১০০ কিঃমিঃ"
+    "scale_km": "১০০ কিঃমিঃ",
+    "location_uninstrumented_notice": "স্থান: {{name}}, {{district}}, {{state}} — এই অঞ্চলত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন নাই। আঞ্চলিক নিৰীক্ষণ সক্ৰিয় হৈ আছে।",
+    "uninstrumented_district_notice": "{{district}}ত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন পঞ্জীয়ন হোৱা নাই। জিলা এলেকা আঞ্চলিক আৱৰণৰ অধীনত নিৰীক্ষণ কৰা হৈছে।",
+    "view_all_state_districts": "{{state}}ৰ সকলো জিলা চাওক"
   },
   "operational_tables": {
     "latest_alerts_title": "শেহতীয়া সতৰ্কবাৰ্তা",
@@ -546,9 +549,9 @@
     "client_recorded": "গ্ৰাহক লিপিবদ্ধ:"
   },
   "map_panel.reset": "পূৰ্বৰ অৱস্থালৈ",
-  "map_panel.uninstrumented_district_notice": "এই জিলাত কোনো সক্ৰিয় কেন্দ্ৰ স্থাপন কৰা হোৱা নাই। আঞ্চলিক তথ্য প্ৰদৰ্শন কৰা হৈছে।",
-  "map_panel.view_all_state_districts": "ৰাজ্যৰ সকলো জিলা চাওক",
-  "map_panel.location_uninstrumented_notice": "এই স্থানত কোনো সক্ৰিয় টেলিমেট্ৰি নাই। ওচৰৰ আঞ্চলিক নিৰীক্ষণ প্ৰদৰ্শন কৰা হৈছে।",
+  "map_panel.uninstrumented_district_notice": "{{district}}ত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন পঞ্জীয়ন হোৱা নাই। জিলা এলেকা আঞ্চলিক আৱৰণৰ অধীনত নিৰীক্ষণ কৰা হৈছে।",
+  "map_panel.view_all_state_districts": "{{state}}ৰ সকলো জিলা চাওক",
+  "map_panel.location_uninstrumented_notice": "স্থান: {{name}}, {{district}}, {{state}} — এই অঞ্চলত কোনো সক্ৰিয় টেলিমেট্ৰি ষ্টেচন নাই। আঞ্চলিক নিৰীক্ষণ সক্ৰিয় হৈ আছে।",
   "dashboard.report_observation_for_zone": "স্থানৰ বাবে পৰ্যবেক্ষণ জমা দিয়ক",
   "dashboard.ml_risk": "ML বিপদাশংকা",
   "dashboard.residents": "বাসিন্দা",

@@ -421,9 +421,9 @@
     "risk_level": "Kengani Gadang",
     "scale_km": "A·chik 100 km",
     "reset": "Skango gita donpilbo",
-    "uninstrumented_district_notice": "A·chik No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
-    "view_all_state_districts": "A·chik View All {{state}} Districts",
-    "location_uninstrumented_notice": "Biap: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Jolal situational coverage active."
+    "uninstrumented_district_notice": "{{district}}-o kol donga kuja. Jol gimikni obostako mesokenga.",
+    "view_all_state_districts": "{{state}}-ni gimik districtrangko nibo",
+    "location_uninstrumented_notice": "Biap: {{name}}, {{district}}, {{state}} — Ia biapo kol dongja. Sepangbatgipa biapni obostako mesokenga."
   },
   "operational_tables": {
     "latest_alerts_title": "Dalgipa Mikrakatanirang",
@@ -566,5 +566,8 @@
     "telemetry_active": "Telemetry Kam Ka·enga",
     "regional_coverage": "Jolal Coverage",
     "locality": "A·chik Locality"
-  }
+  },
+  "map_panel.location_uninstrumented_notice": "Biap: {{name}}, {{district}}, {{state}} — Ia biapo kol dongja. Sepangbatgipa biapni obostako mesokenga.",
+  "map_panel.uninstrumented_district_notice": "{{district}}-o kol donga kuja. Jol gimikni obostako mesokenga.",
+  "map_panel.view_all_state_districts": "{{state}}-ni gimik districtrangko nibo"
 }

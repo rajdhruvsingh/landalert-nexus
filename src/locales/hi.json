@@ -566,5 +566,8 @@
     "telemetry_active": "टेलीमेट्री सक्रिय",
     "regional_coverage": "क्षेत्रीय कवरेज",
     "locality": "इलाका"
-  }
+  },
+  "map_panel.location_uninstrumented_notice": "स्थान: {{name}}, {{district}}, {{state}} — इस इलाके में कोई सक्रिय टेलीमेट्री स्टेशन नहीं है। क्षेत्रीय स्थितिजन्य कवरेज सक्रिय है।",
+  "map_panel.uninstrumented_district_notice": "{{district}} में कोई सक्रिय टेलीमेट्री स्टेशन पंजीकृत नहीं है। जिला क्षेत्र क्षेत्रीय कवरेज के तहत मॉनिटर किया जाता है।",
+  "map_panel.view_all_state_districts": "{{state}} के सभी जिले देखें"
 }

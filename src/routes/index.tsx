@@ -101,7 +101,11 @@ function Dashboard() {
 
   const [customCenter, setCustomCenter] = useState<[number, number] | null>(null);
   const [customZoom, setCustomZoom] = useState<number | null>(null);
-  const [uninstrumentedLocationNotice, setUninstrumentedLocationNotice] = useState<string | null>(null);
+  const [uninstrumentedLocationNotice, setUninstrumentedLocationNotice] = useState<{
+    name: string;
+    district: string;
+    state: string;
+  } | null>(null);
 
   // Listen to header search query, modal trigger events, and URL hash scrolling
   useEffect(() => {
@@ -126,7 +130,11 @@ function Dashboard() {
           setSelectedId(item.zoneId);
           setUninstrumentedLocationNotice(null);
         } else if (item.type === "city" || item.type === "town" || item.type === "locality" || item.type === "district") {
-          setUninstrumentedLocationNotice(`${item.name} (${item.stateName})`);
+          setUninstrumentedLocationNotice({
+            name: item.name,
+            district: item.districtName || item.name,
+            state: item.stateName || "",
+          });
         }
       }
     };
@@ -184,7 +192,16 @@ function Dashboard() {
           }
           if (item.stateName) setStateFilter(item.stateName);
           if (item.districtName) setDistrictFilter(item.districtName);
-          if (item.zoneId) setSelectedId(item.zoneId);
+          if (item.zoneId) {
+            setSelectedId(item.zoneId);
+            setUninstrumentedLocationNotice(null);
+          } else if (item.type === "city" || item.type === "town" || item.type === "locality" || item.type === "district") {
+            setUninstrumentedLocationNotice({
+              name: item.name,
+              district: item.districtName || item.name,
+              state: item.stateName || "",
+            });
+          }
         } catch {}
       }
     };
@@ -469,7 +486,11 @@ function Dashboard() {
               {uninstrumentedLocationNotice && (
                 <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
                   <span>
-                    <strong>{uninstrumentedLocationNotice}:</strong> {t("map_panel.location_uninstrumented_notice", "This location has no direct slope telemetry station installed. Regional satellite and weather coverage active.")}
+                    {t("map_panel.location_uninstrumented_notice", "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active.", {
+                      name: uninstrumentedLocationNotice.name,
+                      district: uninstrumentedLocationNotice.district,
+                      state: uninstrumentedLocationNotice.state,
+                    })}
                   </span>
                   <button
                     type="button"
@@ -481,18 +502,22 @@ function Dashboard() {
                 </div>
               )}
 
-              {/* Notice for Districts without active monitored zones */}
-              {districtFilter !== "All" && filteredZones.length === 0 && (
+              {/* Notice for Districts without active monitored zones (only shown when not already covered by specific location notice) */}
+              {!uninstrumentedLocationNotice && districtFilter !== "All" && filteredZones.length === 0 && (
                 <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-sans text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
                   <span>
-                    {t("map_panel.uninstrumented_district_notice", `No active monitored telemetry stations registered in ${districtFilter}. District territory is monitored under regional coverage.`)}
+                    {t("map_panel.uninstrumented_district_notice", "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.", {
+                      district: districtFilter,
+                    })}
                   </span>
                   <button
                     type="button"
                     onClick={() => setDistrictFilter("All")}
                     className="text-[0.68rem] font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100"
                   >
-                    {t("map_panel.view_all_state_districts", `View All ${stateFilter} Districts`)}
+                    {t("map_panel.view_all_state_districts", "View All {{state}} Districts", {
+                      state: stateFilter,
+                    })}
                   </button>
                 </div>
               )}

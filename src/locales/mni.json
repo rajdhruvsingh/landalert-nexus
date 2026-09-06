@@ -423,7 +423,7 @@
     "reset": "রীসেৎ",
     "uninstrumented_district_notice": "{{district}} দা এক্তিব তেলিমেত্রি স্তেশন লৈতে। রিজনাল কভরেজনা য়েংশিল্লি।",
     "view_all_state_districts": "{{state}} গী জিলা পুম্নমক য়েংবা",
-    "location_uninstrumented_notice": "মফম: {{name}}, {{district}}, {{state}} — মফম অসিদা তোঙানবা স্তেশন লৈতে। রিজনাল মনিটরিং চৎথরি।"
+    "location_uninstrumented_notice": "মফম: {{name}}, {{district}}, {{state}} — মফম অসিদা তোঙানবা তেলিমেত্রি স্তেশন লৈতে। রিজনাল কভরেজনা য়েংশিল্লি।"
   },
   "operational_tables": {
     "latest_alerts_title": "হন্দক্কী পাওতাকশিং",
@@ -566,5 +566,8 @@
     "telemetry_active": "তেলিমেত্রি চৎনরিবা",
     "regional_coverage": "রিজনাল কভরেজ",
     "locality": "মফম"
-  }
+  },
+  "map_panel.location_uninstrumented_notice": "মফম: {{name}}, {{district}}, {{state}} — মফম অসিদা তোঙানবা তেলিমেত্রি স্তেশন লৈতে। রিজনাল কভরেজনা য়েংশিল্লি।",
+  "map_panel.uninstrumented_district_notice": "{{district}} দা এক্তিব তেলিমেত্রি স্তেশন লৈতে। রিজনাল কভরেজনা য়েংশিল্লি।",
+  "map_panel.view_all_state_districts": "{{state}} গী জিলা পুম্নমক য়েংবা"
 }

@@ -566,5 +566,8 @@
     "telemetry_active": "Telemetry Active",
     "regional_coverage": "Regional Coverage",
     "locality": "Locality"
-  }
+  },
+  "map_panel.location_uninstrumented_notice": "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active.",
+  "map_panel.uninstrumented_district_notice": "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
+  "map_panel.view_all_state_districts": "View All {{state}} Districts"
 }
