@@ -257,6 +257,38 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
     const covReq = new Request("http://localhost:3000/api/satellite/coverage", { method: "GET" });
     const covRes = await handleApiRequest(covReq);
     expect(covRes?.status).toBe(200);
+
+    // C. Deformation endpoint
+    const defReq = new Request("http://localhost:3000/api/satellite/deformation?cellId=cell-27.25-88.50", { method: "GET" });
+    const defRes = await handleApiRequest(defReq);
+    expect(defRes?.status).toBe(200);
+    const defJson = await defRes?.json();
+    expect(defJson.status).toBe("success");
+    expect(defJson.deformation).toBeDefined();
+
+    // D. Acquisitions endpoint
+    const acqReq = new Request("http://localhost:3000/api/satellite/acquisitions?lat=27.33&lng=88.61", { method: "GET" });
+    const acqRes = await handleApiRequest(acqReq);
+    expect(acqRes?.status).toBe(200);
+    const acqJson = await acqRes?.json();
+    expect(acqJson.status).toBe("success");
+    expect(acqJson.source).toContain("Copernicus");
+
+    // E. Jobs endpoint
+    const jobsReq = new Request("http://localhost:3000/api/satellite/jobs", { method: "GET" });
+    const jobsRes = await handleApiRequest(jobsReq);
+    expect(jobsRes?.status).toBe(200);
+    const jobsJson = await jobsRes?.json();
+    expect(jobsJson.status).toBe("success");
+    expect(jobsJson.active_workers).toBeGreaterThanOrEqual(1);
+
+    // F. Timeseries endpoint
+    const tsReq = new Request("http://localhost:3000/api/satellite/timeseries?cellId=cell-27.25-88.50", { method: "GET" });
+    const tsRes = await handleApiRequest(tsReq);
+    expect(tsRes?.status).toBe(200);
+    const tsJson = await tsRes?.json();
+    expect(tsJson.status).toBe("success");
+    expect(tsJson.unit).toBe("mm/year");
   });
 
   it("16. Unavailable State: reports honest technical reason when coverage is missing", () => {

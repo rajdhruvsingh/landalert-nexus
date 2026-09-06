@@ -30,6 +30,7 @@ class QualityController:
         valid_pixel_pct: float,
         temporal_baseline_days: int,
         is_dense_canopy: bool = False,
+        is_pair_based: bool = False,
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Validates whether an InSAR interferogram / displacement measurement meets scientific standards.
@@ -54,12 +55,17 @@ class QualityController:
             )
             return False, "UNAVAILABLE", "INSUFFICIENT_VALID_PIXELS"
 
-        # 4. Temporal baseline check
-        if temporal_baseline_days < MIN_TEMPORAL_BASELINE_DAYS:
+        # 4. Temporal baseline check (for annualized rates vs pair-based deformation)
+        if not is_pair_based and temporal_baseline_days < MIN_TEMPORAL_BASELINE_DAYS:
             logger.warning(
                 f"QC_REJECT: Temporal baseline {temporal_baseline_days} days insufficient for velocity rate."
             )
             return False, "LOW", "TEMPORAL_BASELINE_INSUFFICIENT"
+        elif is_pair_based and (temporal_baseline_days < 6 or temporal_baseline_days > 180):
+            logger.warning(
+                f"QC_REJECT: Temporal baseline {temporal_baseline_days} days outside single-pair window [6, 180] days."
+            )
+            return False, "LOW", "TEMPORAL_BASELINE_OUT_OF_RANGE"
 
         # Determine quality rating
         quality = "HIGH" if mean_coherence >= HIGH_COHERENCE_THRESHOLD else "MODERATE"

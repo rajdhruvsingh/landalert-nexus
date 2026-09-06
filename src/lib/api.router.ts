@@ -757,7 +757,40 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       const stateName = url.searchParams.get("state") || "";
 
       if (cellIdParam) {
-        const deformation = getCellDeformation(cellIdParam.trim());
+        let deformation = getCellDeformation(cellIdParam.trim());
+        try {
+          const { data: dbProd } = await supabaseAdmin
+            .from("insar_deformation_products")
+            .select("*")
+            .eq("cell_id", cellIdParam.trim())
+            .maybeSingle();
+          if (dbProd) {
+            deformation = {
+              ...deformation,
+              status: dbProd.status,
+              los_velocity_mean_mm_year: dbProd.los_velocity_mean_mm_year !== null ? parseFloat(dbProd.los_velocity_mean_mm_year) : null,
+              los_velocity_max_mm_year: dbProd.los_velocity_max_mm_year !== null ? parseFloat(dbProd.los_velocity_max_mm_year) : null,
+              cumulative_displacement_mm: dbProd.cumulative_displacement_mm !== null ? parseFloat(dbProd.cumulative_displacement_mm) : null,
+              coherence_mean: dbProd.coherence_mean !== null ? parseFloat(dbProd.coherence_mean) : null,
+              spatial_coverage_pct: dbProd.spatial_coverage_pct !== null ? parseFloat(dbProd.spatial_coverage_pct) : 0,
+              quality: dbProd.quality,
+              unavailable_reason: dbProd.unavailable_reason,
+              sensor: dbProd.sensor || "Sentinel-1 C-SAR",
+              orbit_pass: dbProd.orbit_pass,
+              temporal_baseline_days: dbProd.temporal_baseline_days,
+              temporal_trend: dbProd.temporal_trend || deformation.temporal_trend,
+              processing_pipeline: dbProd.processing_pipeline || deformation.processing_pipeline,
+              observation_period: dbProd.observation_start && dbProd.observation_end ? {
+                start_date: dbProd.observation_start,
+                end_date: dbProd.observation_end,
+              } : deformation.observation_period,
+              last_processed_at: dbProd.updated_at,
+            };
+          }
+        } catch {
+          // Offline fallback to in-memory registry
+        }
+
         return jsonResponse({
           status: "success",
           deformation,
@@ -776,6 +809,39 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           return errorResponse("Invalid lat/lng parameters", "INVALID_COORDINATES", 400, cors);
         }
         const cityDeform = getLocationDeformation(lat, lng, cityName || "Queried Location", districtName, stateName);
+        try {
+          const { data: dbProd } = await supabaseAdmin
+            .from("insar_deformation_products")
+            .select("*")
+            .eq("cell_id", cityDeform.associated_cell_id)
+            .maybeSingle();
+          if (dbProd) {
+            cityDeform.deformation = {
+              ...cityDeform.deformation,
+              status: dbProd.status,
+              los_velocity_mean_mm_year: dbProd.los_velocity_mean_mm_year !== null ? parseFloat(dbProd.los_velocity_mean_mm_year) : null,
+              los_velocity_max_mm_year: dbProd.los_velocity_max_mm_year !== null ? parseFloat(dbProd.los_velocity_max_mm_year) : null,
+              cumulative_displacement_mm: dbProd.cumulative_displacement_mm !== null ? parseFloat(dbProd.cumulative_displacement_mm) : null,
+              coherence_mean: dbProd.coherence_mean !== null ? parseFloat(dbProd.coherence_mean) : null,
+              spatial_coverage_pct: dbProd.spatial_coverage_pct !== null ? parseFloat(dbProd.spatial_coverage_pct) : 0,
+              quality: dbProd.quality,
+              unavailable_reason: dbProd.unavailable_reason,
+              sensor: dbProd.sensor || "Sentinel-1 C-SAR",
+              orbit_pass: dbProd.orbit_pass,
+              temporal_baseline_days: dbProd.temporal_baseline_days,
+              temporal_trend: dbProd.temporal_trend || cityDeform.deformation.temporal_trend,
+              processing_pipeline: dbProd.processing_pipeline || cityDeform.deformation.processing_pipeline,
+              observation_period: dbProd.observation_start && dbProd.observation_end ? {
+                start_date: dbProd.observation_start,
+                end_date: dbProd.observation_end,
+              } : cityDeform.deformation.observation_period,
+              last_processed_at: dbProd.updated_at,
+            };
+          }
+        } catch {
+          // Offline fallback
+        }
+
         return jsonResponse({
           status: "success",
           ...cityDeform,
@@ -799,6 +865,39 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
             found.districtName,
             found.stateName
           );
+          try {
+            const { data: dbProd } = await supabaseAdmin
+              .from("insar_deformation_products")
+              .select("*")
+              .eq("cell_id", cityDeform.associated_cell_id)
+              .maybeSingle();
+            if (dbProd) {
+              cityDeform.deformation = {
+                ...cityDeform.deformation,
+                status: dbProd.status,
+                los_velocity_mean_mm_year: dbProd.los_velocity_mean_mm_year !== null ? parseFloat(dbProd.los_velocity_mean_mm_year) : null,
+                los_velocity_max_mm_year: dbProd.los_velocity_max_mm_year !== null ? parseFloat(dbProd.los_velocity_max_mm_year) : null,
+                cumulative_displacement_mm: dbProd.cumulative_displacement_mm !== null ? parseFloat(dbProd.cumulative_displacement_mm) : null,
+                coherence_mean: dbProd.coherence_mean !== null ? parseFloat(dbProd.coherence_mean) : null,
+                spatial_coverage_pct: dbProd.spatial_coverage_pct !== null ? parseFloat(dbProd.spatial_coverage_pct) : 0,
+                quality: dbProd.quality,
+                unavailable_reason: dbProd.unavailable_reason,
+                sensor: dbProd.sensor || "Sentinel-1 C-SAR",
+                orbit_pass: dbProd.orbit_pass,
+                temporal_baseline_days: dbProd.temporal_baseline_days,
+                temporal_trend: dbProd.temporal_trend || cityDeform.deformation.temporal_trend,
+                processing_pipeline: dbProd.processing_pipeline || cityDeform.deformation.processing_pipeline,
+                observation_period: dbProd.observation_start && dbProd.observation_end ? {
+                  start_date: dbProd.observation_start,
+                  end_date: dbProd.observation_end,
+                } : cityDeform.deformation.observation_period,
+                last_processed_at: dbProd.updated_at,
+              };
+            }
+          } catch {
+            // Offline fallback
+          }
+
           return jsonResponse({
             status: "success",
             ...cityDeform,

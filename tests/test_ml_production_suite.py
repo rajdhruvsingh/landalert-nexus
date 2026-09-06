@@ -26,6 +26,7 @@ import math
 import pytest
 import numpy as np
 import pandas as pd
+import psycopg2
 
 from src.lib.ml.features import (
     FEATURE_SCHEMA_VERSION,

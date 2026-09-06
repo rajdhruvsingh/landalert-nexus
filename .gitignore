@@ -51,3 +51,5 @@ data/insar_cache/
 data/insar_workspace/
 insar_cache/
 insar_workspace/
+scratch/
+supabase/.temp/

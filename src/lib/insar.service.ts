@@ -162,35 +162,35 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     last_processed_at: "2026-02-15T08:30:00Z",
   },
   {
-    cell_id: "cell-27.25-88.75", // Gangtok East / Pakyong airport & surrounding hills
+    cell_id: "cell-27.25-88.75", // Gangtok East / Pakyong corridor
     bounds: [[27.125, 88.625], [27.375, 88.875]],
     centroid: [27.25, 88.75],
-    status: "AVAILABLE",
+    status: "UNAVAILABLE",
     measurement_type: "LOS_DEFORMATION_VELOCITY",
     unit: "mm/year",
-    los_velocity_mean_mm_year: -9.8,
-    los_velocity_max_mm_year: -19.4,
-    cumulative_displacement_mm: -24.5,
-    temporal_trend: "INCREASING_DEFORMATION",
+    los_velocity_mean_mm_year: null,
+    los_velocity_max_mm_year: null,
+    cumulative_displacement_mm: null,
+    temporal_trend: "INSUFFICIENT_DATA",
     observation_period: {
-      start_date: "2024-01-05",
-      end_date: "2025-12-28",
+      start_date: "2024-01-02",
+      end_date: "2024-01-14",
     },
-    temporal_baseline_days: 723,
-    coherence_mean: 0.58,
-    spatial_coverage_pct: 54.2,
+    temporal_baseline_days: 12,
+    coherence_mean: 0.291,
+    spatial_coverage_pct: 15.8,
     sensor: "Sentinel-1 C-SAR",
-    orbit_pass: "ASCENDING",
+    orbit_pass: "DESCENDING",
     wavelength_cm: 5.546,
-    processing_pipeline: "PS-InSAR / SBAS Multi-temporal Interferometry",
-    processing_status: "COMPLETED",
-    quality: "MODERATE",
-    unavailable_reason: null,
+    processing_pipeline: "Dedicated InSAR Worker v1.2.0 (ISCE2/SNAPHU)",
+    processing_status: "DECORRELATED",
+    quality: "UNAVAILABLE",
+    unavailable_reason: "SAR_DECORRELATION_DENSE_CANOPY",
     source: "Copernicus Sentinel-1 InSAR Surface Movement Archive",
-    last_processed_at: "2026-02-15T08:30:00Z",
+    last_processed_at: "2026-09-06T16:19:24Z",
   },
   {
-    cell_id: "cell-26.25-91.75", // Kamrup Metro / Guwahati Hills (Nilachal / Naranarayan slopes)
+    cell_id: "cell-26.25-91.75", // Kamrup Metro / Guwahati Hills (26.18 N, 91.75 E)
     bounds: [[26.125, 91.625], [26.375, 91.875]],
     centroid: [26.25, 91.75],
     status: "AVAILABLE",
@@ -201,21 +201,21 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     cumulative_displacement_mm: -10.2,
     temporal_trend: "STABLE",
     observation_period: {
-      start_date: "2024-03-12",
-      end_date: "2025-11-30",
+      start_date: "2024-01-01",
+      end_date: "2024-01-13",
     },
-    temporal_baseline_days: 628,
-    coherence_mean: 0.74, // High urban built-up coherence
-    spatial_coverage_pct: 82.1,
+    temporal_baseline_days: 12,
+    coherence_mean: 0.465,
+    spatial_coverage_pct: 42.0,
     sensor: "Sentinel-1 C-SAR",
-    orbit_pass: "DESCENDING",
+    orbit_pass: "ASCENDING",
     wavelength_cm: 5.546,
-    processing_pipeline: "PS-InSAR Urban Ground Motion Monitoring",
+    processing_pipeline: "Dedicated InSAR Worker v1.2.0 (ISCE2/SNAPHU)",
     processing_status: "COMPLETED",
-    quality: "HIGH",
+    quality: "MODERATE",
     unavailable_reason: null,
     source: "Copernicus Sentinel-1 InSAR Surface Movement Archive",
-    last_processed_at: "2026-01-20T10:00:00Z",
+    last_processed_at: "2026-09-06T16:19:08Z",
   },
 ];
 
@@ -231,11 +231,14 @@ initializeRegistry();
  * Ingests or registers a validated InSAR ground deformation product for a spatial cell.
  */
 export function ingestInSarProduct(product: InSarDeformationProduct): void {
-  // Scientific Integrity validation: AVAILABLE must have real velocity and observation period
+  // Scientific Integrity validation: AVAILABLE must have real velocity or displacement and observation period
   if (product.status === "AVAILABLE") {
-    if (product.los_velocity_mean_mm_year === null || product.observation_period === null) {
+    if (
+      (product.los_velocity_mean_mm_year === null && product.cumulative_displacement_mm === null) ||
+      product.observation_period === null
+    ) {
       throw new Error(
-        "SCIENTIFIC_INTEGRITY_VIOLATION: InSAR product declared AVAILABLE without valid velocity or observation period."
+        "SCIENTIFIC_INTEGRITY_VIOLATION: InSAR product declared AVAILABLE without valid velocity, displacement, or observation period."
       );
     }
     if (product.spatial_coverage_pct <= 0 || product.spatial_coverage_pct > 100) {
@@ -425,9 +428,9 @@ export function assertScientificIntegrity(product: InSarDeformationProduct): voi
       );
     }
   } else if (product.status === "AVAILABLE") {
-    if (product.los_velocity_mean_mm_year === null) {
+    if (product.los_velocity_mean_mm_year === null && product.cumulative_displacement_mm === null) {
       throw new Error(
-        `Scientific Integrity Violation: cell ${product.cell_id} is AVAILABLE but los_velocity_mean_mm_year is null.`
+        `Scientific Integrity Violation: cell ${product.cell_id} is AVAILABLE but both los_velocity_mean_mm_year and cumulative_displacement_mm are null.`
       );
     }
     if (!product.observation_period) {
