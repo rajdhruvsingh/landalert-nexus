@@ -23,6 +23,8 @@ export {
   type InstitutionalDomain,
   type AppUserRole,
   type OfficialVerificationStatus,
+  type UserProfileVerificationStatus,
+  USER_PROFILE_VERIFICATION_STATUSES,
   TRUSTED_INSTITUTIONAL_DOMAINS,
   evaluateEmailDomain,
   getUserAuthorizationState,
@@ -30,6 +32,7 @@ export {
 import {
   type AppUserRole,
   type OfficialVerificationStatus,
+  type UserProfileVerificationStatus,
   evaluateEmailDomain,
 } from "./auth-domains";
 
@@ -41,7 +44,12 @@ export interface UserProfileRecord {
   department?: string | null;
   designation?: string | null;
   role: AppUserRole;
-  verification_status: OfficialVerificationStatus;
+  /**
+   * Maps directly to user_profiles.verification_status column.
+   * Must be one of the four DB-valid values: UserProfileVerificationStatus.
+   * "OFFICIAL_VERIFIED" is a JWT metadata signal — never write it to the DB.
+   */
+  verification_status: UserProfileVerificationStatus;
   dispatch_authorized: boolean;
   verified_by?: string | null;
   verified_at?: string | null;
@@ -301,7 +309,7 @@ export async function updateOfficialVerification(
       ? "VERIFIED_OFFICIAL"
       : "PUBLIC_USER";
 
-  const newStatus: OfficialVerificationStatus = approval.verified ? "OFFICIAL_VERIFIED" : "REJECTED";
+  const newStatus: UserProfileVerificationStatus = approval.verified ? "VERIFIED" : "REJECTED";
 
   profile.role = newRole;
   profile.verification_status = newStatus;
@@ -344,12 +352,17 @@ export async function updateOfficialVerification(
 
 /**
  * Verifies or rejects a ground field observation (VERIFIED_OFFICIAL, DISPATCHER, or ADMIN only).
+ *
+ * NOTE: decision.status must be "VERIFIED" or "REJECTED" — these are the actual
+ * field_observations.status values defined in the DB CHECK constraint.
+ * "OFFICIAL_VERIFIED" is a user_profiles.verification_status value and must NOT
+ * be used here.
  */
 export async function verifyGroundObservation(
   officialProfile: UserProfileRecord,
   observationId: string,
   decision: {
-    status: "OFFICIAL_VERIFIED" | "REJECTED";
+    status: "VERIFIED" | "REJECTED";
     verificationNotes: string;
     isTrainingEligible?: boolean;
   },
@@ -360,16 +373,42 @@ export async function verifyGroundObservation(
     officialProfile.role === "ADMIN";
 
   if (!authorized) {
+    await logAuditEvent({
+      actorUserId: officialProfile.id,
+      actorEmail: officialProfile.email,
+      actorRole: officialProfile.role,
+      action: "OBSERVATION_REJECTED",
+      targetType: "field_observation",
+      targetId: observationId,
+      result: "FORBIDDEN",
+      reason: `Role ${officialProfile.role} not authorized to review observations.`,
+    });
     return {
       success: false,
       error: "Only verified government officials and dispatchers can verify observations.",
     };
   }
 
-  const isEligible = Boolean(decision.status === "OFFICIAL_VERIFIED" && decision.isTrainingEligible);
+  // 404 guard — verify the observation exists before attempting update
+  try {
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("field_observations")
+      .select("id")
+      .eq("id", observationId)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      return { success: false, error: `Observation ${observationId} not found.` };
+    }
+  } catch {
+    // If DB is unreachable, surface a clear error rather than silently failing
+    return { success: false, error: "Database unavailable. Please retry." };
+  }
+
+  const isEligible = Boolean(decision.status === "VERIFIED" && decision.isTrainingEligible);
 
   try {
-    await supabaseAdmin
+    const { error: updateError } = await supabaseAdmin
       .from("field_observations")
       .update({
         status: decision.status,
@@ -379,14 +418,20 @@ export async function verifyGroundObservation(
         is_training_eligible: isEligible,
       })
       .eq("id", observationId);
-  } catch {}
+
+    if (updateError) {
+      return { success: false, error: `Update failed: ${updateError.message}` };
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Update failed." };
+  }
 
   await logAuditEvent({
     actorUserId: officialProfile.id,
     actorEmail: officialProfile.email,
     actorRole: officialProfile.role,
     institution: officialProfile.institution ?? undefined,
-    action: decision.status === "OFFICIAL_VERIFIED" ? "OBSERVATION_VERIFIED" : "OBSERVATION_REJECTED",
+    action: decision.status === "VERIFIED" ? "OBSERVATION_VERIFIED" : "OBSERVATION_REJECTED",
     targetType: "field_observation",
     targetId: observationId,
     result: "SUCCESS",
@@ -418,7 +463,7 @@ export async function authenticateToken(authHeader?: string | null): Promise<Use
       id: isOfficial ? "test-official-uuid" : "test-anon-citizen-uuid",
       email: isOfficial ? "officer@gsi.gov.in" : "",
       role: isOfficial ? "VERIFIED_OFFICIAL" : "PUBLIC_USER",
-      verification_status: isOfficial ? "OFFICIAL_VERIFIED" : "UNVERIFIED",
+      verification_status: isOfficial ? "VERIFIED" : "UNVERIFIED",
       dispatch_authorized: false,
     };
   }

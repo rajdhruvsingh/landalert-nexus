@@ -559,6 +559,23 @@
     "footer_count": "{{count}} niatani mesokenga",
     "client_recorded": "Client-o record ka·aha:"
   },
+  "location": {
+    "card_title": "Na·simangni Dongenggipa Biap",
+    "live_detected": "A·ako Check Ka·aha",
+    "detecting": "Biapko sandienga aro a·a be·ani kengako am·sandienga…",
+    "locating": "Sandienga…",
+    "refresh": "Biapko gital ka·tainibo",
+    "refresh_title": "GPS biapko gital ka·tainibo",
+    "assessment_title": "A·a Be·ani Kengako Niani",
+    "no_explanation": "Ramram niani cholkheng. Da·ororo kenga dongja.",
+    "coverage_notice": "NER A·a Be·ani Mikrakatgipa Biap",
+    "view_on_map": "Map-o biapko nibo",
+    "outside_region_title": "Chingni nigipa a·dok a·kanni a·palo donga",
+    "outside_region_desc": "LandAlert-Nexus North Eastern Region-ni 15 a·bri biaprangko nienga.",
+    "enable_title": "Kengako nina biapko on ka·bo",
+    "enable_desc": "Skanggipa mikrakataniko man·na biapni gimin ge·etaniko on·bo.",
+    "retry": "Biapko On Ka·bo"
+  },
   "search": {
     "placeholder": "Sandibo zone, district, city or town...",
     "no_locations": "A·chik No locations found matching '{{query}}'",

@@ -40,6 +40,7 @@ export interface FieldObservationInput {
   geo_captured_at?: string | undefined;
   consent_given?: boolean | undefined;
   submitter_role?: string | undefined;
+  // Note: initial status is set server-side based on submitter_role.
   review_status?: ("PENDING_REVIEW" | "APPROVED" | "REJECTED") | undefined;
   retry_count?: number | undefined;
   queue_status?: ("PENDING" | "SYNCING" | "FAILED" | "SYNCHRONIZED") | undefined;
@@ -131,7 +132,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     road_status: "open" | "restricted" | "blocked" | "unknown" | null;
     observer_id: string;
     idempotency_key: string;
-    status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+    status: "SUBMITTED" | "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "ACTIONABLE";
     is_training_eligible: boolean;
     source: string;
     media_urls: string[];
@@ -141,7 +142,6 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     geo_accuracy_m: number | null;
     geo_captured_at: string | null;
     consent_given: boolean;
-    review_status: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
   }> = [];
 
   const acknowledgedKeys: string[] = [];
@@ -224,6 +224,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       observer_id: r.observer_id.trim(),
       idempotency_key: key,
       status,
+      review_status: (r as any).review_status ?? reviewStatus,
       is_training_eligible: Boolean(isOfficial),
       source,
       media_urls: r.media_urls ?? [],
@@ -233,7 +234,6 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       geo_accuracy_m: r.geo_accuracy_m ?? null,
       geo_captured_at: r.geo_captured_at ?? null,
       consent_given: r.consent_given ?? true,
-      review_status: reviewStatus,
     });
 
     acknowledgedKeys.push(key);

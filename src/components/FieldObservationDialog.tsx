@@ -23,9 +23,8 @@ import { submitFieldObservationsServerFn } from "@/lib/monitoring.functions";
 import type { FieldObservationInput } from "@/lib/sync.service";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserAuthorizationState } from "@/lib/auth-domains";
-import { Capacitor } from "@capacitor/core";
-import { Geolocation as CapGeolocation } from "@capacitor/geolocation";
 import { Camera as CapCamera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { useUserLocation } from "@/hooks/useUserLocation";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -213,78 +212,22 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   const [roadStatus, setRoadStatus] = useState<"open" | "restricted" | "blocked" | "unknown">("open");
   const [observerId, setObserverId] = useState<string>("citizen_observer");
 
-  // 3. Geolocation Capture (Capacitor Native with Web Fallback)
-  const [geoLat, setGeoLat] = useState<number | null>(null);
-  const [geoLng, setGeoLng] = useState<number | null>(null);
-  const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null);
-  const [geoCapturedAt, setGeoCapturedAt] = useState<string | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
+  // 3. Geolocation Capture (Shared useUserLocation Hook)
+  const {
+    lat: geoLat,
+    lng: geoLng,
+    accuracy: geoAccuracy,
+    capturedAt: geoCapturedAt,
+    statusText: gpsStatus,
+    requestLocation,
+  } = useUserLocation();
 
-  async function captureGps() {
-    setGpsStatus(t("field_observation.gps_acquiring", "Acquiring GPS location…"));
-
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const perm = await CapGeolocation.checkPermissions();
-        if (perm.location !== "granted") {
-          const req = await CapGeolocation.requestPermissions();
-          if (req.location !== "granted") {
-            setGpsStatus(t("field_observation.gps_denied", "GPS permission denied by user"));
-            return;
-          }
-        }
-        const pos = await CapGeolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 10000,
-        });
-        const lat = Number(pos.coords.latitude.toFixed(5));
-        const lng = Number(pos.coords.longitude.toFixed(5));
-        setGeoLat(lat);
-        setGeoLng(lng);
-        setGeoAccuracy(Number(pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : "5.0"));
-        setGeoCapturedAt(new Date(pos.timestamp).toISOString());
-        autoLocateFromGps(lat, lng);
-        setGpsStatus(
-          t("field_observation.gps_acquired_native", "GPS Acquired (Native): {{lat}}°N, {{lng}}°E (±{{acc}}m)", {
-            lat: pos.coords.latitude.toFixed(4),
-            lng: pos.coords.longitude.toFixed(4),
-            acc: Math.round(pos.coords.accuracy || 5),
-          }),
-        );
-        return;
-      } catch (err: any) {
-        console.warn("Native Geolocation failed, falling back to browser API:", err);
-      }
+  const captureGps = async () => {
+    const loc = await requestLocation({ force: true });
+    if (loc) {
+      autoLocateFromGps(loc.lat, loc.lng);
     }
-
-    // Web fallback
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsStatus(t("field_observation.gps_unsupported", "Browser geolocation not supported"));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = Number(pos.coords.latitude.toFixed(5));
-        const lng = Number(pos.coords.longitude.toFixed(5));
-        setGeoLat(lat);
-        setGeoLng(lng);
-        setGeoAccuracy(Number(pos.coords.accuracy.toFixed(1)));
-        setGeoCapturedAt(new Date(pos.timestamp).toISOString());
-        autoLocateFromGps(lat, lng);
-        setGpsStatus(
-          t("field_observation.gps_acquired_web", "GPS Acquired: {{lat}}°N, {{lng}}°E (±{{acc}}m)", {
-            lat: pos.coords.latitude.toFixed(4),
-            lng: pos.coords.longitude.toFixed(4),
-            acc: Math.round(pos.coords.accuracy),
-          }),
-        );
-      },
-      (err) => {
-        setGpsStatus(t("field_observation.gps_error", "GPS error: {{msg}}", { msg: err.message }));
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    );
-  }
+  };
 
   // Native Camera capture helper
   async function handleNativeCameraCapture() {

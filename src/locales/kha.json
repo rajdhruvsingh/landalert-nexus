@@ -559,6 +559,23 @@
     "footer_count": "Khasi Showing {{count}} ground observations",
     "client_recorded": "Khasi Client recorded:"
   },
+  "location": {
+    "card_title": "Ka Jaka Ba Phi Don",
+    "live_detected": "La Pynskhem Ia Ka Jaka",
+    "detecting": "Wad ia ka jaka bad bishar ia ka jingma na ka jingtwad-khyndew…",
+    "locating": "Wad jaka…",
+    "refresh": "Pynthymmai ia ka jaka",
+    "refresh_title": "Pynthymmai GPS jaka",
+    "assessment_title": "Jingbishar Jingma Jingtwad-khyndew",
+    "no_explanation": "Ka jingpeit bniah ka long kaba iai bteng. Ym pat don jingma ha kane ka por.",
+    "coverage_notice": "NER Landslide Early Warning Sector",
+    "view_on_map": "Peit ha ka map",
+    "outside_region_title": "Phi don shabar ka jaka ba ngi peit",
+    "outside_region_desc": "Ka LandAlert-Nexus ka peit ia ki 15 tylli ki jaka lum ha North Eastern Region.",
+    "enable_title": "Plie ia ka location ban iohi ia ka jingma",
+    "enable_desc": "Shah ban bishar ia ka jaka jong phi ban ioh jingmaham kloi.",
+    "retry": "Plie Location"
+  },
   "search": {
     "placeholder": "Wad zone, district, city or town...",
     "no_locations": "Khasi No locations found matching '{{query}}'",

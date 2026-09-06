@@ -753,7 +753,7 @@ function ZonePage() {
             <p className="text-sm text-muted-foreground py-2">{t("zone_detail.no_observations")}</p>
           )}
           {data.observations?.map((obs: any) => {
-            const isApproved = obs.review_status === "APPROVED" || obs.status === "OFFICIAL_VERIFIED";
+            const isApproved = obs.status === "VERIFIED" || obs.status === "ACTIONABLE";
             const isOfficialViewer = ["DISPATCHER", "ADMIN", "VERIFIED_OFFICIAL"].includes(viewerRole);
             const canViewMedia = isApproved || isOfficialViewer;
 

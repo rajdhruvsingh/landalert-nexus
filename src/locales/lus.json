@@ -559,6 +559,23 @@
     "footer_count": "Mizo Showing {{count}} ground observations",
     "client_recorded": "Mizo Client recorded:"
   },
+  "location": {
+    "card_title": "I Awmna Hmun",
+    "live_detected": "Bial Finfiah A Ni",
+    "detecting": "I awmna hmun zawn mek a ni a, leimin theih dinhmun enfiah mek a ni…",
+    "locating": "Zong mek…",
+    "refresh": "Awmna hmun tharlam rawh",
+    "refresh_title": "GPS awmna tharlam rawh",
+    "assessment_title": "Bial Leimin Theih Dinhmun",
+    "no_explanation": "Hmun pangngai vil mek a ni. Dinhmun hlauhawm a awm lo.",
+    "coverage_notice": "NER Leimin Vang Hlauhawm Hriattirna Bial",
+    "view_on_map": "Map-ah bial en rawh",
+    "outside_region_title": "Vil mek ramri pawnah i awm",
+    "outside_region_desc": "LandAlert-Nexus hian North Eastern Region-a tlangram hmun 15 a vil mek a ni.",
+    "enable_title": "I awmna dinhmun en turin location on rawh",
+    "enable_desc": "Leimin hlauhawm hriat theih nan location phalna pe rawh.",
+    "retry": "Location On Rawh"
+  },
   "search": {
     "placeholder": "Zawng Rawh zone, district, city or town...",
     "no_locations": "Mizo No locations found matching '{{query}}'",

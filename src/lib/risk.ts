@@ -107,3 +107,62 @@ export function zonePolygon(id: number, lat: number, lng: number): [number, numb
   }
   return points;
 }
+
+/**
+ * Determines whether a coordinate [lat, lng] falls inside a polygon [lat, lng][].
+ * Standard ray-casting algorithm (even-odd crossing rule) with zero external geospatial dependencies.
+ */
+export function isPointInPolygon(
+  point: [number, number],
+  polygon: [number, number][]
+): boolean {
+  if (!polygon || polygon.length < 3) return false;
+  const [lat, lng] = point;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [latI, lngI] = polygon[i]!;
+    const [latJ, lngJ] = polygon[j]!;
+
+    const intersect =
+      lngI > lng !== lngJ > lng &&
+      lat < ((latJ - latI) * (lng - lngI)) / (lngJ - lngI) + latI;
+
+    if (intersect) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+export interface ZoneLocationTarget {
+  id: number;
+  centroid_lat: number;
+  centroid_lng: number;
+  [key: string]: any;
+}
+
+/**
+ * Matches a user's [lat, lng] against candidate zones by testing membership
+ * in their deterministic boundary polygons. Returns the matching zone or null if outside all zones.
+ */
+export function findMatchingZone<T extends ZoneLocationTarget>(
+  lat: number,
+  lng: number,
+  zones: T[]
+): T | null {
+  for (const zone of zones) {
+    if (
+      typeof zone.centroid_lat !== "number" ||
+      typeof zone.centroid_lng !== "number"
+    ) {
+      continue;
+    }
+    const polygon = zonePolygon(zone.id, zone.centroid_lat, zone.centroid_lng);
+    if (isPointInPolygon([lat, lng], polygon)) {
+      return zone;
+    }
+  }
+  return null;
+}
