@@ -34,7 +34,7 @@ load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-REQUEST_DELAY_S = 0.6   # stay within Open-Meteo free-tier rate limits
+REQUEST_DELAY_S = 7.0   # Open-Meteo free tier: ~10 req/min; 7s keeps well within limit
 SOURCE_TAG = "Open-Meteo ERA5-Land historical archive (backfill)"
 
 # Saturation reference: 0.40 m3/m3 field capacity for tropical/subtropical
@@ -251,6 +251,7 @@ def main():
     parser.add_argument("--start-year", type=int, default=2016)
     parser.add_argument("--end-year",   type=int, default=date.today().year)
     parser.add_argument("--backfill-events", action="store_true", help="Backfill soil moisture specifically for historical positive events and pseudo-absences")
+    parser.add_argument("--start-zone",  type=int, default=1,    help="Skip zones with id < this value (default: 1 = process all)")
     args = parser.parse_args()
 
     conn = None
@@ -268,7 +269,8 @@ def main():
         return
 
     start_date = date(args.start_year, 1, 1)
-    end_date   = date(args.end_year, 12, 31)
+    # Open-Meteo archive rejects end_date beyond today — cap it.
+    end_date   = min(date(args.end_year, 12, 31), date.today())
 
     print(f"Open-Meteo Historical Backfill")
     print(f"  Fetch range:  {start_date} to {end_date}")
@@ -302,6 +304,9 @@ def main():
     total_rows = 0
     for _, z in zones.iterrows():
         zone_id = int(z["id"])
+        if zone_id < args.start_zone:
+            print(f"  zone {zone_id:2} {z['zone_name']:<30} — SKIPPED (already done)")
+            continue
         lat     = float(z["centroid_lat"])
         lng     = float(z["centroid_lng"])
         print(f"  zone {zone_id:2} {z['zone_name']:<30} ({lat},{lng}) ... ", end="", flush=True)

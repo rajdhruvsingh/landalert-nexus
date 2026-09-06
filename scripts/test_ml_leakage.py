@@ -100,158 +100,167 @@ def make_weather(zone_id, start_date, days, base_rain=10.0, sm=50.0):
     })
 
 
-print("=" * 60)
-print("ML LEAKAGE REGRESSION TESTS")
-print("=" * 60)
+def main():
+    global PASSED, FAILED
+    PASSED = 0
+    FAILED = 0
 
-# ─── TEST GROUP 1: Temporal leakage in rainfall features ─────────────────────
-print("\n[1] Temporal leakage — rainfall features must not use day T or later")
+    print("=" * 60)
+    print("ML LEAKAGE REGRESSION TESTS")
+    print("=" * 60)
 
-event_date = pd.Timestamp("2022-07-01")
-# Weather with a spike ON the event date (must be excluded)
-wx = make_weather(1, "2022-06-01", 31)
-wx.loc[wx['reading_date'] == event_date, 'rainfall_mm'] = 999.0  # spike on T
+    # ─── TEST GROUP 1: Temporal leakage in rainfall features ─────────────────────
+    print("\n[1] Temporal leakage — rainfall features must not use day T or later")
 
-feats = build_rainfall_features(1, event_date, wx, 43.26, -0.78, 200.0)
+    event_date = pd.Timestamp("2022-07-01")
+    # Weather with a spike ON the event date (must be excluded)
+    wx = make_weather(1, "2022-06-01", 31)
+    wx.loc[wx['reading_date'] == event_date, 'rainfall_mm'] = 999.0  # spike on T
 
-test("Event day (T) excluded from rain_1d",
-     feats is not None and feats['rain_1d'] < 100.0,
-     f"rain_1d={feats['rain_1d'] if feats else 'None'}")
+    feats = build_rainfall_features(1, event_date, wx, 43.26, -0.78, 200.0)
 
-test("Event day excluded from rain_3d",
-     feats is not None and feats['rain_3d'] < 100.0,
-     f"rain_3d={feats['rain_3d'] if feats else 'None'}")
+    test("Event day (T) excluded from rain_1d",
+         feats is not None and feats['rain_1d'] < 100.0,
+         f"rain_1d={feats['rain_1d'] if feats else 'None'}")
 
-test("Event day excluded from rain_intensity_max_1d",
-     feats is not None and feats['rain_intensity_max_1d'] < 100.0,
-     f"max={feats['rain_intensity_max_1d'] if feats else 'None'}")
+    test("Event day excluded from rain_3d",
+         feats is not None and feats['rain_3d'] < 100.0,
+         f"rain_3d={feats['rain_3d'] if feats else 'None'}")
 
-# Future weather after event date must also be excluded
-wx2 = make_weather(1, "2022-06-01", 60)
-wx2.loc[wx2['reading_date'] > event_date, 'rainfall_mm'] = 999.0  # future spike
-feats2 = build_rainfall_features(1, event_date, wx2, 43.26, -0.78, 200.0)
+    test("Event day excluded from rain_intensity_max_1d",
+         feats is not None and feats['rain_intensity_max_1d'] < 100.0,
+         f"max={feats['rain_intensity_max_1d'] if feats else 'None'}")
 
-test("Future days (T+1, T+2, ...) excluded from features",
-     feats2 is not None and feats2['rain_1d'] < 100.0,
-     f"rain_1d={feats2['rain_1d'] if feats2 else 'None'}")
+    # Future weather after event date must also be excluded
+    wx2 = make_weather(1, "2022-06-01", 60)
+    wx2.loc[wx2['reading_date'] > event_date, 'rainfall_mm'] = 999.0  # future spike
+    feats2 = build_rainfall_features(1, event_date, wx2, 43.26, -0.78, 200.0)
 
-# ─── TEST GROUP 2: Temporal leakage — soil moisture ──────────────────────────
-print("\n[2] Temporal leakage — soil moisture must not use day T or later")
+    test("Future days (T+1, T+2, ...) excluded from features",
+         feats2 is not None and feats2['rain_1d'] < 100.0,
+         f"rain_1d={feats2['rain_1d'] if feats2 else 'None'}")
 
-wx3 = make_weather(1, "2022-06-01", 31, sm=30.0)
-# Spike soil moisture on and after event date
-wx3.loc[wx3['reading_date'] >= event_date, 'soil_moisture_pct'] = 99.0
-soil = build_soil_features(1, event_date, wx3)
+    # ─── TEST GROUP 2: Temporal leakage — soil moisture ──────────────────────────
+    print("\n[2] Temporal leakage — soil moisture must not use day T or later")
 
-test("Soil moisture on T excluded (latest < 99)",
-     soil['soil_moisture_latest'] < 0.90,
-     f"latest={soil['soil_moisture_latest']:.3f}")
+    wx3 = make_weather(1, "2022-06-01", 31, sm=30.0)
+    # Spike soil moisture on and after event date
+    wx3.loc[wx3['reading_date'] >= event_date, 'soil_moisture_pct'] = 99.0
+    soil = build_soil_features(1, event_date, wx3)
 
-# ─── TEST GROUP 3: No data before event → returns None (not 0) ───────────────
-print("\n[3] No weather data before event → returns None (not fabricated zeros)")
+    test("Soil moisture on T excluded (latest < 99)",
+         soil['soil_moisture_latest'] < 0.90,
+         f"latest={soil['soil_moisture_latest']:.3f}")
 
-wx_after = make_weather(1, "2022-07-05", 10)  # all AFTER event
-feats_none = build_rainfall_features(1, event_date, wx_after, 43.26, -0.78, 200.0)
+    # ─── TEST GROUP 3: No data before event → returns None (not 0) ───────────────
+    print("\n[3] No weather data before event → returns None (not fabricated zeros)")
 
-test("Returns None when no weather before event date",
-     feats_none is None,
-     f"got: {feats_none}")
+    wx_after = make_weather(1, "2022-07-05", 10)  # all AFTER event
+    feats_none = build_rainfall_features(1, event_date, wx_after, 43.26, -0.78, 200.0)
 
-# ─── TEST GROUP 4: AWI decay correctness ─────────────────────────────────────
-print("\n[4] Antecedent wetness index — decay formula correctness")
+    test("Returns None when no weather before event date",
+         feats_none is None,
+         f"got: {feats_none}")
 
-# Build 30 days of weather where only day T-30 has rain (1mm)
-wx4 = make_weather(1, "2022-06-01", 30, base_rain=0.0)
-wx4.loc[wx4['reading_date'] == pd.Timestamp("2022-06-01"), 'rainfall_mm'] = 1.0  # 30 days ago
+    # ─── TEST GROUP 4: AWI decay correctness ─────────────────────────────────────
+    print("\n[4] Antecedent wetness index — decay formula correctness")
 
-feats4 = build_rainfall_features(1, event_date, wx4, 43.26, -0.78, 200.0)
-# AWI for 1mm at day_ago=29: 0.9^29 ≈ 0.0424
-expected_awi = 1.0 * (0.9 ** 29)
-test("AWI correctly decays a single old rain event",
-     feats4 is not None and abs(feats4['antecedent_wetness_index'] - expected_awi) < 0.01,
-     f"got={feats4['antecedent_wetness_index']:.4f}, expected={expected_awi:.4f}")
+    # Build 30 days of weather where only day T-30 has rain (1mm)
+    wx4 = make_weather(1, "2022-06-01", 30, base_rain=0.0)
+    wx4.loc[wx4['reading_date'] == pd.Timestamp("2022-06-01"), 'rainfall_mm'] = 1.0  # 30 days ago
 
-# ─── TEST GROUP 5: Feature list completeness ─────────────────────────────────
-print("\n[5] Feature list completeness — all 19 canonical features present")
+    feats4 = build_rainfall_features(1, event_date, wx4, 43.26, -0.78, 200.0)
+    # AWI for 1mm at day_ago=29: 0.9^29 ≈ 0.0424
+    expected_awi = 1.0 * (0.9 ** 29)
+    test("AWI correctly decays a single old rain event",
+         feats4 is not None and abs(feats4['antecedent_wetness_index'] - expected_awi) < 0.01,
+         f"got={feats4['antecedent_wetness_index']:.4f}, expected={expected_awi:.4f}")
 
-FEATURE_COLS = [
-    'rain_1d','rain_3d','rain_7d','rain_15d','rain_30d',
-    'rain_intensity_max_1d','antecedent_wetness_index','threshold_exceedance_flag',
-    'rain_3d_vs_e_thr',
-    'soil_moisture_latest','soil_moisture_7d_trend',
-    'slope_norm','slope_sin','slope_class',
-    'dist_to_nearest_event_km','historical_event_density',
-    'day_of_year_sin','day_of_year_cos','is_monsoon',
-]
-test("Feature list has exactly 19 features",
-     len(FEATURE_COLS) == 19,
-     f"count={len(FEATURE_COLS)}")
+    # ─── TEST GROUP 5: Feature list completeness ─────────────────────────────────
+    print("\n[5] Feature list completeness — all 19 canonical features present")
 
-# Verify rainfall features return all 9 rainfall-related columns
-wx5 = make_weather(1, "2022-06-01", 30)
-feats5 = build_rainfall_features(1, event_date, wx5, 43.26, -0.78, 200.0)
-rainfall_expected = {
-    'rain_1d','rain_3d','rain_7d','rain_15d','rain_30d',
-    'rain_intensity_max_1d','antecedent_wetness_index',
-    'threshold_exceedance_flag','rain_3d_vs_e_thr'
-}
-test("build_rainfall_features returns all 9 expected keys",
-     feats5 is not None and rainfall_expected.issubset(feats5.keys()),
-     f"keys={set(feats5.keys()) if feats5 else None}")
+    FEATURE_COLS = [
+        'rain_1d','rain_3d','rain_7d','rain_15d','rain_30d',
+        'rain_intensity_max_1d','antecedent_wetness_index','threshold_exceedance_flag',
+        'rain_3d_vs_e_thr',
+        'soil_moisture_latest','soil_moisture_7d_trend',
+        'slope_norm','slope_sin','slope_class',
+        'dist_to_nearest_event_km','historical_event_density',
+        'day_of_year_sin','day_of_year_cos','is_monsoon',
+    ]
+    test("Feature list has exactly 19 features",
+         len(FEATURE_COLS) == 19,
+         f"count={len(FEATURE_COLS)}")
 
-# ─── TEST GROUP 6: Threshold exceedance flag ──────────────────────────────────
-print("\n[6] Threshold exceedance flag — correct trigger/no-trigger boundary")
+    # Verify rainfall features return all 9 rainfall-related columns
+    wx5 = make_weather(1, "2022-06-01", 30)
+    feats5 = build_rainfall_features(1, event_date, wx5, 43.26, -0.78, 200.0)
+    rainfall_expected = {
+        'rain_1d','rain_3d','rain_7d','rain_15d','rain_30d',
+        'rain_intensity_max_1d','antecedent_wetness_index',
+        'threshold_exceedance_flag','rain_3d_vs_e_thr'
+    }
+    test("build_rainfall_features returns all 9 expected keys",
+         feats5 is not None and rainfall_expected.issubset(feats5.keys()),
+         f"keys={set(feats5.keys()) if feats5 else None}")
 
-# Zone with i_coef=43.26, i_exp=-0.78, threshold at 3d = 43.26*3^-0.78 ≈ 17.8 mm/day
-# So 3d rain / 3 > 17.8 triggers flag. Need 3d rain > 53.4mm.
-i_thr_3d = 43.26 * (3.0 ** -0.78)
+    # ─── TEST GROUP 6: Threshold exceedance flag ──────────────────────────────────
+    print("\n[6] Threshold exceedance flag — correct trigger/no-trigger boundary")
 
-# Below threshold: 10mm/day * 3 = 30mm < 53.4
-wx_lo = make_weather(1, "2022-06-01", 30, base_rain=10.0)
-feats_lo = build_rainfall_features(1, event_date, wx_lo, 43.26, -0.78, 200.0)
-test("Exceedance flag=0 below threshold",
-     feats_lo is not None and feats_lo['threshold_exceedance_flag'] == 0,
-     f"flag={feats_lo['threshold_exceedance_flag'] if feats_lo else 'None'}")
+    # Zone with i_coef=43.26, i_exp=-0.78, threshold at 3d = 43.26*3^-0.78 ≈ 17.8 mm/day
+    # So 3d rain / 3 > 17.8 triggers flag. Need 3d rain > 53.4mm.
+    i_thr_3d = 43.26 * (3.0 ** -0.78)  # noqa: F841 (used for documentation)
 
-# Above threshold: 20mm/day * 3 = 60mm > 53.4
-wx_hi = make_weather(1, "2022-06-01", 30, base_rain=20.0)
-feats_hi = build_rainfall_features(1, event_date, wx_hi, 43.26, -0.78, 200.0)
-test("Exceedance flag=1 above threshold",
-     feats_hi is not None and feats_hi['threshold_exceedance_flag'] == 1,
-     f"flag={feats_hi['threshold_exceedance_flag'] if feats_hi else 'None'}")
+    # Below threshold: 10mm/day * 3 = 30mm < 53.4
+    wx_lo = make_weather(1, "2022-06-01", 30, base_rain=10.0)
+    feats_lo = build_rainfall_features(1, event_date, wx_lo, 43.26, -0.78, 200.0)
+    test("Exceedance flag=0 below threshold",
+         feats_lo is not None and feats_lo['threshold_exceedance_flag'] == 0,
+         f"flag={feats_lo['threshold_exceedance_flag'] if feats_lo else 'None'}")
 
-# ─── TEST GROUP 7: Soil moisture fallback ─────────────────────────────────────
-print("\n[7] Soil moisture — fallback to neutral (0.5) when no data")
+    # Above threshold: 20mm/day * 3 = 60mm > 53.4
+    wx_hi = make_weather(1, "2022-06-01", 30, base_rain=20.0)
+    feats_hi = build_rainfall_features(1, event_date, wx_hi, 43.26, -0.78, 200.0)
+    test("Exceedance flag=1 above threshold",
+         feats_hi is not None and feats_hi['threshold_exceedance_flag'] == 1,
+         f"flag={feats_hi['threshold_exceedance_flag'] if feats_hi else 'None'}")
 
-wx_empty = pd.DataFrame(columns=['zone_id','reading_date','rainfall_mm','soil_moisture_pct'])
-soil_fb = build_soil_features(1, event_date, wx_empty)
-test("soil_moisture_latest fallback = 0.5",
-     abs(soil_fb['soil_moisture_latest'] - 0.5) < 0.001)
-test("soil_moisture_7d_trend fallback = 0.0",
-     abs(soil_fb['soil_moisture_7d_trend'] - 0.0) < 0.001)
+    # ─── TEST GROUP 7: Soil moisture fallback ─────────────────────────────────────
+    print("\n[7] Soil moisture — fallback to neutral (0.5) when no data")
 
-# ─── TEST GROUP 8: Haversine distance sanity checks ───────────────────────────
-print("\n[8] Haversine distance sanity checks")
+    wx_empty = pd.DataFrame(columns=['zone_id','reading_date','rainfall_mm','soil_moisture_pct'])
+    soil_fb = build_soil_features(1, event_date, wx_empty)
+    test("soil_moisture_latest fallback = 0.5",
+         abs(soil_fb['soil_moisture_latest'] - 0.5) < 0.001)
+    test("soil_moisture_7d_trend fallback = 0.0",
+         abs(soil_fb['soil_moisture_7d_trend'] - 0.0) < 0.001)
 
-# Distance from a point to itself
-test("Haversine(same point) = 0",
-     abs(haversine_km(25.0, 92.0, 25.0, 92.0)) < 0.001)
+    # ─── TEST GROUP 8: Haversine distance sanity checks ───────────────────────────
+    print("\n[8] Haversine distance sanity checks")
 
-# Approximate: 1° latitude ≈ 111km
-d1deg = haversine_km(25.0, 92.0, 26.0, 92.0)
-test("1° latitude ≈ 111km",
-     abs(d1deg - 111.0) < 5.0,
-     f"got={d1deg:.1f}km")
+    # Distance from a point to itself
+    test("Haversine(same point) = 0",
+         abs(haversine_km(25.0, 92.0, 25.0, 92.0)) < 0.001)
 
-# ─── SUMMARY ──────────────────────────────────────────────────────────────────
-print()
-print("=" * 60)
-print(f"Results: {PASSED} passed, {FAILED} failed")
-print("=" * 60)
+    # Approximate: 1° latitude ≈ 111km
+    d1deg = haversine_km(25.0, 92.0, 26.0, 92.0)
+    test("1° latitude ≈ 111km",
+         abs(d1deg - 111.0) < 5.0,
+         f"got={d1deg:.1f}km")
 
-if FAILED > 0:
-    print(f"\nFAILED: {FAILED} leakage regression test(s). Fix before training.")
-    sys.exit(1)
-else:
-    print("\nAll leakage regression tests passed.")
-    sys.exit(0)
+    # ─── SUMMARY ──────────────────────────────────────────────────────────────────
+    print()
+    print("=" * 60)
+    print(f"Results: {PASSED} passed, {FAILED} failed")
+    print("=" * 60)
+
+    if FAILED > 0:
+        print(f"\nFAILED: {FAILED} leakage regression test(s). Fix before training.")
+        sys.exit(1)
+    else:
+        print("\nAll leakage regression tests passed.")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

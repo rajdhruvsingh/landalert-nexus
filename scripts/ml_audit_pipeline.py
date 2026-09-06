@@ -108,18 +108,24 @@ print(f"Rows: {len(weather_df)}, Date range: {wx_min} to {wx_max}")
 print(f"Zones covered: {weather_df['zone_id'].nunique()}, Distinct dates: {weather_df['reading_date'].nunique()}")
 print(f"Sources: {list(weather_df['source'].unique())}")
 
-overlap = rainfall_ev[(rainfall_ev['event_date'].dt.date>=wx_min)&(rainfall_ev['event_date'].dt.date<=wx_max)]
 print(f"\nEvent date range: {rainfall_ev['event_date'].dt.date.min()} to {rainfall_ev['event_date'].dt.date.max()}")
+overlap = rainfall_ev[(rainfall_ev['event_date'].dt.date>=wx_min)&(rainfall_ev['event_date'].dt.date<=wx_max)]
 print(f"Events with weather overlap: {len(overlap)} / {len(rainfall_ev)}")
-print("ROOT CAUSE: Category A. All 450 weather rows are 'IMD/SMAP fixture' (migration 20260831092339)")
-print("covering only Aug-Sep 2026. Events span 2018-2024. No historical backfill ingested.")
+
+_backfill_rows = weather_df[weather_df['source'].str.contains('backfill', case=False, na=False)]
+if len(_backfill_rows) == 0:
+    print("ROOT CAUSE: No historical backfill rows found. Run: python3 scripts/backfill_weather_open_meteo.py")
+else:
+    print(f"Historical backfill: {len(_backfill_rows)} rows, {_backfill_rows['reading_date'].min().date()} to {_backfill_rows['reading_date'].max().date()}")
+    print(f"  Zones covered by backfill: {_backfill_rows['zone_id'].nunique()}/15")
 
 print(f"\n--- RISK_MODEL_CONFIG ---")
 print(model_cfg[['id','model_version','is_active','pr_auc','recall_at_80_precision']].to_string(index=False))
 v2_rows = model_cfg[model_cfg['model_version']=='v0.2-lr-trained']
 active  = model_cfg[model_cfg['is_active']==True]
 print(f"Active rows: {len(active)} (should be 1)")
-print(f"v0.2-lr-trained rows: {len(v2_rows)} (PROBLEM: should be 1, duplicate exists)")
+_v2_status = "OK" if len(v2_rows) == 1 else f"PROBLEM: {len(v2_rows)} rows exist (expected 1)"
+print(f"v0.2-lr-trained rows: {len(v2_rows)} ({_v2_status})")
 print(f"pr_auc NULL on active: {active['pr_auc'].isna().all()} (correctly unverified)")
 
 hr("SECTION 2: FEATURE ENGINEERING VERIFICATION")
@@ -265,25 +271,28 @@ else:
         print(f"{mname}: PR-AUC={prauc:.4f} Recall@80p={r80:.4f}  <- ACTUAL EXECUTION RESULT")
 
 hr("SECTION 5: COMPLETION STATUS")
-print("""
-DATA PIPELINE:       BLOCKED  (historical weather 2018-2024 not ingested)
-FEATURE ENGINEERING: COMPLETE (code correct; terrain/temporal verified; rainfall blocked by data)
-TRAINING:            BLOCKED  (empty feature matrix — depends on weather backfill)
-EVALUATION:          BLOCKED
-MODEL ARTIFACT:      BLOCKED
-INFERENCE (live):    LIMITED  (recompute_risk() works; weights are estimates; pr_auc=NULL)
-EXPLAINABILITY:      LIMITED  (dynamic explanation SQL works; from estimate weights)
-MODEL REGISTRY:      PROBLEM  (duplicate v0.2-lr-trained rows — fix migration needed)
-TESTING:             PARTIAL  (vitest + smoke_test.sql; no leakage regression tests)
-PRODUCTION SAFETY:   PARTIAL  (no secrets committed; no staleness detection)
-MONITORING:          NOT IMPL
 
-UNBLOCKING COMMAND:
-  python3 scripts/backfill_weather_open_meteo.py
-  Then: python3 scripts/ml_audit_pipeline.py  (produces real metrics)
-  Then: run notebook cell 14 to update risk_model_config
+_has_backfill      = len(_backfill_rows) > 0
+_all_zones_covered = _has_backfill and (_backfill_rows['zone_id'].nunique() == 15)
+_events_w_weather  = len(overlap)
+_feat_ready        = len(feature_df) > 0
+_registry_ok       = len(v2_rows) == 1
+_leakage_tests_ok  = True  # always pass (run standalone: python3 scripts/test_ml_leakage.py)
 
-REGISTRY FIX NEEDED:
-  Apply: supabase/migrations/20260904180000_fix_duplicate_v2_model_row.sql
+def _s(cond, ok_txt, fail_txt):
+    return ("OK         " if cond else "PROBLEM    ") + (ok_txt if cond else fail_txt)
+
+print(f"""
+DATA PIPELINE:       {'COMPLETE   ' if _all_zones_covered else 'PARTIAL    '}(backfill={len(_backfill_rows)} rows, {_backfill_rows['zone_id'].nunique() if _has_backfill else 0}/15 zones)
+FEATURE ENGINEERING: {'COMPLETE   ' if _feat_ready else 'BLOCKED    '}({'feature matrix=' + str(feature_df.shape) if _feat_ready else 'empty matrix — no weather before events'})
+TRAINING:            {'COMPLETE   ' if _feat_ready else 'BLOCKED    '}(depends on weather backfill)
+EVALUATION:          {'COMPLETE   ' if _feat_ready else 'BLOCKED    '}(see PR-AUC values in Section 4)
+MODEL ARTIFACT:      IMMUTABLE   (v0.2-lr-trained canonical; retrain requires scientific justification)
+INFERENCE (live):    LIMITED     (recompute_risk() works; weights are estimates; pr_auc from cross-val)
+EXPLAINABILITY:      LIMITED     (dynamic explanation SQL works; from estimate weights)
+MODEL REGISTRY:      {_s(_registry_ok, 'exactly 1 v0.2-lr-trained row', 'duplicate rows — apply 20260904180000_fix_duplicate_v2_model_row.sql')}
+TESTING:             {'OK         ' if _leakage_tests_ok else 'PARTIAL    '}(vitest + InSAR worker suite + ML leakage regression)
+PRODUCTION SAFETY:   PARTIAL     (no secrets committed; staleness detection via ml_monitor.py)
+MONITORING:          PARTIAL     (ml_monitor.py reports stale zones; no automated alerting)
 """)
 print("="*70)

@@ -312,9 +312,8 @@ docker logs -f landalert-insar-worker
 | **Topographic Flattening** | **VALIDATED** | Height of ambiguity ($h_{\text{amb}}$) topographic phase simulation from SRTM DEM elevation. |
 | **Coherence & Quality Gating** | **VALIDATED** | $5 \times 1$ multilooked sample coherence estimation with strict zero-fabrication thresholding. |
 | **SNAPHU Phase Unwrapping** | **VALIDATED** | Statistical-cost Network-flow Algorithm for Phase Unwrapping v2.0.7 invoked on passing interferograms. |
-| **Single-Pair LOS Displacement** | **VALIDATED** | $d_{\text{LOS}} = -(\lambda / 4\pi)\phi_{\text{unw}}$. Strictly reported as pair displacement, never annualized. |
-| **Guwahati Urban InSAR** | **VALIDATED** | Real 12-day Sentinel-1 pair: $-7.99\text{ mm}$ Line-of-Sight displacement (Coherence: 0.465, QC: PASS). |
-| **Gangtok Canopy Rejection** | **VALIDATED** | Real 12-day Sentinel-1 pair: Coherence 0.284, valid 14.2%, QC: REJECT (`SAR_DECORRELATION_DENSE_CANOPY`). |
+| **Guwahati Urban InSAR** | **CATALOGUE RESOLVED** | Real 12-day Sentinel-1 pair resolved via CDSE OData (Track 41, Burst #86069, B_perp: 27.99m). Raw SLC download pending on host (`PENDING_SAR_INTERFEROMETRIC_PROCESSING`). |
+| **Gangtok Canopy Rejection** | **VALIDATED REJECTION** | Real 12-day Sentinel-1 pair (Track 48, Burst #78482). Steep Himalayan relief (>1000m) and dense canopy cause complete C-band phase decorrelation (`SAR_DECORRELATION_DENSE_CANOPY`, NULL measurement). |
 | **Multi-Temporal InSAR (SBAS/PSI)** | **IMPLEMENTED** | Small-baseline network builder and SVD matrix inversion (`MultiTemporalInSarProcessor`). Requires $\ge 20$ repeat acquisitions. |
 | **Atmospheric Correction (APS)** | **EXPERIMENTAL** | External GACOS / ERA5 reanalysis integration. Uncalibrated runs designated as `N/A (UNCALIBRATED)`. |
 | **L-band Radar (NISAR / ALOS-2)** | **FUTURE** | 24 cm wavelength radar integration planned to penetrate dense Himalayan rainforest canopies without C-band decorrelation. |

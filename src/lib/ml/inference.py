@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import psycopg2
 
+warnings.filterwarnings("ignore", message="pandas only supports SQLAlchemy connectable.*")
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 from dotenv import load_dotenv
 
@@ -44,6 +45,7 @@ except (ImportError, ValueError):
 load_dotenv()
 _raw_db_url = os.getenv("DATABASE_URL")
 DATABASE_URL = _raw_db_url.strip() if _raw_db_url and _raw_db_url.strip() else None
+_is_production = os.getenv("NODE_ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
 
 class LandslideRiskInferenceEngine:
     def __init__(self, artifact_path: str = "models/v0.2-lr-trained.json"):
