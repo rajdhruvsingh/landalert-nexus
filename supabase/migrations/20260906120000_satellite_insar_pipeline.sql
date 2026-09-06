@@ -93,28 +93,39 @@ ALTER TABLE public.satellite_processing_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.insar_deformation_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.insar_displacement_timeseries ENABLE ROW LEVEL SECURITY;
 
--- Read policies (Public / Anonymous)
-CREATE POLICY "Allow public read on satellite_acquisitions"
-  ON public.satellite_acquisitions FOR SELECT USING (true);
+-- Permissions and RLS
+GRANT SELECT ON public.satellite_acquisitions TO anon, authenticated;
+GRANT ALL ON public.satellite_acquisitions TO service_role;
+GRANT SELECT ON public.satellite_processing_jobs TO anon, authenticated;
+GRANT ALL ON public.satellite_processing_jobs TO service_role;
+GRANT SELECT ON public.insar_deformation_products TO anon, authenticated;
+GRANT ALL ON public.insar_deformation_products TO service_role;
+GRANT SELECT ON public.insar_displacement_timeseries TO anon, authenticated;
+GRANT ALL ON public.insar_displacement_timeseries TO service_role;
 
-CREATE POLICY "Allow public read on satellite_processing_jobs"
-  ON public.satellite_processing_jobs FOR SELECT USING (true);
-
-CREATE POLICY "Allow public read on insar_deformation_products"
-  ON public.insar_deformation_products FOR SELECT USING (true);
-
-CREATE POLICY "Allow public read on insar_displacement_timeseries"
-  ON public.insar_displacement_timeseries FOR SELECT USING (true);
-
--- Insert/Update policies (Service role / Dispatcher / Admin)
-CREATE POLICY "Allow service_role full access on satellite_acquisitions"
-  ON public.satellite_acquisitions FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Allow service_role full access on satellite_processing_jobs"
-  ON public.satellite_processing_jobs FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Allow service_role full access on insar_deformation_products"
-  ON public.insar_deformation_products FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Allow service_role full access on insar_displacement_timeseries"
-  ON public.insar_displacement_timeseries FOR ALL USING (auth.role() = 'service_role');
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'satellite_acquisitions' AND policyname = 'Allow public read on satellite_acquisitions') THEN
+    CREATE POLICY "Allow public read on satellite_acquisitions" ON public.satellite_acquisitions FOR SELECT TO anon, authenticated USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'satellite_processing_jobs' AND policyname = 'Allow public read on satellite_processing_jobs') THEN
+    CREATE POLICY "Allow public read on satellite_processing_jobs" ON public.satellite_processing_jobs FOR SELECT TO anon, authenticated USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'insar_deformation_products' AND policyname = 'Allow public read on insar_deformation_products') THEN
+    CREATE POLICY "Allow public read on insar_deformation_products" ON public.insar_deformation_products FOR SELECT TO anon, authenticated USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'insar_displacement_timeseries' AND policyname = 'Allow public read on insar_displacement_timeseries') THEN
+    CREATE POLICY "Allow public read on insar_displacement_timeseries" ON public.insar_displacement_timeseries FOR SELECT TO anon, authenticated USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'satellite_acquisitions' AND policyname = 'Allow service_role full access on satellite_acquisitions') THEN
+    CREATE POLICY "Allow service_role full access on satellite_acquisitions" ON public.satellite_acquisitions FOR ALL TO service_role USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'satellite_processing_jobs' AND policyname = 'Allow service_role full access on satellite_processing_jobs') THEN
+    CREATE POLICY "Allow service_role full access on satellite_processing_jobs" ON public.satellite_processing_jobs FOR ALL TO service_role USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'insar_deformation_products' AND policyname = 'Allow service_role full access on insar_deformation_products') THEN
+    CREATE POLICY "Allow service_role full access on insar_deformation_products" ON public.insar_deformation_products FOR ALL TO service_role USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'insar_displacement_timeseries' AND policyname = 'Allow service_role full access on insar_displacement_timeseries') THEN
+    CREATE POLICY "Allow service_role full access on insar_displacement_timeseries" ON public.insar_displacement_timeseries FOR ALL TO service_role USING (true);
+  END IF;
+END $$;

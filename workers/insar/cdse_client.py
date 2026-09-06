@@ -100,46 +100,57 @@ class CdseClient:
     ) -> List[Dict[str, Any]]:
         """
         Searches Sentinel-1 IW SLC scenes covering bounding box [minLng, minLat, maxLng, maxLat].
+        Uses the official CDSE OData catalogue API.
         """
         min_lng, min_lat, max_lng, max_lat = bbox
-        body: Dict[str, Any] = {
-            "collections": ["SENTINEL-1"],
-            "bbox": [min_lng, min_lat, max_lng, max_lat],
-            "datetime": f"{start_date}T00:00:00Z/{end_date}T23:59:59Z",
-            "limit": limit,
-            "query": {
-                "sar:instrument_mode": {"eq": "IW"},
-                "sar:product_type": {"eq": "SLC"},
-            },
-        }
+        poly = f"POLYGON(({min_lng} {min_lat}, {max_lng} {min_lat}, {max_lng} {max_lat}, {min_lng} {max_lat}, {min_lng} {min_lat}))"
+
+        filters = [
+            "Collection/Name eq 'SENTINEL-1'",
+            f"OData.CSC.Intersects(area=geography'SRID=4326;{poly}')",
+            f"ContentDate/Start gt {start_date}T00:00:00.000Z",
+            f"ContentDate/Start lt {end_date}T23:59:59.000Z",
+            "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq 'SLC')",
+            "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq 'IW')",
+        ]
 
         if orbit_direction:
-            body["query"]["sat:orbit_state"] = {"eq": orbit_direction.lower()}
-        if relative_orbit:
-            body["query"]["sat:relative_orbit"] = {"eq": relative_orbit}
+            filters.append(
+                f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'orbitDirection' and att/OData.CSC.StringAttribute/Value eq '{orbit_direction.upper()}')"
+            )
+
+        params = {
+            "$filter": " and ".join(filters),
+            "$top": str(limit),
+            "$expand": "Attributes",
+            "$orderby": "ContentDate/Start desc",
+        }
 
         try:
-            resp = requests.post(CDSE_STAC_URL, json=body, timeout=30)
+            resp = requests.get(CDSE_ODATA_URL, params=params, timeout=30)
             if resp.status_code == 200:
-                features = resp.json().get("features", [])
+                items = resp.json().get("value", [])
                 records = []
-                for f in features:
-                    props = f.get("properties", {})
+                for item in items:
+                    attrs = {a.get("Name"): a.get("Value") for a in item.get("Attributes", [])}
                     records.append({
-                        "scene_id": f.get("id"),
-                        "satellite": props.get("platform", "Sentinel-1A"),
-                        "mode": props.get("sar:instrument_mode", "IW"),
-                        "product_type": props.get("sar:product_type", "SLC"),
-                        "orbit_direction": props.get("sat:orbit_state", "descending").upper(),
-                        "relative_orbit": props.get("sat:relative_orbit"),
-                        "sensing_start": props.get("datetime") or props.get("start_datetime"),
-                        "sensing_stop": props.get("end_datetime") or props.get("datetime"),
-                        "download_url": f.get("assets", {}).get("data", {}).get("href"),
-                        "footprint": f.get("geometry"),
+                        "scene_id": item.get("Name", "").replace(".SAFE", ""),
+                        "product_id": item.get("Id"),
+                        "satellite": "Sentinel-1A" if "S1A" in item.get("Name", "") else "Sentinel-1B" if "S1B" in item.get("Name", "") else "Sentinel-1",
+                        "mode": attrs.get("operationalMode", "IW"),
+                        "product_type": attrs.get("productType", "SLC"),
+                        "orbit_direction": attrs.get("orbitDirection", "").upper(),
+                        "relative_orbit": attrs.get("relativeOrbitNumber") or attrs.get("orbitNumber"),
+                        "sensing_start": item.get("ContentDate", {}).get("Start"),
+                        "sensing_stop": item.get("ContentDate", {}).get("End"),
+                        "download_url": f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products({item.get('Id')})/$value",
+                        "footprint": item.get("GeoFootprint"),
                     })
                 return records
+            else:
+                logger.warning(f"CDSE OData search returned HTTP {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            logger.warning(f"STAC search encountered error: {e}. Falling back to OData.")
+            logger.warning(f"OData search encountered error: {e}")
 
         return []
 
