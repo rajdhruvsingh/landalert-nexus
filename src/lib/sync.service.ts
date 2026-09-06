@@ -475,7 +475,7 @@ export async function getOfflinePackage(): Promise<OfflinePackage> {
     zones,
     roads,
     active_model: {
-      model_version: cfg?.model_version ?? "v0.2-lr-trained",
+      model_version: cfg?.model_version ?? "v0.4-lr-trained",
       feature_schema_version: cfg?.feature_schema_version ?? "v1.0.0",
       pr_auc: cfg?.pr_auc ?? null,
       recall_at_80_precision: cfg?.recall_at_80_precision ?? null,

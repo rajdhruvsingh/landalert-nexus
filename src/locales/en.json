@@ -594,6 +594,6 @@
     "sar_processing_pending": "SAR interferometric processing pending",
     "sar_unconfigured": "No convergent orbit acquisition",
     "scientific_integrity_no_fake": "Strict integrity policy: No synthetic or 0 mm/yr values substituted.",
-    "insar_option_a_notice": "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.2-lr-trained without uncalibrated weight injection."
+    "insar_option_a_notice": "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.4-lr-trained without uncalibrated weight injection."
   }
 }

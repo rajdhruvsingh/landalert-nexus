@@ -27,7 +27,7 @@
  * 21. Temporal leakage protection (t_obs <= t_event).
  * 22. Cross-city isolation (Gangtok vs Guwahati vs Dibrugarh).
  * 23. Cache isolation / test registry reset.
- * 24. Existing ML model remains unchanged (19 canonical features in v0.2-lr-trained).
+ * 24. Existing ML model remains unchanged (19 canonical features in v0.4-lr-trained).
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -68,7 +68,7 @@ import { deriveLocationSpatialRisk } from "./spatial-risk.service";
 import fs from "node:fs";
 import path from "node:path";
 
-const artifactPath = path.resolve(process.cwd(), "models/v0.2-lr-trained.json");
+const artifactPath = path.resolve(process.cwd(), "models/v0.4-lr-trained.json");
 const modelArtifact = JSON.parse(fs.readFileSync(artifactPath, "utf-8"));
 const CANONICAL_FEATURES = modelArtifact.feature_names as string[];
 
@@ -453,14 +453,14 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
     expect(products.find((p) => p.cell_id === "cell-test-valid")).toBeUndefined();
   });
 
-  it("24. Existing ML Model Immutability: active model v0.2-lr-trained retains 19 canonical features", () => {
+  it("24. Existing ML Model Immutability: active model v0.4-lr-trained retains 19 canonical features", () => {
     expect(CANONICAL_FEATURES.length).toBe(19);
     expect(CANONICAL_FEATURES).not.toContain("satellite_deformation");
     expect(CANONICAL_FEATURES).not.toContain("insar_velocity");
     expect(CANONICAL_FEATURES).not.toContain("sar_displacement");
 
     const locRisk = deriveLocationSpatialRisk("Gangtok", "city", "East Sikkim", "Sikkim", [27.33, 88.61]);
-    expect(locRisk.model_provenance?.active_ml_model).toBe("v0.2-lr-trained");
+    expect(locRisk.model_provenance?.active_ml_model).toBe("v0.4-lr-trained");
     expect(locRisk.model_provenance?.satellite_feature_integration).toBe("OPTION_A_INDEPENDENT_INDICATOR");
   });
 

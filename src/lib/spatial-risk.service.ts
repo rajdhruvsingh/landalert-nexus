@@ -12818,7 +12818,7 @@ export function deriveLocationSpatialRisk(
       model_version: "v0.3-spatial-surface",
       model_provenance: {
         model_version: "v0.3-spatial-surface",
-        active_ml_model: "v0.2-lr-trained",
+        active_ml_model: "v0.4-lr-trained",
         feature_schema_version: "v1.0.0",
         satellite_feature_integration: "OPTION_A_INDEPENDENT_INDICATOR",
         satellite_feature_version: "insar-v1.0-indep",
@@ -12882,7 +12882,7 @@ export function deriveLocationSpatialRisk(
     model_version: "v0.3-spatial-surface",
     model_provenance: {
       model_version: "v0.3-spatial-surface",
-      active_ml_model: "v0.2-lr-trained",
+      active_ml_model: "v0.4-lr-trained",
       feature_schema_version: "v1.0.0",
       satellite_feature_integration: "OPTION_A_INDEPENDENT_INDICATOR",
       satellite_feature_version: "insar-v1.0-indep",

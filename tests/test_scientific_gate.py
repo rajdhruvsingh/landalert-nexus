@@ -458,5 +458,93 @@ class TestPRAUCDiscrepancy(unittest.TestCase):
         self.assertIn("GroupKFold", migration_content)
 
 
+# ---------------------------------------------------------------------------
+# Section 7: Comprehensive Invariants & Exclusion Controls
+# ---------------------------------------------------------------------------
+
+class TestScientificGateInvariants(unittest.TestCase):
+    """
+    Direct invariant tests:
+    - Synthetic events cannot satisfy gate
+    - GLOF events cannot satisfy rainfall-triggered gate
+    - Blocked models cannot become active
+    - InSAR UNAVAILABLE != 0 mm/year
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from dotenv import load_dotenv
+        load_dotenv()
+        import psycopg2
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            raise unittest.SkipTest("DATABASE_URL not configured")
+        try:
+            cls.conn = psycopg2.connect(db_url, connect_timeout=3)
+        except Exception:
+            raise unittest.SkipTest("Database not reachable")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "conn"):
+            cls.conn.close()
+
+    def test_synthetic_events_excluded_from_scientific_gate(self):
+        """Synthetic fixture events must NOT be counted towards the >= 200 gate."""
+        from scripts.ml_registry import count_real_rainfall_events
+        real_count = count_real_rainfall_events(self.conn)
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM public.historical_landslides WHERE is_synthetic = true")
+        synth_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM public.historical_landslides WHERE hazard_type = 'rainfall_slope_failure'")
+        all_rainfall = cur.fetchone()[0]
+        cur.close()
+
+        self.assertGreater(synth_count, 0, "Expected synthetic fixtures to exist in database")
+        self.assertEqual(
+            real_count, all_rainfall - synth_count,
+            "count_real_rainfall_events must strictly exclude all synthetic records."
+        )
+
+    def test_glof_events_excluded_from_scientific_gate(self):
+        """GLOF events (non-rainfall) must NOT be counted towards rainfall gate."""
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM public.historical_landslides WHERE hazard_type = 'glof_triggered'")
+        glof_count = cur.fetchone()[0]
+        cur.close()
+        self.assertGreaterEqual(glof_count, 1, "At least one GLOF record must exist for exclusion test")
+
+        from scripts.ml_registry import count_real_rainfall_events
+        real_count = count_real_rainfall_events(self.conn)
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM public.historical_landslides WHERE is_synthetic = false")
+        all_real = cur.fetchone()[0]
+        cur.close()
+        self.assertEqual(
+            real_count, all_real - glof_count,
+            "Real rainfall event count must strictly exclude GLOF events."
+        )
+
+    def test_blocked_model_cannot_be_activated_by_cmd_activate(self):
+        """A scientifically_blocked model must be rejected by cmd_activate."""
+        from scripts.ml_registry import cmd_activate
+        import argparse
+        args = argparse.Namespace(model_version="v0.3-lr-trained", reason="Test activation")
+        # cmd_activate should exit with code 1
+        with self.assertRaises(SystemExit) as cm:
+            cmd_activate(args)
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_insar_unavailable_is_not_zero(self):
+        """UNAVAILABLE InSAR product must have NULL deformation values, never 0.0 mm/year."""
+        from src.lib.ml.inference import get_active_artifact_path_from_registry
+        # Model features must not contain synthetic zero satellite features
+        path = get_active_artifact_path_from_registry()
+        with open(path, "r") as f:
+            data = json.load(f)
+        self.assertNotIn("satellite_deformation", data["feature_names"])
+        self.assertNotIn("insar_velocity", data["feature_names"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

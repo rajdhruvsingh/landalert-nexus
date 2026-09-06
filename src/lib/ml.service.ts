@@ -209,7 +209,7 @@ export async function getDatabaseFallbackPrediction(zoneId: number): Promise<Ris
         // Use the actual model version from the latest DB prediction record if
         // available, falling back to the active registry model. This preserves
         // the true provenance of the cached prediction.
-        model_version: latestPred?.model_version ?? cfg?.model_version ?? "v0.2-lr-trained",
+        model_version: latestPred?.model_version ?? cfg?.model_version ?? "v0.4-lr-trained",
         feature_schema_version: cfg?.feature_schema_version ?? "v1.0.0",
         probability,
         risk_score: riskScore,
@@ -274,7 +274,7 @@ export async function getDatabaseFallbackPrediction(zoneId: number): Promise<Ris
     zone_name: zInfo.name,
     district: zInfo.district,
     state: zInfo.state,
-    model_version: "v0.2-lr-trained",
+    model_version: "v0.4-lr-trained",
     feature_schema_version: "v1.0.0",
     probability: null,
     risk_score: null,

@@ -150,7 +150,7 @@ export async function getSystemHealth(): Promise<SystemHealthReport> {
       .eq("is_active", true);
 
     let activeModelVersion: string | null = null;
-    let artifactRelPath = "models/v0.2-lr-trained.json";
+    let artifactRelPath = "models/v0.4-lr-trained.json";
 
     if (!mErr && activeModels && activeModels.length === 1) {
       activeModelVersion = activeModels[0]!.model_version;
@@ -160,12 +160,12 @@ export async function getSystemHealth(): Promise<SystemHealthReport> {
       report.components.model_registry.message = "Registry invariant satisfied (1 active model)";
     } else {
       // Fallback to local verified model artifact file
-      const localArtifactPath = path.resolve(process.cwd(), "models/v0.2-lr-trained.json");
+      const localArtifactPath = path.resolve(process.cwd(), "models/v0.4-lr-trained.json");
       if (fs.existsSync(localArtifactPath)) {
         try {
           const raw = fs.readFileSync(localArtifactPath, "utf-8");
           const parsed = JSON.parse(raw);
-          activeModelVersion = parsed.model_version ?? "v0.2-lr-trained";
+          activeModelVersion = parsed.model_version ?? "v0.4-lr-trained";
           report.components.model_registry.status = "healthy";
           report.components.model_registry.active_model_count = 1;
           report.components.model_registry.message =
@@ -228,7 +228,7 @@ export async function getMLHealth(): Promise<MLHealthReport> {
     // Graceful fallback to local model artifact
   }
 
-  const artifactRelPath = activeModelData?.artifact_path ?? "models/v0.2-lr-trained.json";
+  const artifactRelPath = activeModelData?.artifact_path ?? "models/v0.4-lr-trained.json";
   const artifactPath = path.resolve(process.cwd(), artifactRelPath);
   const artifactExists = fs.existsSync(artifactPath);
 
@@ -237,11 +237,11 @@ export async function getMLHealth(): Promise<MLHealthReport> {
       const raw = fs.readFileSync(artifactPath, "utf-8");
       const parsed = JSON.parse(raw);
       activeModelData = {
-        model_version: parsed.model_version ?? "v0.2-lr-trained",
+        model_version: parsed.model_version ?? "v0.4-lr-trained",
         feature_schema_version: parsed.feature_schema_version ?? "v1.0.0",
         dataset_fingerprint: parsed.dataset_fingerprint ?? null,
-        pr_auc: parsed.metrics?.pr_auc ?? 0.5934,
-        recall_at_80_precision: parsed.metrics?.recall_at_80_precision ?? 0.125,
+        pr_auc: parsed.metrics?.pr_auc ?? 0.6037,
+        recall_at_80_precision: parsed.metrics?.recall_at_80_precision ?? 0.0086,
         artifact_path: artifactRelPath,
       };
     } catch {
@@ -267,15 +267,15 @@ export async function getMLHealth(): Promise<MLHealthReport> {
 
   return {
     status: artifactExists ? "healthy" : "degraded",
-    active_model_version: activeModelData?.model_version ?? "v0.2-lr-trained",
+    active_model_version: activeModelData?.model_version ?? "v0.4-lr-trained",
     model_type: "LogisticRegression (L2-penalized, standard-scaled)",
     feature_schema_version: activeModelData?.feature_schema_version ?? "v1.0.0",
     dataset_fingerprint: activeModelData?.dataset_fingerprint ?? null,
-    pr_auc: activeModelData?.pr_auc ?? 0.5934,
-    recall_at_80_precision: activeModelData?.recall_at_80_precision ?? 0.125,
+    pr_auc: activeModelData?.pr_auc ?? 0.6037,
+    recall_at_80_precision: activeModelData?.recall_at_80_precision ?? 0.0086,
     artifact_path: artifactRelPath,
     artifact_verified: artifactExists,
-    scientific_status: "DATA LIMITED (N=8 real NER landslides) — OPERATIONAL RISK MAPPING",
+    scientific_status: "DATA LIMITED (N=549 real NER landslides >= 200 threshold) — OPERATIONAL RISK MAPPING",
     monitored_zones: totalZones,
     soil_moisture_telemetry: {
       measured_zones: measured,

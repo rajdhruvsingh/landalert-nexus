@@ -16,10 +16,10 @@
  *    - InSAR Ground Deformation (Sentinel-1 Interferometry): Millimetric phase-derived displacement/velocity.
  *
  * 3. ML MODEL INTEGRATION (OPTION A — INDEPENDENT INDICATOR):
- *    - Production ML model (v0.2-lr-trained, schema v1.0.0) was trained on 19 canonical hydrometeorological
+ *    - Production ML model (v0.4-lr-trained, schema v1.0.0) was trained on 19 canonical hydrometeorological
  *      and topographic features without satellite deformation.
  *    - InSAR deformation is exposed as an INDEPENDENT observational risk indicator.
- *    - We strictly avoid injecting an uncalibrated deformation feature into v0.2-lr-trained weights.
+ *    - We strictly avoid injecting an uncalibrated deformation feature into v0.4-lr-trained weights.
  *
  * 4. CANONICAL SAR PROCESSING PIPELINE:
  *    SAR acquisition (Copernicus Sentinel-1 C-SAR / NISAR L-SAR)
@@ -32,7 +32,7 @@
  *    → Geocoding (SAR Doppler range-Doppler projection to WGS84)
  *    → Displacement & Velocity Estimation (PS-InSAR / SBAS time series)
  *    → Spatial Grid Aggregation (Zonal statistics over cell bounds)
- *    → Risk Engine (Option A: Independent indicator alongside v0.2-lr-trained)
+ *    → Risk Engine (Option A: Independent indicator alongside v0.4-lr-trained)
  */
 
 import { haversineDistanceKm } from "./geography";
@@ -374,12 +374,12 @@ export function getLocationDeformation(
     risk_engine_integration: {
       mode: "OPTION_A_INDEPENDENT_INDICATOR",
       incorporated_in_ml_weights: false,
-      ml_model_version: "v0.2-lr-trained",
+      ml_model_version: "v0.4-lr-trained",
       ml_feature_schema_version: "v1.0.0",
       satellite_feature_version: "insar-v1.0-indep",
       inference_date: new Date().toISOString(),
       rationale:
-        "Production ML model v0.2-lr-trained was trained on 19 canonical hydrometeorological and topographic features without satellite deformation. Deformation is reported independently to preserve statistical calibration integrity.",
+        "Production ML model v0.4-lr-trained was trained on 19 canonical hydrometeorological and topographic features without satellite deformation. Deformation is reported independently to preserve statistical calibration integrity.",
     },
   };
 }

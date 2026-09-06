@@ -360,7 +360,7 @@ export default function SpatialLocationRiskPanel({
           </p>
 
           <p className="text-[0.66rem] leading-relaxed text-muted-foreground/90 pt-0.5">
-            {t("spatial_risk.insar_option_a_notice", "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.2-lr-trained without uncalibrated weight injection.")}
+            {t("spatial_risk.insar_option_a_notice", "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.4-lr-trained without uncalibrated weight injection.")}
           </p>
 
           {!isCell && locationRisk && (
