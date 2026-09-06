@@ -21,7 +21,7 @@ InSAR provides millimeter-scale measurement of slope creep, subsidence, and pre-
 1. **No Synthetic Ground Deformation**: Under no circumstance does LandAlert-Nexus generate, simulate, or output synthetic deformation values.
 2. **No Fake Zero Fallbacks**: Cells lacking valid interferometric processing or coherence do **not** report `0.0 mm/year` as a substitute for missing data.
 3. **Explicit Technical Justifications**: Missing or unprocessable areas report `status: "UNAVAILABLE"` along with explicit scientific reasons (`SAR_DECORRELATION_DENSE_CANOPY`, `PENDING_SAR_INTERFEROMETRIC_PROCESSING`, `INSUFFICIENT_ACQUISITIONS`, `LOW_COHERENCE`, `ORBIT_DATA_UNAVAILABLE`).
-4. **Machine Learning Model Isolation (Option A)**: The production ML model (`v0.2-lr-trained`, 19 canonical features) remains untouched. Deformation is treated strictly as an independent observational indicator.
+4. **Machine Learning Model Isolation (Option A)**: The production ML model (`v0.2-lr-trained`, 19 canonical features) remains untouched. Satellite deformation is strictly treated as an independent observational evidence layer.
 
 ---
 
@@ -145,21 +145,130 @@ Jobs transition through 14 explicit, verifiable stages:
 
 ---
 
-## 5. Copernicus CDSE Setup & Authentication
+## 5. Precise Deployment & Operations Guide
 
-### Environment Variables
-Configure the following secrets in the worker environment (e.g. Docker environment or cloud secret manager):
+### A. CDSE Account Setup
+1. Register for a free Copernicus Data Space Ecosystem account at [https://dataspace.copernicus.eu](https://dataspace.copernicus.eu).
+2. Verify email and accept the ESA Copernicus terms of service.
+3. Validate login against the CDSE portal.
+
+### B. CDSE Credentials Configuration
+Store credentials securely in the worker environment:
 ```bash
-CDSE_USERNAME="your-copernicus-email@domain.com"
-CDSE_PASSWORD="your-copernicus-password"
-SUPABASE_URL="https://your-project.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+CDSE_USERNAME="your-registered-email@domain.com"
+CDSE_PASSWORD="your-secure-password"
+```
+Never commit credentials to git. The `.gitignore` enforces exclusion of all `.env` files.
+
+### C. External Worker Provisioning Options
+Deploy the dedicated worker container on any cloud compute provider:
+- **AWS EC2**: `c6i.2xlarge` or `r6i.xlarge` (8 vCPU, 16–32 GB RAM, 100 GB gp3 SSD).
+- **AWS Batch / ECS**: Fargate or EC2 compute environment with 16 GB task memory.
+- **GCP Compute Engine**: `c2-standard-4` or `n2-standard-4` (16 GB RAM, 100 GB Persistent Disk SSD).
+- **GCP Cloud Run / Batch**: Batch task definition with 16 GB memory reservation.
+- **Self-hosted Kubernetes**: Worker DaemonSet or KEDA-scaled Deployment with persistent volume claim (PVC).
+
+### D. Minimum Hardware Requirements
+- **RAM**: Minimum 16 GB (recommended 32 GB for multi-swath processing).
+- **Storage**: Minimum 100 GB SSD scratch disk. (Pre-flight audit enforces $\ge 30\text{ GB}$ free before download).
+- **CPU**: 4+ vCPU cores.
+
+### E. Docker Deployment
+Build the container image:
+```bash
+docker build -t landalert-insar-worker -f workers/insar/Dockerfile.insar .
+```
+Run using Docker Compose:
+```bash
+docker compose -f docker-compose.worker.yml up -d
 ```
 
-### Authentication Flow
-1. Worker issues POST to `https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token` with `client_id=cdse-public`.
-2. Receives short-lived JWT access token; refreshes automatically when expiring within 60s.
-3. Authenticates streaming requests to OData download endpoints with `Authorization: Bearer <token>`.
+### F. Environment Variables Manifest
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `CDSE_USERNAME` | Yes | Copernicus CDSE email |
+| `CDSE_PASSWORD` | Yes | Copernicus CDSE password |
+| `SUPABASE_URL` | Yes | Supabase REST endpoint |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role secret |
+| `SATELLITE_STORAGE_PATH` | No | Cache path (default: `/data/insar_cache`) |
+| `MIN_DISK_FREE_GB` | No | Minimum free disk required (default: `30.0`) |
+
+### G. Storage Management & Cost Control
+- **Temporary Scratch Volume**: Raw `.SAFE.zip` scenes (8–16 GB per pair) and unwrapped matrix files are stored in `/data/insar_workspace` during processing.
+- **Automatic Cleanup**: Upon job completion or permanent failure, `storage.cleanup_job_scratch(job_id)` purges raw archives, keeping container disk usage constant.
+- **Persistent Products**: Geocoded deformation GeoTIFFs, mean velocity rasters, and metadata are archived in `/data/insar_cache/products` or uploaded to object storage.
+- **Cost Scaling**: The worker can be started on-demand when jobs are queued in Supabase (`QUEUED` count > 0) and stopped/scaled to zero when the queue is drained.
+
+### H. Supabase Database Setup
+Ensure migrations are applied:
+1. `supabase/migrations/20260906120000_satellite_insar_pipeline.sql`
+2. `supabase/migrations/20260906130000_insar_worker_pipeline.sql`
+
+### I. Worker Startup & Self-Test
+Verify that all binaries, storage headroom, and configurations are intact:
+```bash
+python3 workers/insar/worker.py --self-test
+```
+Example JSON output:
+```json
+{
+  "worker_id": "insar-worker-node-1",
+  "pipeline_version": "v1.2.0-isce2-snaphu",
+  "checks": {
+    "snaphu_installed": true,
+    "gdal_installed": true,
+    "storage_headroom": {
+      "path": "/data/insar_workspace",
+      "free_gb": 82.4,
+      "required_gb": 30.0,
+      "sufficient": true
+    },
+    "cdse_configured": true,
+    "supabase_configured": true
+  },
+  "all_passed": true,
+  "operational_readiness": "OPERATIONAL"
+}
+```
+
+### J. Health Verification
+The REST API exposes:
+`GET /api/satellite/health`
+Returns:
+- `service_status`: `SERVICE_AVAILABLE`
+- `satellite_data_status`: `SATELLITE_DATA_AVAILABLE` (or `PENDING_CONFIGURATION`)
+- `worker_architecture`: `ASYNCHRONOUS_DEDICATED_WORKER`
+- `cdse_auth`: `{ configured: boolean, missing: string[] }`
+
+### K. Triggering the First Real InSAR Job
+Dispatch job via API:
+```bash
+curl -X POST https://landalert-nexus.onrender.com/api/satellite/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"cellId": "cell-27.25-88.50"}'
+```
+Returns HTTP `202 Accepted` with `jobId`.
+
+### L. Monitoring & Observability
+Poll job status:
+```bash
+curl "https://landalert-nexus.onrender.com/api/satellite/jobs?jobId=<JOB_ID>"
+```
+Observe worker logs:
+```bash
+docker logs -f landalert-insar-worker
+```
+
+### M. Troubleshooting & Failure Recovery
+- `INVALID_CREDENTIALS`: Verify `CDSE_USERNAME` and `CDSE_PASSWORD` on the CDSE portal.
+- `INSUFFICIENT_PROCESSING_STORAGE`: Expand worker persistent disk to $\ge 100\text{ GB}$.
+- `LOW_COHERENCE`: Expected over dense subtropical rainforest; cell marked `UNAVAILABLE` with `LOW_COHERENCE` or `SAR_DECORRELATION_DENSE_CANOPY`.
+- `TRANSIENT_NETWORK_TIMEOUT`: Handled automatically by exponential backoff retry.
+
+### N. Security Audit
+- No credentials or tokens are printed in worker logs.
+- Worker runs under unprivileged non-root user `insarworker` (`UID 1001`).
+- All `.SAFE` and intermediate rasters are excluded in `.gitignore`.
 
 ---
 
@@ -175,16 +284,18 @@ SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 
 ---
 
-## 7. Operational Status Matrix
+## 7. Machine Learning Isolation & Scientific Claims Policy
 
-| Component | Status | Notes |
-| :--- | :--- | :--- |
-| **Application API Routes** | **IMPLEMENTED** | All `/api/satellite/*` endpoints live and tested. |
-| **Database Migrations** | **IMPLEMENTED** | Schema supporting 14 states, fingerprints, timeseries, products. |
-| **Frontend UI (RiskPanel & Map)** | **IMPLEMENTED** | Honest `UNAVAILABLE`, `PROCESSING`, and `AVAILABLE` rendering. |
-| **Automated Tests** | **IMPLEMENTED** | 24 Section 28 tests passing cleanly in Vitest. |
-| **Dedicated Worker Code** | **IMPLEMENTED** | Python daemon, CDSE client, orbit client, pipeline wrapper, QC. |
-| **Container Specification** | **IMPLEMENTED** | `Dockerfile.insar` & `docker-compose.worker.yml` ready. |
-| **CDSE Credentials** | **CONFIGURATION REQUIRED** | Requires setting `CDSE_USERNAME` and `CDSE_PASSWORD` on worker. |
-| **Worker Hardware Instance** | **EXTERNAL INFRASTRUCTURE REQUIRED** | Requires deploying worker container on 16GB+ RAM / 100GB+ SSD node. |
-| **Live Dynamic InSAR Run** | **NOT YET VALIDATED** | Pending configuration of CDSE secrets on external worker instance. |
+- **Model Isolation**: Production logistic regression model `v0.2-lr-trained` retains its canonical 19-feature vector (`slope_degrees`, `rainfall_7d_mm`, etc.). Model weights are **not modified**.
+- **Observational Indicator**: Satellite ground deformation velocity ($\text{mm/year}$) and displacement ($\text{mm}$) are exposed as an **independent geological observation** alongside the heuristic risk score.
+- **Scientific Claims**:
+  - We do **not** claim "InSAR improves model accuracy" until historical validation across confirmed landslide catalogs is performed.
+  - We do **not** claim "real-time deformation"; measurements represent multi-temporal interferometric velocity across Sentinel-1 revisit cycles (6–12 days).
+  - All deformation measurements are explicitly designated as **LOS (Line-Of-Sight) deformation**, never uncalibrated vertical displacement.
+- **Future ML Feature Interfaces**:
+  - `insar_los_velocity`
+  - `insar_cumulative_displacement`
+  - `insar_trend`
+  - `insar_coherence`
+  - `insar_valid_coverage`
+  - `insar_observation_age`

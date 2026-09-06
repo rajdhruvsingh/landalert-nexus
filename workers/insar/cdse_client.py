@@ -67,18 +67,27 @@ class CdseClient:
 
         try:
             resp = requests.post(CDSE_TOKEN_URL, data=payload, timeout=20)
-            if resp.status_code != 200:
+            if resp.status_code == 401:
+                raise RuntimeError("INVALID_CREDENTIALS: Username or password rejected by Copernicus CDSE.")
+            elif resp.status_code == 403:
+                raise RuntimeError("AUTHENTICATION_FAILED: CDSE account not authorized or terms not accepted.")
+            elif resp.status_code >= 500:
+                raise RuntimeError(f"CDSE_UNAVAILABLE: CDSE identity service returned status {resp.status_code}.")
+            elif resp.status_code != 200:
                 raise RuntimeError(
-                    f"CDSE_AUTH_FAILED: Authentication failed with status {resp.status_code}: {resp.text}"
+                    f"AUTHENTICATION_FAILED: Failed to acquire CDSE token (HTTP {resp.status_code})"
                 )
+
             token_data = resp.json()
             self.access_token = token_data["access_token"]
             expires_in = token_data.get("expires_in", 3600)
             self.token_expiry = time.time() + expires_in
-            logger.info("Successfully refreshed CDSE OAuth2 access token.")
+            logger.info("Successfully acquired/refreshed CDSE OAuth2 access token (expiring in %ds).", expires_in)
             return self.access_token
+        except requests.Timeout:
+            raise RuntimeError("CDSE_UNAVAILABLE: Request to CDSE token endpoint timed out.")
         except requests.RequestException as e:
-            raise RuntimeError(f"CDSE_AUTH_NETWORK_ERROR: Failed to reach CDSE token endpoint: {e}")
+            raise RuntimeError(f"CDSE_UNAVAILABLE: Network failure reaching CDSE token endpoint: {e}")
 
     def search_acquisitions(
         self,
@@ -210,7 +219,7 @@ class CdseClient:
         with requests.get(download_url, headers=headers, stream=True, timeout=60) as resp:
             if resp.status_code != 200:
                 raise RuntimeError(
-                    f"CDSE_DOWNLOAD_ERROR: Download failed for {scene_id} with HTTP {resp.status_code}: {resp.text[:200]}"
+                    f"PRODUCT_DOWNLOAD_FAILED: Download failed for scene {scene_id} with HTTP status {resp.status_code}."
                 )
 
             hasher = hashlib.sha256()

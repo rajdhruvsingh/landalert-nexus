@@ -72,10 +72,15 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY workers/insar/ .
 RUN chown -R insarworker:insarworker /app
 
+# Strict build-time validation: Build will FAIL immediately if SNAPHU, GDAL, or core libraries are missing
+RUN snaphu -h > /dev/null 2>&1 \
+    && gdalinfo --version > /dev/null 2>&1 \
+    && python3 -c "import requests, numpy, scipy; print('Build validation passed.')"
+
 USER insarworker
 
-# Healthcheck to verify worker is running and binaries are accessible
+# Healthcheck using worker self-test
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD snaphu -h > /dev/null 2>&1 && gdalinfo --version > /dev/null 2>&1 || exit 1
+    CMD python3 worker.py --self-test || exit 1
 
 ENTRYPOINT ["python3", "worker.py"]

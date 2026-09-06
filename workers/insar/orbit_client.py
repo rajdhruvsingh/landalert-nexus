@@ -23,8 +23,14 @@ CDSE_POD_ODATA = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 
 
 class OrbitClient:
-    def __init__(self, cache_dir: str = "/data/insar_cache/orbits"):
-        self.cache_dir = cache_dir
+    def __init__(self, cache_dir: Optional[str] = None):
+        if cache_dir:
+            self.cache_dir = cache_dir
+        else:
+            base = os.environ.get("SATELLITE_STORAGE_PATH")
+            if not base:
+                base = "/data/insar_cache" if os.path.exists("/data") and os.access("/data", os.W_OK) else os.path.join(os.getcwd(), "data", "insar_cache")
+            self.cache_dir = os.path.join(base, "orbits")
         os.makedirs(self.cache_dir, exist_ok=True)
 
     def get_precise_orbit(
