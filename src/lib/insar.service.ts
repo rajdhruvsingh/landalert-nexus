@@ -40,6 +40,7 @@ import { haversineDistanceKm } from "./geography";
 export type InSarProcessingStatus =
   | "COMPLETED"
   | "PENDING_PIPELINE"
+  | "PROCESSING_PENDING"
   | "DECORRELATED"
   | "UNAVAILABLE";
 
@@ -59,7 +60,8 @@ export type InSarUnavailableReason =
   | "ATMOSPHERIC_PHASE_CONTAMINATION"
   | "NO_CONVERGENT_ORBIT_PASS"
   | "MISSING_COPERNICUS_SLC_DATA"
-  | "OUTSIDE_PRIMARY_RADAR_FOOTPRINT";
+  | "OUTSIDE_PRIMARY_RADAR_FOOTPRINT"
+  | "PROCESSING_PENDING";
 
 export interface InSarDeformationProduct {
   cell_id: string;
@@ -78,7 +80,7 @@ export interface InSarDeformationProduct {
   } | null;
   temporal_baseline_days: number | null;
   coherence_mean: number | null; // 0.0 to 1.0
-  spatial_coverage_pct: number; // Percentage of cell with valid interferometric phase pixels
+  spatial_coverage_pct: number | null; // Percentage of cell with valid interferometric phase pixels (null when UNAVAILABLE)
   sensor: string; // e.g., "Sentinel-1 C-SAR" or "NISAR L-SAR"
   orbit_pass: "ASCENDING" | "DESCENDING" | "COMBINED" | null;
   wavelength_cm: number; // 5.546 cm for C-band Sentinel-1
@@ -128,9 +130,15 @@ export const CANONICAL_SAR_PIPELINE_STEPS = [
 const inSarRegistry = new Map<string, InSarDeformationProduct>();
 
 /**
- * Validated baseline InSAR deformation datasets.
- * Ground-truth InSAR ground motion studies published for critical NER slope corridors
- * (e.g. Gangtok NH-10 corridor, East Sikkim, and Guwahati urban hill slopes).
+ * Baseline InSAR registry entries for NER monitoring cells.
+ *
+ * ZERO-FABRICATION POLICY: No synthetic deformation values are pre-populated.
+ * All AVAILABLE products must originate exclusively from the real Sentinel-1
+ * InSAR worker (workers/insar/worker.py) completing a full 14-stage ISCE2/SNAPHU
+ * pipeline against real CDSE SLC acquisitions.
+ *
+ * UNAVAILABLE cells include a reason code so the API can explain why data is
+ * absent rather than serving a fabricated substitute.
  */
 const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
   {
@@ -140,17 +148,14 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     status: "UNAVAILABLE",
     measurement_type: "LOS_DEFORMATION_VELOCITY",
     unit: "mm/year",
-    los_velocity_mean_mm_year: null, // Zero fabrication: decorrelated phase cannot yield deformation
+    los_velocity_mean_mm_year: null, // Cannot be derived from decorrelated phase
     los_velocity_max_mm_year: null,
     cumulative_displacement_mm: null,
     temporal_trend: "INSUFFICIENT_DATA",
-    observation_period: {
-      start_date: "2024-01-02",
-      end_date: "2024-01-14",
-    },
-    temporal_baseline_days: 12,
-    coherence_mean: 0.284,
-    spatial_coverage_pct: 14.2, // Below 20% minimum threshold
+    observation_period: null, // No valid interferometric pair processed
+    temporal_baseline_days: null,
+    coherence_mean: null,
+    spatial_coverage_pct: null,
     sensor: "Sentinel-1 C-SAR",
     orbit_pass: "DESCENDING",
     wavelength_cm: 5.546,
@@ -159,35 +164,35 @@ const BASELINE_INSAR_DATASETS: InSarDeformationProduct[] = [
     quality: "UNAVAILABLE",
     unavailable_reason: "SAR_DECORRELATION_DENSE_CANOPY",
     source: "Copernicus Sentinel-1 InSAR Surface Movement Archive",
-    last_processed_at: "2024-01-14T00:03:47Z",
+    last_processed_at: null,
   },
   {
+    // ZERO-FABRICATION: Guwahati cell is marked UNAVAILABLE/PROCESSING_PENDING.
+    // When the InSAR worker successfully completes a real CDSE SLC pair, it will
+    // call ingestInSarProduct() to replace this entry with a real measurement.
     cell_id: "cell-26.25-91.75", // Kamrup Metro / Guwahati Hills (26.18 N, 91.75 E)
     bounds: [[26.125, 91.625], [26.375, 91.875]],
     centroid: [26.25, 91.75],
-    status: "AVAILABLE",
+    status: "UNAVAILABLE",
     measurement_type: "LOS_DEFORMATION_VELOCITY",
     unit: "mm/year",
-    los_velocity_mean_mm_year: null, // Strict rule: Single pair (<60d) must NOT be annualized into annual velocity
+    los_velocity_mean_mm_year: null,
     los_velocity_max_mm_year: null,
-    cumulative_displacement_mm: -7.99, // Genuine real LOS pair displacement (12-day pair)
-    temporal_trend: "STABLE",
-    observation_period: {
-      start_date: "2024-01-01",
-      end_date: "2024-01-13",
-    },
-    temporal_baseline_days: 12,
-    coherence_mean: 0.465,
-    spatial_coverage_pct: 42.0,
+    cumulative_displacement_mm: null,
+    temporal_trend: "INSUFFICIENT_DATA",
+    observation_period: null,
+    temporal_baseline_days: null,
+    coherence_mean: null,
+    spatial_coverage_pct: null,
     sensor: "Sentinel-1 C-SAR",
     orbit_pass: "ASCENDING",
     wavelength_cm: 5.546,
     processing_pipeline: "Dedicated InSAR Worker v1.2.0 (ISCE2/SNAPHU)",
-    processing_status: "COMPLETED",
-    quality: "MODERATE",
-    unavailable_reason: null,
+    processing_status: "PROCESSING_PENDING",
+    quality: "UNAVAILABLE",
+    unavailable_reason: "PROCESSING_PENDING",
     source: "Copernicus Sentinel-1 InSAR Surface Movement Archive",
-    last_processed_at: "2024-01-13T11:57:30Z",
+    last_processed_at: null,
   },
 ];
 

@@ -30,8 +30,9 @@ S1_WAVELENGTH_M = 0.05546576  # C-band wavelength: 5.54658 cm (f = 5.405 GHz)
 
 
 class InSarPipeline:
-    def __init__(self, workspace_root: str = "/data/insar_workspace"):
-        self.workspace_root = workspace_root
+    def __init__(self, workspace_root: Optional[str] = None):
+        default_root = "/data/insar_workspace" if os.path.exists("/data") and os.access("/data", os.W_OK) else os.path.join(os.getcwd(), "data", "insar_workspace")
+        self.workspace_root = workspace_root or default_root
         os.makedirs(self.workspace_root, exist_ok=True)
 
     def check_installed_binaries(self) -> Dict[str, bool]:

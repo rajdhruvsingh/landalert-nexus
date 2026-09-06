@@ -411,35 +411,8 @@ class InSarWorkerDaemon:
             max_displacement_mm = None
             product_status = "UNAVAILABLE"
 
-            # Case A: Verified Guwahati benchmark (real SLC pair 2024-01-01 -> 2024-01-13)
-            if cell_id == "cell-26.25-91.75":
-                mean_coherence = 0.465
-                median_coherence = 0.450
-                valid_pixel_pct = 42.0
-                is_valid = True
-                quality = "MODERATE"
-                unavail_reason = None
-                product_status = "AVAILABLE"
-                cumulative_displacement_mm = -7.99
-                los_velocity_mm_yr = None  # Single 12-day pair cannot be annualized
-                max_displacement_mm = -14.2
-                logger.info(f"Verified Guwahati result: LOS disp={cumulative_displacement_mm}mm, coherence={mean_coherence}")
-
-            # Case B: Verified Gangtok benchmark (real SLC pair 2024-01-02 -> 2024-01-14)
-            elif cell_id == "cell-27.25-88.50":
-                mean_coherence = 0.284
-                median_coherence = 0.261
-                valid_pixel_pct = 14.2  # Below 20% minimum threshold
-                is_valid = False
-                quality = "UNAVAILABLE"
-                unavail_reason = "SAR_DECORRELATION_DENSE_CANOPY"
-                product_status = "UNAVAILABLE"
-                cumulative_displacement_mm = None
-                los_velocity_mm_yr = None
-                logger.info("Verified Gangtok result: REJECT due to dense canopy decorrelation.")
-
-            # Case C: Real raster processing if raw SLC files are present in workspace
-            elif os.path.exists(master_slc_path) and os.path.exists(slave_slc_path):
+            # Case A: Real raster processing if raw SLC files are present in workspace
+            if os.path.exists(master_slc_path) and os.path.exists(slave_slc_path):
                 logger.info("Reading complex SLC rasters from workspace...")
                 s1 = np.fromfile(master_slc_path, dtype=np.complex64)
                 s2 = np.fromfile(slave_slc_path, dtype=np.complex64)
@@ -467,9 +440,8 @@ class InSarWorkerDaemon:
                         max_displacement_mm = mx
                         product_status = "AVAILABLE"
 
-            # Case D: Other NER locations without local raw SLC extraction
+            # Case B: Steep mountain relief and dense subtropical forest cover
             elif is_canopy:
-                # Steep mountain relief and dense subtropical forest cover
                 # Sentinel-1 C-band undergoes severe volume scattering & temporal decorrelation
                 is_valid = False
                 quality = "UNAVAILABLE"
@@ -481,6 +453,7 @@ class InSarWorkerDaemon:
                 cumulative_displacement_mm = None
                 los_velocity_mm_yr = None
                 logger.info(f"Terrain analysis for {location_name}: High-relief canopy decorrelation ({unavail_reason}).")
+            # Case C: Plain/valley with pair discovered in catalogue but raw SLC processing pending
             else:
                 # Flat plain/valley with pair discovered in catalogue but not downloaded to host disk
                 is_valid = False

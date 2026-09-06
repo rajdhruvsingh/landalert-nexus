@@ -409,19 +409,28 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
     const dibrugarh = getLocationDeformation(27.47, 94.91, "Dibrugarh", "Dibrugarh", "Assam");
     const gangtok = getLocationDeformation(27.33, 88.61, "Gangtok", "East Sikkim", "Sikkim");
 
-    expect(guwahati.deformation.status).toBe("AVAILABLE");
-    expect(guwahati.deformation.cumulative_displacement_mm).toBe(-7.99);
-    expect(guwahati.deformation.los_velocity_mean_mm_year).toBeNull(); // Single pair
+    // ZERO-FABRICATION: No synthetic AVAILABLE products — all cells correctly report UNAVAILABLE.
+    // Guwahati: real SLC processing pending (no CDSE download has completed in-process)
+    expect(guwahati.deformation.status).toBe("UNAVAILABLE");
+    expect(guwahati.deformation.unavailable_reason).toBe("PROCESSING_PENDING");
+    expect(guwahati.deformation.cumulative_displacement_mm).toBeNull();
+    expect(guwahati.deformation.los_velocity_mean_mm_year).toBeNull();
 
+    // Gangtok: known C-band decorrelation from dense subtropical forest/steep terrain
     expect(gangtok.deformation.status).toBe("UNAVAILABLE");
     expect(gangtok.deformation.unavailable_reason).toBe("SAR_DECORRELATION_DENSE_CANOPY");
 
+    // Dibrugarh: no baseline cell registered → UNAVAILABLE/no coverage
     expect(dibrugarh.deformation.status).toBe("UNAVAILABLE");
     expect(dibrugarh.deformation.cumulative_displacement_mm).toBeNull();
 
-    expect(guwahati.deformation.cumulative_displacement_mm).not.toBe(
-      dibrugarh.deformation.cumulative_displacement_mm
-    );
+    // Geographic isolation: all three cities map to distinct cell IDs
+    expect(guwahati.associated_cell_id).not.toBe(gangtok.associated_cell_id);
+    expect(guwahati.associated_cell_id).not.toBe(dibrugarh.associated_cell_id);
+    expect(gangtok.associated_cell_id).not.toBe(dibrugarh.associated_cell_id);
+
+    // Reason codes are distinct — not cloned from a shared template
+    expect(guwahati.deformation.unavailable_reason).not.toBe(gangtok.deformation.unavailable_reason);
   });
 
   it("23. Cache Isolation: resets registries cleanly between tests", () => {
