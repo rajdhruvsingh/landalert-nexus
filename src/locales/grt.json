@@ -339,7 +339,10 @@
     "true_color": "A·chik True-Color Imagery",
     "ndvi_vegetation": "A·chik NDVI Vegetation Index",
     "sentinel_attribution": "A·chik Copernicus Sentinel data 2026",
-    "slide_tooltip": "A·chik {{severity}} slide · {{date}}"
+    "slide_tooltip": "A·chik {{severity}} slide · {{date}}",
+    "layers_title": "Layers aro Grid",
+    "spatial_coverage_info": "Northeast-ni state 8 gimikko sandigipa 0.25° grid.",
+    "show_spatial_surface": "State 8-ni Spatial Risk Map"
   },
   "system_health": {
     "button_label": "A·chik System Health",
@@ -569,5 +572,22 @@
   },
   "map_panel.location_uninstrumented_notice": "Biap: {{name}}, {{district}}, {{state}} — Ia biapo kol dongja. Sepangbatgipa biapni obostako mesokenga.",
   "map_panel.uninstrumented_district_notice": "{{district}}-o kol donga kuja. Jol gimikni obostako mesokenga.",
-  "map_panel.view_all_state_districts": "{{state}}-ni gimik districtrangko nibo"
+  "map_panel.view_all_state_districts": "{{state}}-ni gimik districtrangko nibo",
+  "spatial_risk": {
+    "cell_assessment": "Spatial Grid Cell-ko Sandina",
+    "derived_location_assessment": "Biatni Kenani Obostako Sandina",
+    "current_risk": "Da'ororoni Kenani",
+    "static_susceptibility": "A'brini Obosta",
+    "terrain_basis": "A'brini chona aro a'ani obosta",
+    "dynamic_trigger": "Mikkawaoni ong'katgipa",
+    "telemetry_interpolated": "Mikkawani diltengko sandina",
+    "satellite_signal": "Satellite-ni chin",
+    "satellite_unconfigured": "Satellite signal dongkuja; sengenga",
+    "confidence_and_evidence": "Data-ni Bebeni",
+    "verified_obs_count": "Niatgipa report-rang",
+    "transparency_title": "Science-ni Niamrang",
+    "probability_calibrated": "Chanani: {{prob}}%",
+    "probability_uncalibrated_notice": "Statistical probability-ko on'na man'kuja, uni gimin Risk Score (0-100)-ko on'a.",
+    "aggregation_summary": "Sepango donggipa 0.25° grid cell {{count}}-oni ra'a."
+  }
 }

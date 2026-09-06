@@ -339,7 +339,10 @@
     "true_color": "Mizo True-Color Imagery",
     "ndvi_vegetation": "Mizo NDVI Vegetation Index",
     "sentinel_attribution": "Mizo Copernicus Sentinel data 2026",
-    "slide_tooltip": "Mizo {{severity}} slide · {{date}}"
+    "slide_tooltip": "Mizo {{severity}} slide · {{date}}",
+    "layers_title": "Layers leh Grid",
+    "spatial_coverage_info": "Hmarchhak state 8 huam chhung 0.25° spatial grid.",
+    "show_spatial_surface": "State 8 Huam Chhung Risk Map"
   },
   "system_health": {
     "button_label": "Mizo System Health",
@@ -569,5 +572,22 @@
   },
   "map_panel.location_uninstrumented_notice": "Hmun: {{name}}, {{district}}, {{state}} — He hmunah hian telemetry station a awm lo. Bial chhung thil awm hmuh a ni.",
   "map_panel.uninstrumented_district_notice": "{{district}}-ah hian khawl dah a la ni lo. Bial chhung thil awm hmuh a ni.",
-  "map_panel.view_all_state_districts": "{{state}} chhung district zawng zawng en rawh"
+  "map_panel.view_all_state_districts": "{{state}} chhung district zawng zawng en rawh",
+  "spatial_risk": {
+    "cell_assessment": "Hmun hrang Grid Cell Endikna",
+    "derived_location_assessment": "Hmun Hrang Chhiatna Risk Endikna",
+    "current_risk": "Tunlai Risk Dinhmun",
+    "static_susceptibility": "Tlang leh Hmun awmzia",
+    "terrain_basis": "Tlang awn zawng leh leilung zia",
+    "dynamic_trigger": "Ruahsur vanga chhiat theihna",
+    "telemetry_interpolated": "Khawchin enna atanga lak",
+    "satellite_signal": "Satellite atanga hmuh",
+    "satellite_unconfigured": "Satellite signal a la inpe lo; nghah mek a ni",
+    "confidence_and_evidence": "Data Rintlak Dan",
+    "verified_obs_count": "Hmunhma endik tawh zat",
+    "transparency_title": "Science leh Dan Dik Kengkawhna",
+    "probability_calibrated": "Chhut chhuah theih zat: {{prob}}%",
+    "probability_uncalibrated_notice": "Probability dik tak la chhut theih a nih loh avangin Risk Score (0-100) hman a ni.",
+    "aggregation_summary": "Hmun hnaivai 0.25° grid cell {{count}} atanga lakkhawm a ni."
+  }
 }

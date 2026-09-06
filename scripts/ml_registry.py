@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath("."))
 from src.lib.ml.artifact import load_model_artifact
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db():
     return psycopg2.connect(DATABASE_URL)

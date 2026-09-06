@@ -27,7 +27,7 @@ import psycopg2
 from src.lib.ml.inference import LandslideRiskInferenceEngine
 from scripts.ml_registry import verify_model_candidate, get_db
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def test_scenario_a_valid_fresh_data():
     """Scenario A: Valid fresh data produces scores, categories, and explanations."""

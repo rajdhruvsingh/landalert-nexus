@@ -41,7 +41,7 @@ import psycopg2
 from src.lib.ml.features import FEATURE_SCHEMA_VERSION, CANONICAL_FEATURES
 from src.lib.ml.inference import LandslideRiskInferenceEngine
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)

@@ -47,7 +47,9 @@ from src.lib.ml.features import (
 )
 from src.lib.ml.artifact import save_model_artifact, load_model_artifact
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL must be configured in environment")
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)

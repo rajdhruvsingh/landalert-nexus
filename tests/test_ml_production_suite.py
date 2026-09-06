@@ -243,8 +243,9 @@ def test_risk_score_calibration_and_monotonicity():
 
 def test_database_and_artifact_cutoffs_match():
     """Verify that PostgreSQL risk_model_config and model artifact cutoffs agree exactly."""
-    import psycopg2
-    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured in environment")
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     cur.execute("""
@@ -301,8 +302,9 @@ def test_model_registry_safety_gating():
 
 def test_risk_prediction_persistence_and_idempotency():
     """Verify that predictions can be persisted with idempotency into public.risk_predictions."""
-    import psycopg2
-    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured in environment")
     engine = LandslideRiskInferenceEngine(artifact_path=str(ARTIFACT_FILE))
     pred = engine.predict_zone(zone_id=1)
     assert pred["status"] in ("VALID", "FALLBACK", "STALE")

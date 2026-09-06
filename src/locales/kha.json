@@ -339,7 +339,10 @@
     "true_color": "Khasi True-Color Imagery",
     "ndvi_vegetation": "Khasi NDVI Vegetation Index",
     "sentinel_attribution": "Khasi Copernicus Sentinel data 2026",
-    "slide_tooltip": "Khasi {{severity}} slide · {{date}}"
+    "slide_tooltip": "Khasi {{severity}} slide · {{date}}",
+    "layers_title": "Ki Layer bad Grid",
+    "spatial_coverage_info": "Ka grid kaba peit ia baroh 8 tylli ki state ha Shatei Lam Mihngi.",
+    "show_spatial_surface": "Ka Map jong baroh 8 tylli ki State"
   },
   "system_health": {
     "button_label": "Khasi System Health",
@@ -569,5 +572,22 @@
   },
   "map_panel.location_uninstrumented_notice": "Jaka: {{name}}, {{district}}, {{state}} — Ym don kor peit ha kane ka jaka. Pyni ki jinglap ba hajan eh.",
   "map_panel.uninstrumented_district_notice": "Ym pat don kor peit ha {{district}}. Ka pyni ia ki jingtip jong ka thain baroh kawei.",
-  "map_panel.view_all_state_districts": "Peit baroh ki distrik jong ka {{state}}"
+  "map_panel.view_all_state_districts": "Peit baroh ki distrik jong ka {{state}}",
+  "spatial_risk": {
+    "cell_assessment": "Ka jingbishar ia ki Grid Cell",
+    "derived_location_assessment": "Ka jingbishar ia ka jingma ha ka jaka",
+    "current_risk": "Ka jingma mynta",
+    "static_susceptibility": "Ka dur jong ka khyndew",
+    "terrain_basis": "Ka jingran bad jingkylla ka khyndew",
+    "dynamic_trigger": "Ka slap kaba wanrah jingma",
+    "telemetry_interpolated": "Kaba la shim na ki jaka peit suinbneng",
+    "satellite_signal": "Ka dak na Satellite",
+    "satellite_unconfigured": "Ym pat don signal na satellite",
+    "confidence_and_evidence": "Ka jingthikna jong ka data",
+    "verified_obs_count": "Ki jinglap ba la pynskhem",
+    "transparency_title": "Ka rukom bishar ba thikna",
+    "probability_calibrated": "Ka jinglah ban jia: {{prob}}%",
+    "probability_uncalibrated_notice": "Ym pat lah ban ai ia ka probability kaba thikna, kumta la pyndonkam da ka Risk Score (0-100).",
+    "aggregation_summary": "La shim na ki {{count}} tylli ki grid cell kiba don marjan."
+  }
 }

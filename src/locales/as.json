@@ -332,7 +332,10 @@
     "true_color": "প্ৰকৃত-ৰঙৰ ছবি (True-Color)",
     "ndvi_vegetation": "NDVI উদ্ভিদ সূচক",
     "sentinel_attribution": "কপাৰ্নিকাছ চেন্টিনেল তথ্য ২০২৬",
-    "slide_tooltip": "{{severity}} ভূমিস্খলন · {{date}}"
+    "slide_tooltip": "{{severity}} ভূমিস্খলন · {{date}}",
+    "layers_title": "স্তৰ আৰু গ্ৰিড",
+    "spatial_coverage_info": "সকলো ৮ উত্তৰ-পূব ৰাজ্যত ০.২৫° স্থানিক বিপদ পূৰ্বানুমান গ্ৰিড।",
+    "show_spatial_surface": "৮-ৰাজ্য স্থানিক বিপদ পৃষ্ঠ"
   },
   "system_health": {
     "button_label": "প্ৰণালীৰ স্বাস্থ্য",
@@ -579,5 +582,22 @@
     "regional_coverage": "আঞ্চলিক আৱৰণ",
     "locality": "অঞ্চল",
     "header_matches": "ভৌগোলিক ফলাফল"
+  },
+  "spatial_risk": {
+    "cell_assessment": "স্থানিক গ্ৰিড চেল মূল্যায়ন",
+    "derived_location_assessment": "উপলব্ধ স্থানিক বিপদ মূল্যায়ন",
+    "current_risk": "বৰ্তমানৰ বিপদ",
+    "static_susceptibility": "স্থিৰ সংবেদনশীলতা",
+    "terrain_basis": "ভূমিৰ ঢাল, উচ্চতা আৰু বন্ধুরতা",
+    "dynamic_trigger": "বৰষুণৰ ট্ৰিগাৰ",
+    "telemetry_interpolated": "আঞ্চলিক বতৰ ক্লাষ্টাৰৰ পৰা অন্তৰ্ভুক্ত",
+    "satellite_signal": "উপগ্ৰহ বিকৃতি",
+    "satellite_unconfigured": "কোনো ভুৱা সংকেত নাই; ইনছাৰ প্ৰদানকাৰী সংযোগ অপেক্ষাৰত",
+    "confidence_and_evidence": "তথ্যৰ নিৰ্ভৰযোগ্যতা",
+    "verified_obs_count": "প্ৰমাণিত ক্ষেত্ৰ পৰিদৰ্শন",
+    "transparency_title": "বৈজ্ঞানিক নিষ্ঠা আৰু পৰিসাংখ্যিক সম্ভাৱিতা নীতি",
+    "probability_calibrated": "কেলিব্ৰেট কৰা পৰিসাংখ্যিক সম্ভাৱিতা: {{prob}}%",
+    "probability_uncalibrated_notice": "পৰিসাংখ্যিক সম্ভাৱিতা অনুপলব্ধ বুলি দেখুওৱা হৈছে কাৰণ এই স্থানাংকৰ বাবে ভূস্খলনৰ আনুষ্ঠানিক কেলিব্ৰেচন হোৱা নাই। ইয়াৰ পৰিৱৰ্তে তথ্য-চালিত বিপদ স্কোৰ (০-১০০) প্ৰদান কৰা হৈছে।",
+    "aggregation_summary": "ওচৰৰ {{count}} টা ০.২৫° স্থানিক গ্ৰিড চেলৰ পৰা সংগ্ৰহ কৰা হৈছে।"
   }
 }

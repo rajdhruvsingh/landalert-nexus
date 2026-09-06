@@ -339,7 +339,10 @@
     "true_color": "True-Color Imagery",
     "ndvi_vegetation": "NDVI Vegetation Index",
     "sentinel_attribution": "Copernicus Sentinel data 2026",
-    "slide_tooltip": "{{severity}} slide · {{date}}"
+    "slide_tooltip": "{{severity}} slide · {{date}}",
+    "layers_title": "Layers & Grid",
+    "spatial_coverage_info": "Continuous 0.25° spatial landslide risk prediction grid across all 8 Northeast states.",
+    "show_spatial_surface": "8-State Spatial Risk Surface"
   },
   "system_health": {
     "button_label": "System Health",
@@ -569,5 +572,22 @@
   },
   "map_panel.location_uninstrumented_notice": "Location: {{name}}, {{district}}, {{state}} — No active telemetry station at this locality. Regional situational coverage active.",
   "map_panel.uninstrumented_district_notice": "No active monitored telemetry stations registered in {{district}}. District territory is monitored under regional coverage.",
-  "map_panel.view_all_state_districts": "View All {{state}} Districts"
+  "map_panel.view_all_state_districts": "View All {{state}} Districts",
+  "spatial_risk": {
+    "cell_assessment": "Spatial Grid Cell Assessment",
+    "derived_location_assessment": "Derived Spatial Risk Assessment",
+    "current_risk": "Current Risk",
+    "static_susceptibility": "Static Susceptibility",
+    "terrain_basis": "Relief, slope gradient & terrain ruggedness",
+    "dynamic_trigger": "Rainfall Trigger",
+    "telemetry_interpolated": "Interpolated from regional weather clusters",
+    "satellite_signal": "Satellite Deformation",
+    "satellite_unconfigured": "No fabricated signal; InSAR awaiting provider setup",
+    "confidence_and_evidence": "Data Confidence",
+    "verified_obs_count": "verified field observations",
+    "transparency_title": "Scientific Integrity & Statistical Probability Policy",
+    "probability_calibrated": "Calibrated statistical probability: {{prob}}%",
+    "probability_uncalibrated_notice": "Statistical probability is reported as UNAVAILABLE because empirical landslide frequency has not undergone formal isotonic probability calibration for this specific coordinate. An operational, data-driven Risk Score (0-100) combining static susceptibility and dynamic trigger conditions is provided instead.",
+    "aggregation_summary": "Derived from {{count}} surrounding 0.25° spatial grid cells via Inverse-Distance Weighting (IDW)."
+  }
 }

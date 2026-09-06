@@ -42,14 +42,8 @@ except (ImportError, ValueError):
     from artifact import load_model_artifact, ModelArtifact
 
 load_dotenv()
-_is_production = os.getenv("RENDER") is not None or os.getenv("NODE_ENV") == "production"
 _raw_db_url = os.getenv("DATABASE_URL")
-if _raw_db_url and _raw_db_url.strip():
-    DATABASE_URL = _raw_db_url.strip()
-elif _is_production:
-    DATABASE_URL = None
-else:
-    DATABASE_URL = "postgresql://localhost/landalert"
+DATABASE_URL = _raw_db_url.strip() if _raw_db_url and _raw_db_url.strip() else None
 
 class LandslideRiskInferenceEngine:
     def __init__(self, artifact_path: str = "models/v0.2-lr-trained.json"):

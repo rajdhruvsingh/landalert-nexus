@@ -339,7 +339,10 @@
     "true_color": "মৈতৈলোন্ True-Color Imagery",
     "ndvi_vegetation": "মৈতৈলোন্ NDVI Vegetation Index",
     "sentinel_attribution": "মৈতৈলোন্ Copernicus Sentinel data 2026",
-    "slide_tooltip": "{{severity}} চিংশিৎপা · {{date}}"
+    "slide_tooltip": "{{severity}} চিংশিৎপা · {{date}}",
+    "layers_title": "লেয়ার অমসুং গ্রিড",
+    "spatial_coverage_info": "নোংপোক ভারতকী ষ্টেট ৮ মায়োক্নবা ০.২৫° স্পেসিএল গ্রিড।",
+    "show_spatial_surface": "ষ্টেট ৮ গী স্পেসিএল রিস্ক মেপ"
   },
   "system_health": {
     "button_label": "সিস্তেম হকশেল",
@@ -569,5 +572,22 @@
   },
   "map_panel.location_uninstrumented_notice": "মফম: {{name}}, {{district}}, {{state}} — মফম অসিদা তোঙানবা তেলিমেত্রি স্তেশন লৈতে। রিজনাল কভরেজনা য়েংশিল্লি।",
   "map_panel.uninstrumented_district_notice": "{{district}} দা এক্তিব তেলিমেত্রি স্তেশন লৈতে। রিজনাল কভরেজনা য়েংশিল্লি।",
-  "map_panel.view_all_state_districts": "{{state}} গী জিলা পুম্নমক য়েংবা"
+  "map_panel.view_all_state_districts": "{{state}} গী জিলা পুম্নমক য়েংবা",
+  "spatial_risk": {
+    "cell_assessment": "স্পেসিএল গ্রিড সেল লেপ্থোকপা",
+    "derived_location_assessment": "মফম অদুগী স্পেসিএল রিস্ক লেপ্থোকপা",
+    "current_risk": "হৌজিক্কী রিস্ক",
+    "static_susceptibility": "ষ্টেটিক সসেপটিবিলিটি",
+    "terrain_basis": "চীংগী চংবা অমসুং অৱাং-অনেম",
+    "dynamic_trigger": "নোংগী ত্রিগর",
+    "telemetry_interpolated": "নোংজুগী পোৎলমশিংদগী লৌবা",
+    "satellite_signal": "সেটেলাইট সিগনেল",
+    "satellite_unconfigured": "অচুম্বা সিগনেল নত্তে; ইনসার ইনটেগ্রেশন ঙাইরি",
+    "confidence_and_evidence": "ডাটা থাজবা য়াবা",
+    "verified_obs_count": "ভেরিফাই তৌরবা ফিল্ড ওবজারভেশন",
+    "transparency_title": "সাইন্টিফিক প্রোবেবিলিটি রুল",
+    "probability_calibrated": "কেলিব্রেট তৌরবা প্রোবেবিলিটি: {{prob}}%",
+    "probability_uncalibrated_notice": "কেলিব্রেট তৌদবনা প্রোবেবিলিটি পীদ্রে। মদুগী মহুৎ রিস্ক স্কোর (০-১০০) উৎলে।",
+    "aggregation_summary": "অকোইবদা লৈবা গ্রিড সেল {{count}} দগী লৌখৎপা।"
+  }
 }

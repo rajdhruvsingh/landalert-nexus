@@ -33,7 +33,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 NER_LAT_MIN, NER_LAT_MAX = 21.0, 30.0
 NER_LNG_MIN, NER_LNG_MAX = 88.0, 98.0

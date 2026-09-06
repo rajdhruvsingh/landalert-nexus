@@ -18,7 +18,7 @@ from sklearn.metrics import precision_recall_curve, auc, precision_score, recall
 from sklearn.preprocessing import StandardScaler
 
 load_dotenv()
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://localhost/landalert')
+DATABASE_URL = os.getenv('DATABASE_URL')
 RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
 

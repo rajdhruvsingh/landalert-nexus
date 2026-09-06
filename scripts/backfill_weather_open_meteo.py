@@ -31,7 +31,7 @@ import psycopg2
 from dotenv import load_dotenv
 
 load_dotenv()
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://localhost/landalert')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 REQUEST_DELAY_S = 0.6   # stay within Open-Meteo free-tier rate limits

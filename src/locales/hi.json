@@ -339,7 +339,10 @@
     "true_color": "हिन्दी True-Color Imagery",
     "ndvi_vegetation": "हिन्दी NDVI Vegetation Index",
     "sentinel_attribution": "हिन्दी Copernicus Sentinel data 2026",
-    "slide_tooltip": "{{severity}} भूस्खलन · {{date}}"
+    "slide_tooltip": "{{severity}} भूस्खलन · {{date}}",
+    "layers_title": "परतें और ग्रिड",
+    "spatial_coverage_info": "सभी 8 पूर्वोत्तर राज्यों में सतत 0.25° स्थानिक भूस्खलन जोखिम पूर्वानुमान ग्रिड।",
+    "show_spatial_surface": "8-राज्य स्थानिक जोखिम सतह"
   },
   "system_health": {
     "button_label": "प्रणाली स्थिति",
@@ -569,5 +572,22 @@
   },
   "map_panel.location_uninstrumented_notice": "स्थान: {{name}}, {{district}}, {{state}} — इस इलाके में कोई सक्रिय टेलीमेट्री स्टेशन नहीं है। क्षेत्रीय स्थितिजन्य कवरेज सक्रिय है।",
   "map_panel.uninstrumented_district_notice": "{{district}} में कोई सक्रिय टेलीमेट्री स्टेशन पंजीकृत नहीं है। जिला क्षेत्र क्षेत्रीय कवरेज के तहत मॉनिटर किया जाता है।",
-  "map_panel.view_all_state_districts": "{{state}} के सभी जिले देखें"
+  "map_panel.view_all_state_districts": "{{state}} के सभी जिले देखें",
+  "spatial_risk": {
+    "cell_assessment": "स्थानिक ग्रिड सेल मूल्यांकन",
+    "derived_location_assessment": "व्युत्पन्न स्थानिक जोखिम मूल्यांकन",
+    "current_risk": "वर्तमान जोखिम",
+    "static_susceptibility": "स्थैतिक संवेदनशीलता",
+    "terrain_basis": "भूभाग ढलान, ऊंचाई और ऊबड़-खाबड़पन",
+    "dynamic_trigger": "वर्षा ट्रिगर",
+    "telemetry_interpolated": "क्षेत्रीय मौसम क्लस्टर से अंतर्वेशित",
+    "satellite_signal": "उपग्रह विरूपण",
+    "satellite_unconfigured": "कोई बनावटी संकेत नहीं; इनसार प्रदाता सेटअप प्रतीक्षित",
+    "confidence_and_evidence": "डेटा विश्वसनीयता",
+    "verified_obs_count": "सत्यापित जमीनी निरीक्षण",
+    "transparency_title": "वैज्ञानिक सत्यनिष्ठा एवं सांख्यिकीय प्रायिकता नीति",
+    "probability_calibrated": "कैलिब्रेटेड सांख्यिकीय प्रायिकता: {{prob}}%",
+    "probability_uncalibrated_notice": "सांख्यिकीय प्रायिकता अनुपलब्ध के रूप में रिपोर्ट की गई है क्योंकि इस समन्वय के लिए अनुभवजन्य भूस्खलन आवृत्ति का औपचारिक आइसोटोनिक अंशांकन नहीं हुआ है। इसके स्थान पर स्थैतिक संवेदनशीलता और गतिशील ट्रिगर स्थितियों को मिलाकर एक परिचालन जोखिम स्कोर (0-100) प्रदान किया जाता है।",
+    "aggregation_summary": "व्युत्क्रम-दूरी भारण (IDW) के माध्यम से {{count}} आसपास के 0.25° स्थानिक ग्रिड सेल से प्राप्त।"
+  }
 }

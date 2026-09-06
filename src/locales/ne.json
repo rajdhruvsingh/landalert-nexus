@@ -332,7 +332,10 @@
     "true_color": "वास्तविक रङ्गको छवि (True-Color)",
     "ndvi_vegetation": "NDVI वनस्पति सूचकांक",
     "sentinel_attribution": "कोपरनिकस सेन्टिनेल डेटा २०२६",
-    "slide_tooltip": "{{severity}} पहिरो · {{date}}"
+    "slide_tooltip": "{{severity}} पहिरो · {{date}}",
+    "layers_title": "तहहरू र ग्रिड",
+    "spatial_coverage_info": "सबै ८ उत्तर-पूर्वी राज्यहरूमा ०.२५° स्थानिक पहिरो जोखिम पूर्वानुमान ग्रिड।",
+    "show_spatial_surface": "८-राज्य स्थानिक जोखिम सतह"
   },
   "system_health": {
     "button_label": "प्रणाली स्वास्थ्य",
@@ -579,5 +582,22 @@
     "regional_coverage": "क्षेत्रीय कभरेज",
     "locality": "इलाका",
     "header_matches": "भौगोलिक मिलानहरू"
+  },
+  "spatial_risk": {
+    "cell_assessment": "स्थानिक ग्रिड सेल मूल्याङ्कन",
+    "derived_location_assessment": "स्थानिक जोखिम मूल्याङ्कन",
+    "current_risk": "हालको जोखिम",
+    "static_susceptibility": "स्थिर संवेदनशीलता",
+    "terrain_basis": "भू-भाग ढलान, उचाइ र भू-स्वरूप",
+    "dynamic_trigger": "वर्षा ट्रिगर",
+    "telemetry_interpolated": "क्षेत्रीय मौसम क्लस्टरबाट गणना गरिएको",
+    "satellite_signal": "उपग्रह विरूपण",
+    "satellite_unconfigured": "कुनै नक्कली संकेत छैन; इनसार प्रतीक्षामा",
+    "confidence_and_evidence": "तथ्याङ्क विश्वसनीयता",
+    "verified_obs_count": "प्रमाणित स्थलगत निरीक्षण",
+    "transparency_title": "वैज्ञानिक अखण्डता र साङ्ख्यिकीय सम्भाव्यता नीति",
+    "probability_calibrated": "क्यालिब्रेट गरिएको सम्भाव्यता: {{prob}}%",
+    "probability_uncalibrated_notice": "यस स्थानका लागि औपचारिक क्यालिब्रेसन नभएकाले साङ्ख्यिकीय सम्भाव्यता अनुपलब्ध देखाइएको छ। यसको सट्टा डाटा-संचालित जोखिम स्कोर (०-१००) प्रदान गरिएको छ।",
+    "aggregation_summary": "वरपरका {{count}} वटा ०.२५° स्थानिक ग्रिड सेलहरूबाट प्राप्त।"
   }
 }

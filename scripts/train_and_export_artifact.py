@@ -29,7 +29,7 @@ from src.lib.ml.features import (
 from src.lib.ml.artifact import save_model_artifact, load_model_artifact
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/landalert")
+DATABASE_URL = os.getenv("DATABASE_URL")
 RANDOM_SEED = 42
 MODEL_VERSION = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "v0.3-lr-trained"
 ARTIFACT_PATH = f"models/{MODEL_VERSION}.json"
