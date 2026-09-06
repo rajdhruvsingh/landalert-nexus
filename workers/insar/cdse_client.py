@@ -227,6 +227,124 @@ class CdseClient:
 
         return None
 
+    def resolve_target_burst_pair(
+        self,
+        target_lat: float,
+        target_lon: float,
+        start_date: str = "2024-01-01",
+        end_date: str = "2024-01-31",
+        min_baseline_days: int = 12,
+        max_baseline_days: int = 36,
+        prediction_cutoff: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Automatically resolves the exact Sentinel-1 IW burst covering target_lat, target_lon
+        and selects a valid interferometric repeat-pass pair using the official CDSE Bursts API.
+
+        Enforces:
+        1. Exact point-in-burst spatial intersection
+        2. Identical relative orbit (track)
+        3. Identical swath (IW1, IW2, or IW3)
+        4. Identical BurstId
+        5. Temporal baseline window (min_baseline_days <= dt <= max_baseline_days)
+        6. Temporal leakage protection: sensing_stop <= prediction_cutoff
+        """
+        token = self.get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        url = (
+            f"https://catalogue.dataspace.copernicus.eu/odata/v1/Bursts?"
+            f"$filter=OData.CSC.Intersects(area=geography'SRID=4326;POINT({target_lon} {target_lat})') and "
+            f"PolarisationChannels eq 'VV' and "
+            f"ContentDate/Start ge {start_date}T00:00:00.000Z and "
+            f"ContentDate/Start le {end_date}T23:59:59.000Z"
+            f"&$orderby=ContentDate/Start asc"
+            f"&$top=30"
+        )
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=25)
+            if resp.status_code != 200:
+                logger.warning(f"CDSE Bursts query failed: HTTP {resp.status_code}")
+                return {"status": "ERROR", "error": f"HTTP_{resp.status_code}"}
+
+            bursts = resp.json().get("value", [])
+            if not bursts:
+                return {
+                    "status": "NO_COVERAGE",
+                    "reason": "OUTSIDE_PRIMARY_RADAR_FOOTPRINT",
+                    "message": f"No Sentinel-1 IW bursts cover ({target_lat} N, {target_lon} E) in time window.",
+                }
+
+            # Enforce temporal leakage cutoff if provided
+            if prediction_cutoff:
+                cutoff_str = f"{prediction_cutoff}T23:59:59"
+                bursts = [b for b in bursts if b.get("ContentDate", {}).get("Start", "") <= cutoff_str]
+
+            # Group bursts by (track, swath, burst_id)
+            tracks: Dict[Tuple[int, str, int], List[Dict[str, Any]]] = {}
+            for b in bursts:
+                track = b.get("RelativeOrbitNumber")
+                swath = b.get("SwathIdentifier")
+                burst_id = b.get("BurstId")
+                key = (track, swath, burst_id)
+                tracks.setdefault(key, []).append(b)
+
+            # Look for interferometric repeat-pass pairs
+            for (track, swath, burst_id), b_list in tracks.items():
+                if len(b_list) >= 2:
+                    for i in range(len(b_list)):
+                        m = b_list[i]
+                        m_time_str = m.get("ContentDate", {}).get("Start")[:19]
+                        m_epoch = time.mktime(time.strptime(m_time_str, "%Y-%m-%dT%H:%M:%S"))
+
+                        for j in range(i + 1, len(b_list)):
+                            s = b_list[j]
+                            s_time_str = s.get("ContentDate", {}).get("Start")[:19]
+                            s_epoch = time.mktime(time.strptime(s_time_str, "%Y-%m-%dT%H:%M:%S"))
+                            dt_days = (s_epoch - m_epoch) / 86400.0
+
+                            if min_baseline_days <= dt_days <= max_baseline_days:
+                                master_scene = m.get("ParentProductName", "").replace(".SAFE", "")
+                                slave_scene = s.get("ParentProductName", "").replace(".SAFE", "")
+                                orbit_dir = m.get("OrbitDirection")
+
+                                return {
+                                    "status": "PAIR_FOUND",
+                                    "track": track,
+                                    "orbit_dir": orbit_dir,
+                                    "swath": swath,
+                                    "burst_id": burst_id,
+                                    "abs_burst_id": m.get("AbsoluteBurstId"),
+                                    "master_scene_id": master_scene,
+                                    "slave_scene_id": slave_scene,
+                                    "master_time": m_time_str,
+                                    "slave_time": s_time_str,
+                                    "temporal_baseline_days": int(round(dt_days)),
+                                    "byte_offset": m.get("ByteOffset"),
+                                    "lines_per_burst": m.get("LinesPerBurst"),
+                                    "samples_per_burst": m.get("SamplesPerBurst"),
+                                    "target_lat": target_lat,
+                                    "target_lon": target_lon,
+                                }
+
+            # Fallback if only single acquisition found
+            b = bursts[0]
+            return {
+                "status": "INSUFFICIENT_REPEAT_ACQUISITIONS",
+                "track": b.get("RelativeOrbitNumber"),
+                "orbit_dir": b.get("OrbitDirection"),
+                "swath": b.get("SwathIdentifier"),
+                "burst_id": b.get("BurstId"),
+                "master_scene_id": b.get("ParentProductName", "").replace(".SAFE", ""),
+                "master_time": b.get("ContentDate", {}).get("Start")[:19],
+                "reason": "INSUFFICIENT_TEMPORAL_SAR_ACQUISITIONS",
+            }
+
+        except Exception as err:
+            logger.error(f"Failed to query CDSE bursts: {err}")
+            return {"status": "ERROR", "error": str(err)}
+
     def download_scene(
         self,
         scene_id: str,

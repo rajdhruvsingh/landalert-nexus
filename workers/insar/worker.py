@@ -266,10 +266,12 @@ class InSarWorkerDaemon:
         target_lat: float,
         target_lon: float,
         location_name: str,
-        elevation_m: float = 1520.0,
+        elevation_m: float = 500.0,
+        prediction_cutoff: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Executes genuine end-to-end Sentinel-1 InSAR processing for target coordinates.
+        Executes genuine end-to-end Sentinel-1 InSAR processing for arbitrary target coordinates.
+        Automatically resolves target-to-burst geometry and valid interferometric pair via CDSE OData.
         """
         import uuid
         job_id = str(uuid.uuid4())
@@ -280,32 +282,53 @@ class InSarWorkerDaemon:
         os.makedirs(job_dir, exist_ok=True)
 
         try:
-            # Stage 1: DOWNLOADING & Pair Discovery
-            logger.info("Discovering real Sentinel-1 IW SLC repeat acquisitions from CDSE OData...")
+            # Stage 1: DOWNLOADING & Dynamic Target-to-Burst Pair Discovery
+            logger.info(f"Resolving real Sentinel-1 IW burst pair for ({target_lat} N, {target_lon} E) via CDSE OData...")
+            resolved = self.cdse_client.resolve_target_burst_pair(
+                target_lat, target_lon, start_date="2024-01-01", end_date="2024-01-31",
+                prediction_cutoff=prediction_cutoff
+            )
 
-            # Official acquisitions covering Gangtok track 48
-            if "88." in str(target_lon):  # Gangtok
-                master_scene_id = "S1A_IW_SLC__1SDV_20240102T000323_20240102T000350_051920_0645E2_7BB2"
-                slave_scene_id = "S1A_IW_SLC__1SDV_20240114T000323_20240114T000350_052095_064BDC_FC0C"
-                master_time = "2024-01-02T00:03:47"
-                slave_time = "2024-01-14T00:03:47"
-                subswath = "IW2"
-                burst_num = 9
-                rel_orbit = 48
-                orbit_dir = "DESCENDING"
-                inc_angle_deg = 38.95
-                is_canopy = True  # Himalayan subtropical forest slopes
-            else:  # Guwahati
-                master_scene_id = "S1A_IW_SLC__1SDV_20240101T115717_20240101T115744_051913_0645A7_16B1"
-                slave_scene_id = "S1A_IW_SLC__1SDV_20240113T115716_20240113T115743_052088_064BA4_0A45"
-                master_time = "2024-01-01T11:57:30"
-                slave_time = "2024-01-13T11:57:30"
-                subswath = "IW1"
-                burst_num = 4
-                rel_orbit = 41
-                orbit_dir = "ASCENDING"
-                inc_angle_deg = 34.50
-                is_canopy = False
+            if resolved.get("status") != "PAIR_FOUND":
+                unavail_reason = resolved.get("reason", "INSUFFICIENT_TEMPORAL_SAR_ACQUISITIONS")
+                logger.warning(f"No valid InSAR pair found for {location_name} ({target_lat}, {target_lon}): {unavail_reason}")
+                # Persist honest UNAVAILABLE product
+                sql_unavail = """
+                INSERT INTO public.insar_deformation_products (
+                    cell_id, status, los_velocity_mean_mm_year, los_velocity_max_mm_year,
+                    cumulative_displacement_mm, temporal_trend, observation_start, observation_end,
+                    temporal_baseline_days, coherence_mean, spatial_coverage_pct, quality,
+                    unavailable_reason, sensor, orbit_pass, processing_pipeline, updated_at
+                ) VALUES (%s, 'UNAVAILABLE', NULL, NULL, NULL, 'INSUFFICIENT_DATA', NULL, NULL, NULL, NULL, 0, 'UNAVAILABLE', %s, 'Sentinel-1 C-SAR', NULL, 'Dedicated InSAR Worker v1.2.0 (ISCE2/SNAPHU)', NOW())
+                ON CONFLICT (cell_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    quality = EXCLUDED.quality,
+                    unavailable_reason = EXCLUDED.unavailable_reason,
+                    updated_at = NOW();
+                """
+                self._execute_sql(sql_unavail, (cell_id, unavail_reason))
+                total_duration = time.time() - start_time
+                return {
+                    "cell_id": cell_id,
+                    "location_name": location_name,
+                    "status": "UNAVAILABLE",
+                    "unavailable_reason": unavail_reason,
+                    "duration_seconds": round(total_duration, 1),
+                }
+
+            master_scene_id = resolved["master_scene_id"]
+            slave_scene_id = resolved["slave_scene_id"]
+            master_time = resolved["master_time"]
+            slave_time = resolved["slave_time"]
+            subswath = resolved["swath"]
+            burst_num = resolved["burst_id"]
+            rel_orbit = resolved["track"]
+            orbit_dir = resolved["orbit_dir"]
+            temporal_baseline_days = resolved["temporal_baseline_days"]
+            inc_angle_deg = 34.5 if subswath == "IW1" else 39.0 if subswath == "IW2" else 43.5
+
+            # Canopy decorrelation check: high elevation mountainous areas (> 1000m) suffer steep C-band decorrelation
+            is_canopy = elevation_m >= 1000.0 or target_lat >= 27.0
 
             # Ingest scene metadata into satellite_acquisitions first (foreign key dependency)
             for s_id, t_start in [(master_scene_id, master_time), (slave_scene_id, slave_time)]:
@@ -543,6 +566,11 @@ def main():
     parser = argparse.ArgumentParser(description="LandAlert-Nexus InSAR Processing Worker")
     parser.add_argument("--self-test", action="store_true", help="Run startup self-test and exit")
     parser.add_argument("--process-cell", type=str, help="Execute genuine InSAR pipeline for target cell (e.g. cell-27.25-88.50)")
+    parser.add_argument("--lat", type=float, help="Target latitude")
+    parser.add_argument("--lon", type=float, help="Target longitude")
+    parser.add_argument("--location-name", type=str, help="Location label name")
+    parser.add_argument("--elevation", type=float, default=500.0, help="Target elevation in meters")
+    parser.add_argument("--prediction-cutoff", type=str, help="Enforce temporal leakage cutoff date (YYYY-MM-DD)")
     args = parser.parse_args()
 
     daemon = InSarWorkerDaemon()
@@ -552,10 +580,32 @@ def main():
         sys.exit(0)
 
     if args.process_cell:
-        if "88." in args.process_cell:
-            res = daemon.process_job_for_cell(args.process_cell, 27.33, 88.61, "Gangtok, Sikkim", 1520.0)
-        else:
-            res = daemon.process_job_for_cell(args.process_cell, 26.18, 91.75, "Guwahati, Assam", 55.0)
+        cell = args.process_cell
+        lat = args.lat
+        lon = args.lon
+        loc_name = args.location_name or "NER Monitored Target"
+        elev = args.elevation
+
+        if (lat is None or lon is None) and cell.startswith("cell-"):
+            parts = cell.replace("cell-", "").split("-")
+            if len(parts) == 2:
+                try:
+                    lat = float(parts[0])
+                    lon = float(parts[1])
+                except ValueError:
+                    pass
+
+        lat = lat if lat is not None else 26.18
+        lon = lon if lon is not None else 91.75
+
+        res = daemon.process_job_for_cell(
+            cell_id=cell,
+            target_lat=lat,
+            target_lon=lon,
+            location_name=loc_name,
+            elevation_m=elev,
+            prediction_cutoff=args.prediction_cutoff,
+        )
         print(json.dumps(res, indent=2))
         sys.exit(0)
 
