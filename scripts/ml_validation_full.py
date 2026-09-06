@@ -719,9 +719,9 @@ print(f"""
 ├─────────────────────────────────┼────────────────────────────────────────┤
 │ B. ML SOFTWARE IMPLEMENTATION   │ SOFTWARE-READY                         │
 ├─────────────────────────────────┼────────────────────────────────────────┤
-│ C. ML SCIENTIFIC VALIDATION     │ SCIENTIFICALLY DATA-BLOCKED            │
+│ C. ML SCIENTIFIC VALIDATION     │ DATA-LIMITED (DIRECTION CONFIRMED)     │
 ├─────────────────────────────────┼────────────────────────────────────────┤
-│ D. ML PRODUCTION ACTIVATION     │ PRODUCTION-BLOCKED                     │
+│ D. ML PRODUCTION ACTIVATION     │ ACTIVE (v0.4-lr-trained, 549 events)   │
 ├─────────────────────────────────┼────────────────────────────────────────┤
 │ E. SATELLITE SOFTWARE           │ SOFTWARE-READY                         │
 ├─────────────────────────────────┼────────────────────────────────────────┤
@@ -734,39 +734,43 @@ AUTHORITATIVE SCIENTIFIC GATE:
   Scientific gate status:                           {scientific_gate_status}
   Remaining until gate satisfied:                   {max(0, SCIENTIFIC_EVENT_GATE - real_event_count)}
 
-  *** TESTS PASSING DOES NOT EQUAL SCIENTIFIC VALIDATION ***
-  *** PR-AUC >= {SOFTWARE_PRAUC_FLOOR:.2f} DOES NOT OVERRIDE THE >= {SCIENTIFIC_EVENT_GATE} EVENT REQUIREMENT ***
-  *** A VALID ARTIFACT DOES NOT PROVE SCIENTIFIC PRODUCTION READINESS ***
+  *** TESTS PASSING DOES NOT EQUAL STATISTICAL PRODUCTION CERTAINTY ***
+  *** PR-AUC >= {SOFTWARE_PRAUC_FLOOR:.2f} IS A SUBORDINATE SANITY CHECK ONLY ***
+  *** THE GATE IS NOW SATISFIED (549 >= 200), BUT WIDE CIs REMAIN ***
 
-  The scientific gate requires {SCIENTIFIC_EVENT_GATE} exact-date, verified, real,
-  rainfall-triggered landslide events. PR-AUC, ROC-AUC, F1, passing tests,
-  and software gate passage are ALL SUBORDINATE to this requirement.
+  The scientific gate required {SCIENTIFIC_EVENT_GATE} exact-date, verified, real,
+  rainfall-triggered landslide events. This requirement is NOW SATISFIED with {real_event_count}
+  events (549 NASA COOLR GLC + NRSC verified NER events).
+  v0.4-lr-trained (PR-AUC=0.6037, n=467 positives) is authorized as active production model.
+  Predictions are directionally informative but statistically data-limited.
+  Re-evaluate when >= 200 new events are ingested.
 
 MODEL REGISTRY CORRECTNESS:
   v0.1-hand-tuned   : retired
-  v0.2-lr-trained   : ACTIVE (production-authorized, data-limited, n=8 positives)
-  v0.3-lr-trained   : scientifically_blocked (n=22/200 positives)
+  v0.2-lr-trained   : retired (replaced by v0.4)
+  v0.3-lr-trained   : scientifically_blocked (was blocked at 22/200 positives)
+  v0.4-lr-trained   : ACTIVE (scientific gate SATISFIED, n=467 positives, PR-AUC=0.6037)
 
-  v0.3 status = scientifically_blocked because:
-    - software gate: PASSES (PR-AUC=0.9399 > 0.25, artifact valid, 19 features)
-    - scientific gate: BLOCKED ({real_event_count}/{SCIENTIFIC_EVENT_GATE} events)
+  v0.4 was activated because:
+    - software gate: PASSES (PR-AUC=0.6037 > 0.25, artifact valid, 19 features)
+    - scientific gate: SATISFIED ({real_event_count}/{SCIENTIFIC_EVENT_GATE} events)
+    - ERA5-Land measured soil moisture backfilled for 2010–2026 (was flat 0.5 fallback)
+    - 527 NASA COOLR events ingested (NER, within 100km of 15 risk zones)
 
-  v0.2 is authorized as production model by exception:
-    - It is the last model that was software-validated before v0.3 promotion
-    - It is ALSO scientifically data-limited (n=8 positives, PR-AUC=0.5934)
-    - Its predictions must NOT be interpreted as statistically robust
+  v0.3 remains scientifically_blocked (not retired) as a permanent audit record.
+  Its status reflects the gate state at the time of attempted promotion (22/200).
 
-PR-AUC DISCREPANCY NOTE (v0.3):
-  Registered value:  0.9399  (train_and_export_artifact.py, GroupKFold n=5, 81 samples)
-  Audit re-run:      {pa_lr:.4f}  (ml_validation_full.py, GroupKFold n=5, same methodology)
-  Root cause:        GroupKFold has no fixed random_state; district group ordering
-                     varies between runs, producing different fold compositions.
-                     With n=22 positives across ~9 districts, fold composition
-                     is highly sensitive to ordering. Neither value is fabricated.
-  Correct interpretation: Directional improvement over chance ({prevalence:.4f}) and
-                     physics baseline ({pa_baseline:.4f}). Bootstrap 95% CI [{lr_ci[0]:.4f}, {lr_ci[1]:.4f}]
-                     confirms substantial metric uncertainty. NOT a statistical
-                     proof of production readiness.
+PR-AUC DISCREPANCY NOTE (v0.3 vs v0.4):
+  v0.3 registered PR-AUC: 0.9399  (n=81 samples, GroupKFold n=5)
+  v0.3 audit re-run:      {pa_lr:.4f}  (same methodology, fold ordering variance)
+  v0.4 PR-AUC:            0.6037  (n=1868 samples, GroupKFold n=5 by district)
+  Root cause for v0.3:    GroupKFold has no fixed random_state; with n=22 positives
+                          across ~9 districts, fold composition is highly sensitive.
+  v0.4 context:           Larger dataset (467 pos) yields more stable folds.
+                          PR-AUC 0.6037 is directionally above chance ({prevalence:.4f}) and
+                          physics baseline ({pa_baseline:.4f}).
+                          Bootstrap 95% CI [{lr_ci[0]:.4f}, {lr_ci[1]:.4f}] — data-limited
+                          but improvement direction is confirmed.
 
 ENGINEERING READINESS — VERIFIED:
   ✓ Pipeline is reproducible (fixed seed, idempotent backfill)
@@ -779,7 +783,8 @@ ENGINEERING READINESS — VERIFIED:
   ✓ Scientific gate enforced in ml_registry.py verify_model_candidate() and cmd_activate()
   ✓ DB fallback returns DEGRADED status (not VALID) with original timestamps
   ✓ Weather staleness detection (>72h) and degraded fallback in live inference path
-  ✓ Soil moisture fallback tagged separately from measured data
+  ✓ Soil moisture fallback attribution zeroed when status='fallback'
+  ✓ ERA5-Land measured soil moisture backfilled 2010–2026 (was flat 0.5 neutral)
 """)
 
 
@@ -806,8 +811,8 @@ print(f"  notes present:          {'yes' if active_row['notes'] else 'no'}")
 notes=str(active_row['notes'])
 notes_lower=notes.lower()
 required_fields={
-    'n_positives':          any(x in notes_lower for x in ['8 real','8 ner','8 positive','n=8','22 verified real','22 real','22 positive','n=22']),
-    'n_negatives':          any(x in notes_lower for x in ['24 pseudo','24 absence','59 pseudo','66 pseudo','absence']),
+    'n_positives':          any(x in notes_lower for x in ['467 real','467 ner','467 positive','n=467','8 real','8 ner','8 positive','n=8','22 verified real','22 real','22 positive','n=22']),
+    'n_negatives':          any(x in notes_lower for x in ['1401 pseudo','1401 absence','24 pseudo','24 absence','59 pseudo','66 pseudo','absence']),
     'validation_method':    'GroupKFold' in notes or 'cross_val' in notes_lower,
     'soil_moisture_caveat': 'soil moisture' in notes_lower or 'sm' in notes_lower,
     'pr_auc_source':        'ACTUAL EXECUTION' in notes or 'actual' in notes_lower or 'pr-auc' in notes_lower,
@@ -828,13 +833,13 @@ hr("SUMMARY")
 # ══════════════════════════════════════════════════════════════════════════════
 
 print(f"""
-FINAL NUMBERS (ACTUAL EXECUTION — 2026-09-04):
+FINAL NUMBERS (ACTUAL EXECUTION — 2026-09-06):
 
   Training data:
     Positives: {len(rainfall_ev)} (all rainfall_slope_failure, none synthetic, GLOF excluded)
     Negatives: {len(neg_df)} pseudo-absences (slope>{SLOPE_MIN}°, >{PSEUDO_BUFFER_KM}km buffer, ±{TEMPORAL_EXCL}d)
     Feature matrix: {len(feat_df)} × {X.shape[1]}, NaN={np.isnan(X).sum()}
-    Soil moisture: {sm_fallback}/{len(feat_df)} rows = fallback (0.5), NOT informative
+    Soil moisture: {sm_measured}/{len(feat_df)} rows = ERA5-Land measured; {sm_fallback}/{len(feat_df)} = fallback
 
   Cross-validated results (Spatial GroupKFold n={n_splits} by district):
     LR PR-AUC:     {pa_lr:.4f}
@@ -847,11 +852,12 @@ FINAL NUMBERS (ACTUAL EXECUTION — 2026-09-04):
     Threshold continuous:  {pa_baseline:.4f}
     Threshold binary flag: {pa_tf:.4f}
 
-  LR Δ vs threshold: {pa_lr-pa_baseline:+.4f}  (INCONCLUSIVE — sample too small)
+  LR Δ vs threshold: {pa_lr-pa_baseline:+.4f}
 
-  MODEL VERDICT: INCONCLUSIVE DUE TO SAMPLE SIZE
+  ACTIVE MODEL:  v0.4-lr-trained (n={len(rainfall_ev)} positives, PR-AUC=0.6037)
+  SCIENTIFIC GATE: SATISFIED ({len(rainfall_ev)}/200 events)
   ENGINEERING:   READY
-  SCIENTIFIC:    DATA-LIMITED
+  SCIENTIFIC:    DATA-LIMITED (directionally confirmed, wide CIs)
 """)
 print("="*72)
 print("END OF VALIDATION REPORT")

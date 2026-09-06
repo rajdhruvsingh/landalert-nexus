@@ -191,7 +191,7 @@ def test_inference_engine_active_zone():
     assert "risk_score" in res
     assert 0.0 <= res["probability"] <= 1.0
     assert 0.0 <= res["risk_score"] <= 100.0
-    assert res["model_version"] == "v0.2-lr-trained"
+    assert res["model_version"] == "v0.4-lr-trained"
 
 # =====================================================================
 # 6. Risk Calibration, Monotonicity & Cutoff Alignment

@@ -195,19 +195,19 @@ class TestRegistryState(unittest.TestCase):
         self.assertEqual(status, "scientifically_blocked",
             f"v0.3-lr-trained must have status='scientifically_blocked', got '{status}'")
 
-    def test_v0_2_is_active_production_model(self):
-        """v0.2-lr-trained must be the sole active production model."""
+    def test_v0_4_is_active_production_model(self):
+        """v0.4-lr-trained must be the sole active production model."""
         cur = self.conn.cursor()
         cur.execute(
-            "SELECT is_active, status FROM public.risk_model_config WHERE model_version = 'v0.2-lr-trained'"
+            "SELECT is_active, status FROM public.risk_model_config WHERE model_version = 'v0.4-lr-trained'"
         )
         row = cur.fetchone()
         cur.close()
         if row is None:
-            self.skipTest("v0.2-lr-trained not found in registry")
+            self.skipTest("v0.4-lr-trained not found in registry")
         is_active, status = row
-        self.assertTrue(is_active, "v0.2-lr-trained must be is_active=TRUE (authorized production model).")
-        self.assertEqual(status, "active", f"v0.2-lr-trained status must be 'active', got '{status}'")
+        self.assertTrue(is_active, "v0.4-lr-trained must be is_active=TRUE (authorized production model).")
+        self.assertEqual(status, "active", f"v0.4-lr-trained status must be 'active', got '{status}'")
 
     def test_active_model_has_valid_artifact_on_disk(self):
         """The active model's artifact_path must exist on disk."""
@@ -225,16 +225,14 @@ class TestRegistryState(unittest.TestCase):
             f"Active model '{ver}' artifact '{art_path}' not found on disk"
         )
 
-    def test_real_event_count_below_scientific_gate(self):
-        """Verifies the current event count is below 200 (gate state is BLOCKED)."""
+    def test_real_event_count_satisfies_scientific_gate(self):
+        """Verifies the current event count satisfies the >= 200 gate requirement."""
         from scripts.ml_registry import SCIENTIFIC_EVENT_GATE, count_real_rainfall_events
         count = count_real_rainfall_events(self.conn)
-        self.assertLess(
+        self.assertGreaterEqual(
             count, SCIENTIFIC_EVENT_GATE,
-            f"If count >= {SCIENTIFIC_EVENT_GATE}, the scientific gate may now be satisfiable. "
-            "Re-run verify_model_candidate() and consider promotion."
+            f"Expected real event count ({count}) to satisfy gate ({SCIENTIFIC_EVENT_GATE})."
         )
-        # Also assert the count hasn't been fabricated (no impossible value)
         self.assertGreater(count, 0, "Real event count must be positive")
 
 
@@ -319,13 +317,13 @@ class TestInferenceEngineModelVersion(unittest.TestCase):
             "v0.3 is scientifically_blocked and must not be used for production inference."
         )
 
-    def test_v0_2_artifact_is_current_production_model(self):
-        """v0.2 must be the artifact used for production inference."""
+    def test_v0_4_artifact_is_current_production_model(self):
+        """v0.4 must be the artifact used for production inference."""
         from src.lib.ml.inference import get_active_artifact_path_from_registry
         resolved_path = get_active_artifact_path_from_registry()
         self.assertIn(
-            "v0.2", resolved_path,
-            f"Expected v0.2 artifact path, got '{resolved_path}'"
+            "v0.4", resolved_path,
+            f"Expected v0.4 artifact path, got '{resolved_path}'"
         )
 
 

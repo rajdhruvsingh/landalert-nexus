@@ -57,14 +57,14 @@ const MOCK_ROADS = [
 ];
 
 const MOCK_MODEL_CONFIG = {
-  id: 4,
-  model_version: "v0.2-lr-trained",
+  id: 5,
+  model_version: "v0.4-lr-trained",
   feature_schema_version: "v1.0.0",
-  pr_auc: 0.5934,
-  recall_at_80_precision: 0.125,
-  dataset_fingerprint: "f1054c5041ad8e672a45899f42f037d1f7cd15cc6f55256d8d7d68388ed2aa26",
+  pr_auc: 0.6037,
+  recall_at_80_precision: 0.18,
+  dataset_fingerprint: "e2f7a1c9b8d4063a19f5e72c3b6d0a8e4f1c2b9a7d3e6f08c1b4e2a5d9f3c7b8",
   is_active: true,
-  artifact_path: "models/v0.2-lr-trained.json",
+  artifact_path: "models/v0.4-lr-trained.json",
   cutoff_moderate: 38.0,
   cutoff_high: 56.0,
   cutoff_severe: 74.0,
@@ -239,7 +239,7 @@ describe("Authoritative ML Fallback & Degraded State Handling", () => {
       zone_name: "Aizawl East",
       district: "Aizawl",
       state: "Mizoram",
-      model_version: "v0.2-lr-trained",
+      model_version: "v0.4-lr-trained",
       feature_schema_version: "v1.0.0",
       probability: 0.72,
       risk_score: 72,
@@ -383,7 +383,7 @@ describe("REST API Router (/api/*)", () => {
       feature_schema_version: string;
       scientific_status: string;
     };
-    expect(body.active_model_version).toBe("v0.2-lr-trained");
+    expect(body.active_model_version).toBe("v0.4-lr-trained");
     expect(body.feature_schema_version).toBe("v1.0.0");
     expect(body.scientific_status).toContain("DATA LIMITED");
   });
@@ -408,7 +408,7 @@ describe("REST API Router (/api/*)", () => {
         data_freshness: { soil_moisture_status: string };
       };
       expect(body.zone_id).toBe(1);
-      expect(body.model_version).toBe("v0.2-lr-trained");
+      expect(body.model_version).toBe("v0.4-lr-trained");
       expect(body.probability).toBeGreaterThanOrEqual(0.0);
       expect(body.probability).toBeLessThanOrEqual(1.0);
       expect(body.risk_score).toBeGreaterThanOrEqual(0.0);
@@ -474,7 +474,7 @@ describe("REST API Router (/api/*)", () => {
       cache_policy: { max_age_hours: number; is_expired: boolean };
     };
     expect(body.zones.length).toBe(15);
-    expect(body.active_model.model_version).toBe("v0.2-lr-trained");
+    expect(body.active_model.model_version).toBe("v0.4-lr-trained");
     expect(body.active_model.cutoffs.moderate).toBe(38.0);
     expect(body.active_model.cutoffs.high).toBe(56.0);
     expect(body.active_model.cutoffs.severe).toBe(74.0);

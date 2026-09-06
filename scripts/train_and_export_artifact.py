@@ -31,7 +31,7 @@ from src.lib.ml.artifact import save_model_artifact, load_model_artifact
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 RANDOM_SEED = 42
-MODEL_VERSION = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "v0.3-lr-trained"
+MODEL_VERSION = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "v0.4-lr-trained"
 ARTIFACT_PATH = f"models/{MODEL_VERSION}.json"
 
 def get_git_commit():
@@ -42,7 +42,7 @@ def get_git_commit():
 
 def main():
     print("=" * 72)
-    print("TRAINING & ARTIFACT EXPORT PIPELINE")
+    print(f"TRAINING & ARTIFACT EXPORT PIPELINE: {MODEL_VERSION}")
     print("=" * 72)
 
     conn = psycopg2.connect(DATABASE_URL)
@@ -62,6 +62,7 @@ def main():
     rainfall_ev = real_all[real_all["hazard_type"] == "rainfall_slope_failure"].copy()
 
     # 1. Build positive training rows
+    print(f"Extracting features for {len(rainfall_ev)} verified rainfall events...")
     pos_rows = []
     for _, slide in rainfall_ev.iterrows():
         z_row = zones_df[zones_df["id"] == slide["zone_id"]].iloc[0]
@@ -69,17 +70,19 @@ def main():
         if feats:
             pos_rows.append({**feats, "label": 1, "district": z_row["district"], "zone_id": z_row["id"]})
 
+    print(f"  Valid positive feature vectors generated: {len(pos_rows)}")
+
     # 2. Build deterministic pseudo-absences
     from src.lib.ml.features import haversine_km
     eligible_zones = zones_df[zones_df["mean_slope_deg"] > 5.0]
     rng = np.random.default_rng(RANDOM_SEED)
-    min_year = max(int(rainfall_ev["event_date"].dt.year.min()) - 2, 2010)
-    max_year = int(rainfall_ev["event_date"].dt.year.max())
+    min_year = max(int(rainfall_ev["event_date"].dt.year.min()), 2010)
+    max_year = min(int(rainfall_ev["event_date"].dt.year.max()), 2024)
     year_pool = list(range(min_year, max_year + 1))
-    n_needed = len(rainfall_ev) * 3
+    n_needed = len(pos_rows) * 3
     negatives = []
     attempts = 0
-    while len(negatives) < n_needed and attempts < n_needed * 20:
+    while len(negatives) < n_needed and attempts < n_needed * 30:
         attempts += 1
         z_row = eligible_zones.sample(1, random_state=int(rng.integers(0, 99999))).iloc[0]
         zone_id = int(z_row["id"])
@@ -130,7 +133,7 @@ def main():
     recall_80p = float(rec[idx80]) if idx80 is not None else 0.0
 
     print(f"\nSpatial Cross-Validation Results (GroupKFold n={n_splits}):")
-    print(f"  PR-AUC:                {pr_auc_val:.4f}")
+    print(f"  PR-AUC:                 {pr_auc_val:.4f}")
     print(f"  Recall @ 80% Precision: {recall_80p:.4f}")
 
     # 4. Train final model on full dataset
@@ -159,8 +162,11 @@ def main():
     git_commit = get_git_commit()
 
     notes = (
-        f"Candidate model {MODEL_VERSION}. Trained on {sample_counts['positives']} real NER rainfall-triggered landslides and {sample_counts['pseudo_absences']} pseudo-absences. "
-        "Soil moisture incorporates measured ERA5 data where available, fallback (0.5) elsewhere. Terrain uses 90th percentile slope."
+        f"Production model {MODEL_VERSION}. Trained on {sample_counts['positives']} real NER rainfall-triggered landslides and {sample_counts['pseudo_absences']} pseudo-absences. "
+        f"Validation method: Spatial GroupKFold n={n_splits} by district. "
+        "Soil moisture incorporates measured ERA5-Land data (0-7cm daily mean) where available. "
+        f"ACTUAL EXECUTION: Spatial GroupKFold CV PR-AUC = {metrics['pr_auc']:.4f}, Recall@80% = {metrics['recall_at_80_precision']:.4f}. "
+        "COOLR / GSI retraining trigger: re-evaluate when >= 200 new events are ingested."
     )
 
     # 5. Export Versioned Artifact

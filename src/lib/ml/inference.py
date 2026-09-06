@@ -48,7 +48,7 @@ DATABASE_URL = _raw_db_url.strip() if _raw_db_url and _raw_db_url.strip() else N
 _is_production = os.getenv("NODE_ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
 
 # Fallback artifact path when registry is unreachable
-_FALLBACK_ARTIFACT_PATH = "models/v0.2-lr-trained.json"
+_FALLBACK_ARTIFACT_PATH = "models/v0.4-lr-trained.json"
 
 def get_active_artifact_path_from_registry(db_url: str = None) -> str:
     """
@@ -226,6 +226,21 @@ class LandslideRiskInferenceEngine:
             proba = self.artifact.predict_proba(feats)
             risk_score, risk_level = self.artifact.compute_risk_score(proba)
             explanation = self.artifact.explain(feats)
+
+            # When soil moisture is in fallback mode (unmeasured neutral value),
+            # zero out its factor attribution so unmeasured data does not distort attribution.
+            if sm_status == "fallback":
+                for cat in explanation.get("top_categories", []):
+                    if cat.get("category") == "soil_moisture":
+                        cat["net_contribution"] = 0.0
+                for feat in explanation.get("all_features", []):
+                    if "soil" in feat.get("feature", ""):
+                        feat["contribution"] = 0.0
+                for feat in explanation.get("top_features", []):
+                    if "soil" in feat.get("feature", ""):
+                        feat["contribution"] = 0.0
+                # Re-sort top_categories by absolute contribution
+                explanation["top_categories"].sort(key=lambda item: abs(item["net_contribution"]), reverse=True)
 
             # 7. Construct dynamic explanation text
             top_cat = explanation["top_categories"][0]["category"].replace("_", " ")

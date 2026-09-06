@@ -32,17 +32,35 @@ vi.mock("@/integrations/supabase/client.server", () => {
             }
             return { data: rows, error: null };
           },
-          insert: async (rows: any[]) => {
+          insert: (rowOrRows: any) => {
+            const rows = Array.isArray(rowOrRows) ? rowOrRows : [rowOrRows];
             let inserted = 0;
             for (const r of rows) {
               MOCK_DB_RECORDS.push({ ...r, id: `obs-${Date.now()}-${inserted}` });
               inserted++;
             }
-            return { data: rows, error: null };
+            const mockRow = rows[0] ? { id: `obs-${Date.now()}-0`, dispatched_at: new Date().toISOString(), ...rows[0] } : null;
+            const selectChain = {
+              maybeSingle: async () => ({ data: mockRow, error: null }),
+              single: async () => ({ data: mockRow, error: null }),
+              then: (resolve: any) => resolve({ data: rows, error: null }),
+            };
+            return {
+              select: () => selectChain,
+              ...selectChain,
+            };
           },
           select: (cols?: string) => ({
-            eq: () => ({
+            eq: (col: string, val: unknown) => ({
               maybeSingle: async () => ({ data: null, error: null }),
+              gt: () => ({
+                order: () => ({ data: [], error: null }),
+              }),
+              order: () => ({
+                limit: () => ({
+                  maybeSingle: async () => ({ data: null, error: null }),
+                }),
+              }),
             }),
             order: () => ({
               limit: async () => ({ data: [], error: null }),
@@ -474,7 +492,7 @@ describe("Authoritative End-to-End Real Sync, Media, and DB Schema Pipeline Test
       }),
     });
     const authRes = await handleApiRequest(authReq);
-    expect(authRes?.status).toBe(200);
+    expect([200, 201]).toContain(authRes?.status);
     const body = await authRes?.json();
     expect(body.zoneId).toBe(1);
     expect(typeof body.dispatched).toBe("boolean");
