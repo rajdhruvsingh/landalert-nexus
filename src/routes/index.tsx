@@ -10,6 +10,7 @@ import {
   getRiskPredictionServerFn,
   getZoneWeatherRiskForecastServerFn,
   getResponsePrioritizationServerFn,
+  getRiskForLocationServerFn,
   type ZoneRow,
 } from "@/lib/monitoring.functions";
 import { MapCanvas } from "@/components/MapCanvas";
@@ -40,7 +41,15 @@ import {
   ChevronDown,
   Layers,
   ChevronUp,
+  MapPin,
+  MapPinOff,
+  RotateCw,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import type { User } from "@supabase/supabase-js";
+import { useUserLocation } from "@/hooks/useUserLocation";
+import { getUserAuthorizationState, type AppUserRole } from "@/lib/auth-domains";
+import { getObservationStatusMeta } from "@/lib/observation-status";
 
 const overviewQuery = queryOptions({
   queryKey: ["overview"],
@@ -85,6 +94,63 @@ function Dashboard() {
   const [obsDialogOpen, setObsDialogOpen] = useState(false);
   const [selectedObsId, setSelectedObsId] = useState<number | string | null>(null);
 
+  // Session-derived role for observation review gating (same pattern as AuthDialog)
+  const [viewerRole, setViewerRole] = useState<AppUserRole>("PUBLIC_USER");
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [locationBannerDismissed, setLocationBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    // Read initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const authState = getUserAuthorizationState(session?.user ?? null);
+      setViewerRole(authState.role);
+      setAccessToken(session?.access_token ?? null);
+      setCurrentUser(session?.user ?? null);
+    });
+    // Keep in sync with sign-in / sign-out events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const authState = getUserAuthorizationState(session?.user ?? null);
+      setViewerRole(authState.role);
+      setAccessToken(session?.access_token ?? null);
+      setCurrentUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isLoggedIn = Boolean(currentUser);
+  const userLocation = useUserLocation();
+
+  // On login or on home-page mount if already logged in, request user location
+  useEffect(() => {
+    console.log("[index.tsx] useEffect [isLoggedIn] fired. isLoggedIn =", isLoggedIn);
+    if (isLoggedIn) {
+      console.log("[index.tsx] Calling userLocation.requestLocation()...");
+      userLocation.requestLocation().then((loc) => {
+        console.log("[index.tsx] userLocation.requestLocation() resolved with:", loc);
+      }).catch((err) => {
+        console.error("[index.tsx] userLocation.requestLocation() rejected with:", err);
+      });
+    }
+  }, [isLoggedIn]);
+
+  const getRiskForLocationFn = useServerFn(getRiskForLocationServerFn);
+
+  const {
+    data: locationRisk,
+    isLoading: isRiskLoading,
+  } = useQuery({
+    queryKey: ["riskForLocation", userLocation.lat, userLocation.lng],
+    queryFn: async () => {
+      if (userLocation.lat === null || userLocation.lng === null) return null;
+      return getRiskForLocationFn({
+        data: { lat: userLocation.lat, lng: userLocation.lng },
+      });
+    },
+    enabled: isLoggedIn && userLocation.lat !== null && userLocation.lng !== null,
+    staleTime: 60 * 1000,
+  });
+
   const recompute = useServerFn(recomputeAll);
   const ingest = useServerFn(ingestLiveRainfall);
 
@@ -119,7 +185,7 @@ function Dashboard() {
   }, []);
 
   const states: string[] = useMemo(
-    () => ["All", ...Array.from(new Set(data.zones.map((z: ZoneRow) => z.state))).sort()],
+    () => ["All", ...(Array.from(new Set((data.zones as ZoneRow[]).map((z: ZoneRow) => z.state))) as string[]).sort()],
     [data.zones],
   );
 
@@ -129,13 +195,13 @@ function Dashboard() {
 
     const matchingRoadZoneIds = new Set(
       q
-        ? data.roads
+        ? (data.roads as any[])
             .filter(
-              (r) =>
+              (r: any) =>
                 r.road_name.toLowerCase().includes(q) ||
                 r.segment_label.toLowerCase().includes(q),
             )
-            .map((r) => r.zone_id)
+            .map((r: any) => r.zone_id)
         : [],
     );
 
@@ -281,6 +347,208 @@ function Dashboard() {
             <button onClick={() => setActionNotice(null)} className="text-xs hover:underline">
               {t("common.close", "Close")}
             </button>
+          </div>
+        )}
+
+        {/* Location Permission / Unavailable Graceful Banner */}
+        {isLoggedIn &&
+          (userLocation.permissionDenied || userLocation.error) &&
+          !userLocation.lat &&
+          !locationBannerDismissed && (
+            <div
+              role="alert"
+              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3 animate-in fade-in"
+            >
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div>
+                  <span className="font-semibold">
+                    {t("location.enable_title", "Enable location to see risk in your area")}
+                  </span>
+                  <span className="hidden sm:inline text-muted-foreground ml-1">
+                    — {t(
+                      "location.enable_desc",
+                      "Allow location access to view real-time landslide risk and early warnings for your current zone.",
+                    )}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    userLocation.clearError();
+                    userLocation.requestLocation({ force: true });
+                  }}
+                  className="h-7 text-xs px-2.5 font-medium"
+                >
+                  {t("location.retry", "Enable Location")}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setLocationBannerDismissed(true)}
+                  aria-label={t("common.close", "Close")}
+                  className="text-muted-foreground hover:text-foreground text-sm px-1.5 py-0.5 rounded cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* Prominent Current Location Risk Card for Logged-In Users */}
+        {isLoggedIn && (userLocation.loading || (userLocation.lat !== null && userLocation.lng !== null)) && (
+          <div
+            id="current-location-card"
+            className="panel p-4 sm:p-5 border-l-4 border-l-primary bg-surface/95 shadow-xs space-y-3 animate-in fade-in duration-200"
+          >
+            {userLocation.loading || isRiskLoading ? (
+              <div className="flex items-center justify-between gap-4 py-1">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center text-primary shrink-0">
+                    <MapPin className="h-5 w-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <span className="label-caps">{t("location.card_title", "Your Current Location")}</span>
+                    <p className="text-sm font-medium text-foreground mt-0.5">
+                      {t("location.detecting", "Detecting location and evaluating landslide risk for your current sector…")}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="h-8 gap-1.5 text-xs font-mono shrink-0"
+                >
+                  <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>{t("location.locating", "Locating…")}</span>
+                </Button>
+              </div>
+            ) : locationRisk?.matched && locationRisk.zone ? (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center text-primary shrink-0 mt-0.5">
+                      <MapPin className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="label-caps">{t("location.card_title", "Your Current Location")}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[0.65rem] font-mono">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {t("location.live_detected", "Sector Verified")}
+                        </span>
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-bold font-display text-foreground mt-0.5">
+                        {locationRisk.zone.zone_name}
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {locationRisk.zone.district} district · {locationRisk.zone.state} ·{" "}
+                        <span className="font-mono">
+                          {userLocation.lat?.toFixed(4)}°N, {userLocation.lng?.toFixed(4)}°E
+                        </span>
+                        {userLocation.accuracy ? ` (±${Math.round(userLocation.accuracy)}m)` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <RiskBadge
+                      level={locationRisk.zone.current_risk_level}
+                      score={locationRisk.zone.risk_score}
+                      className="text-xs sm:text-sm py-1 px-3"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={userLocation.loading}
+                      onClick={() => userLocation.requestLocation({ force: true })}
+                      className="h-8 gap-1.5 text-xs font-mono shrink-0 cursor-pointer"
+                      title={t("location.refresh_title", "Refresh GPS location")}
+                    >
+                      <RotateCw className={`h-3.5 w-3.5 ${userLocation.loading ? "animate-spin" : ""}`} />
+                      <span>{t("location.refresh", "Refresh my location")}</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded border border-border bg-secondary/30 p-3 sm:p-3.5 text-xs sm:text-sm text-foreground space-y-1">
+                  <div className="text-[0.68rem] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                    {t("location.assessment_title", "Zone Landslide Risk Assessment")}
+                  </div>
+                  <p className="leading-relaxed">
+                    {locationRisk.zone.explanation ||
+                      t("location.no_explanation", "Standard baseline monitoring active. No heightened hazard conditions detected at this time.")}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-muted-foreground text-[0.72rem]">
+                    {t("location.coverage_notice", "Official NER Landslide Early Warning Sector")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (locationRisk.zone) {
+                        setSelectedId(locationRisk.zone.id);
+                        setShowZoneDetails(true);
+                        const mapEl = document.getElementById("risk-map");
+                        if (mapEl) mapEl.scrollIntoView({ behavior: "smooth" });
+                      }
+                    }}
+                    className="text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{t("location.view_on_map", "Focus zone on map")}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-full bg-secondary text-muted-foreground flex items-center justify-center shrink-0 mt-0.5">
+                      <MapPinOff className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="label-caps">{t("location.card_title", "Your Current Location")}</span>
+                      <h2 className="text-lg sm:text-xl font-bold font-display text-foreground mt-0.5">
+                        {t("location.outside_region_title", "You're outside our currently monitored region")}
+                      </h2>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {userLocation.lat?.toFixed(4)}°N, {userLocation.lng?.toFixed(4)}°E
+                        {userLocation.accuracy ? ` (±${Math.round(userLocation.accuracy)}m)` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={userLocation.loading}
+                    onClick={() => userLocation.requestLocation({ force: true })}
+                    className="h-8 gap-1.5 text-xs font-mono shrink-0 cursor-pointer"
+                    title={t("location.refresh_title", "Refresh GPS location")}
+                  >
+                    <RotateCw className={`h-3.5 w-3.5 ${userLocation.loading ? "animate-spin" : ""}`} />
+                    <span>{t("location.refresh", "Refresh my location")}</span>
+                  </Button>
+                </div>
+
+                <div className="rounded border border-border bg-secondary/20 p-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                  {t(
+                    "location.outside_region_desc",
+                    "LandAlert-Nexus currently provides high-resolution early warning coverage for 15 designated hill zones across the North Eastern Region of India (Assam, Arunachal Pradesh, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura). Your current coordinates fall outside these monitored operational sectors. You can explore the regional map below to review active alerts and risk levels.",
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -802,6 +1070,7 @@ function Dashboard() {
                       <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_time", "Time (IST)")}</th>
                       <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_location", "Location")}</th>
                       <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_type", "Type")}</th>
+                      <th className="py-2 px-2.5 whitespace-nowrap">{t("operational_tables.col_status", "Status")}</th>
                       <th className="py-2 px-2.5 text-right">{t("common.action", "Action")}</th>
                     </tr>
                   </thead>
@@ -812,6 +1081,7 @@ function Dashboard() {
                       const typeLabel =
                         obs.visual_signs ||
                         (obs.road_status && obs.road_status !== "open" ? `Road ${obs.road_status}` : "Slope Movement");
+                      const statusMeta = getObservationStatusMeta(obs.status);
                       return (
                         <tr key={obs.id} className="hover:bg-secondary/20 transition-colors">
                           <td className="py-2.5 px-2.5 font-mono text-[0.7rem] whitespace-nowrap text-muted-foreground">
@@ -822,6 +1092,13 @@ function Dashboard() {
                           </td>
                           <td className="py-2.5 px-2.5 text-muted-foreground text-[0.72rem] truncate max-w-[120px]">
                             {typeLabel}
+                          </td>
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <span
+                              className={`inline-block px-1.5 py-0.5 rounded border text-[0.62rem] font-semibold ${statusMeta.badgeClass}`}
+                            >
+                              {statusMeta.label}
+                            </span>
                           </td>
                           <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                             <button
@@ -840,7 +1117,7 @@ function Dashboard() {
                     })}
                     {observationsList.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                        <td colSpan={5} className="py-6 text-center text-muted-foreground">
                           {t("observations.no_records", "No observations found matching the search filter.")}
                         </td>
                       </tr>
@@ -1019,6 +1296,8 @@ function Dashboard() {
             if (el) el.scrollIntoView({ behavior: "smooth" });
           }}
           onSuccess={() => qc.invalidateQueries()}
+          viewerRole={viewerRole}
+          accessToken={accessToken}
         />
       </main>
 

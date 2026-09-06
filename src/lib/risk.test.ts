@@ -17,7 +17,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { moistureThresholdMm, intensityThresholdMmPerDay } from "./risk";
+import {
+  moistureThresholdMm,
+  intensityThresholdMmPerDay,
+  isPointInPolygon,
+  findMatchingZone,
+  zonePolygon,
+} from "./risk";
 
 // ─── moistureThresholdMm ─────────────────────────────────────────────────────
 // E(mm) = -11.10 + 0.62 * D(hr)
@@ -128,5 +134,96 @@ describe("Threshold formula regression guards", () => {
   it("intensityThresholdMmPerDay matches the literal formula constants", () => {
     const D = 4;
     expect(intensityThresholdMmPerDay(D)).toBe(43.26 * Math.pow(D, -0.78));
+  });
+});
+
+// ─── Point-In-Polygon and Zone-Matching Tests ─────────────────────────────────
+
+describe("isPointInPolygon and findMatchingZone", () => {
+  const testZones = [
+    {
+      id: 1,
+      zone_name: "Tamenglong",
+      district: "Tamenglong",
+      state: "Manipur",
+      centroid_lat: 24.98,
+      centroid_lng: 93.5,
+      current_risk_level: "High",
+      risk_score: 78.4,
+      explanation: "High cumulative 72h rainfall exceeds threshold.",
+    },
+    {
+      id: 2,
+      zone_name: "Noney",
+      district: "Noney",
+      state: "Manipur",
+      centroid_lat: 24.83,
+      centroid_lng: 93.66,
+      current_risk_level: "Moderate",
+      risk_score: 55.2,
+      explanation: "Moderate antecedent moisture on steep slopes.",
+    },
+    {
+      id: 11,
+      zone_name: "Gangtok-Singtam Corridor",
+      district: "East Sikkim",
+      state: "Sikkim",
+      centroid_lat: 27.33,
+      centroid_lng: 88.61,
+      current_risk_level: "Severe",
+      risk_score: 91.5,
+      explanation: "Extreme rainfall exceeding Sikkim I-D threshold.",
+    },
+  ];
+
+  it("resolves a coordinate clearly inside a known test zone to that zone", () => {
+    // Tamenglong centroid: [24.98, 93.5]
+    const matchedTamenglong = findMatchingZone(24.98, 93.5, testZones);
+    expect(matchedTamenglong).not.toBeNull();
+    expect(matchedTamenglong?.id).toBe(1);
+    expect(matchedTamenglong?.zone_name).toBe("Tamenglong");
+
+    // Slightly offset coordinate still well within Tamenglong polygon (~1 km offset)
+    const matchedNearby = findMatchingZone(24.985, 93.505, testZones);
+    expect(matchedNearby).not.toBeNull();
+    expect(matchedNearby?.id).toBe(1);
+
+    // Gangtok centroid: [27.33, 88.61]
+    const matchedGangtok = findMatchingZone(27.33, 88.61, testZones);
+    expect(matchedGangtok).not.toBeNull();
+    expect(matchedGangtok?.id).toBe(11);
+    expect(matchedGangtok?.zone_name).toBe("Gangtok-Singtam Corridor");
+  });
+
+  it("resolves a coordinate clearly outside all zones to none (null)", () => {
+    // Delhi coordinates
+    const delhi = findMatchingZone(28.6139, 77.209, testZones);
+    expect(delhi).toBeNull();
+
+    // Mumbai coordinates
+    const mumbai = findMatchingZone(19.076, 72.8777, testZones);
+    expect(mumbai).toBeNull();
+
+    // Null Island
+    const nullIsland = findMatchingZone(0, 0, testZones);
+    expect(nullIsland).toBeNull();
+
+    // Far away coordinate in Arabian Sea
+    const ocean = findMatchingZone(15.0, 68.0, testZones);
+    expect(ocean).toBeNull();
+  });
+
+  it("handles empty or degenerate polygons safely", () => {
+    expect(isPointInPolygon([24.98, 93.5], [])).toBe(false);
+    expect(isPointInPolygon([24.98, 93.5], [[24.98, 93.5]])).toBe(false);
+    expect(
+      isPointInPolygon(
+        [24.98, 93.5],
+        [
+          [24.0, 93.0],
+          [25.0, 93.0],
+        ]
+      )
+    ).toBe(false);
   });
 });
