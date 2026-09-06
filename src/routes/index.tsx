@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -83,6 +83,7 @@ import {
   getStateByName,
   getDistrictsByState,
   getDistrictByName,
+  searchGeography,
   NER_DISTRICTS,
   NORTH_EASTERN_REGION,
 } from "@/lib/geography";
@@ -90,6 +91,9 @@ import {
 function Dashboard() {
   const { t } = useTranslation();
   const { data } = useSuspenseQuery(overviewQuery);
+  const dataZonesRef = useRef(data.zones);
+  dataZonesRef.current = data.zones;
+
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedSpatialLocation, setSelectedSpatialLocation] = useState<LocationSpatialRisk | null>(null);
@@ -136,8 +140,13 @@ function Dashboard() {
       if (typeof detail?.query === "string") {
         setSearchQuery(detail.query);
       }
-      if (detail?.item) {
-        const item = detail.item;
+      const item =
+        detail?.item ||
+        (typeof detail?.query === "string" && detail.query.trim().length >= 2
+          ? searchGeography(detail.query)[0]
+          : undefined);
+
+      if (item) {
         if (item.centroid) {
           setCustomCenter(item.centroid);
           setCustomZoom(item.type === "city" || item.type === "town" || item.type === "locality" ? 11 : item.type === "district" ? 9 : 8);
@@ -150,18 +159,15 @@ function Dashboard() {
         }
         if (item.zoneId) {
           setSelectedId(item.zoneId);
-          setSelectedSpatialLocation(null);
-          setSelectedCellRisk(null);
-          setShowZoneDetails(true);
-          setUninstrumentedLocationNotice(null);
-        } else if (item.centroid) {
+        }
+        if (item.centroid) {
           const locRisk = deriveLocationSpatialRisk(
             item.name,
             item.type || "city",
             item.districtName || item.name,
             item.stateName || "",
             item.centroid,
-            data.zones,
+            dataZonesRef.current,
           );
           setSelectedSpatialLocation(locRisk);
           setSelectedCellRisk(null);
@@ -226,18 +232,15 @@ function Dashboard() {
           if (item.districtName) setDistrictFilter(item.districtName);
           if (item.zoneId) {
             setSelectedId(item.zoneId);
-            setSelectedSpatialLocation(null);
-            setSelectedCellRisk(null);
-            setShowZoneDetails(true);
-            setUninstrumentedLocationNotice(null);
-          } else if (item.centroid) {
+          }
+          if (item.centroid) {
             const locRisk = deriveLocationSpatialRisk(
               item.name,
               item.type || "city",
               item.districtName || item.name,
               item.stateName || "",
               item.centroid,
-              data.zones,
+              dataZonesRef.current,
             );
             setSelectedSpatialLocation(locRisk);
             setSelectedCellRisk(null);
@@ -474,8 +477,22 @@ function Dashboard() {
                     aria-label="Filter by region or state"
                     value={stateFilter}
                     onChange={(e) => {
-                      setStateFilter(e.target.value);
+                      const st = e.target.value;
+                      setStateFilter(st);
                       setDistrictFilter("All");
+                      setSelectedSpatialLocation(null);
+                      setSelectedCellRisk(null);
+                      setUninstrumentedLocationNotice(null);
+                      if (st !== "All") {
+                        const stateObj = getStateByName(st);
+                        if (stateObj) {
+                          setCustomCenter(stateObj.centroid);
+                          setCustomZoom(8);
+                        }
+                      } else {
+                        setCustomCenter(null);
+                        setCustomZoom(null);
+                      }
                     }}
                     className="h-8 rounded border border-border bg-background px-2 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
                   >
@@ -493,7 +510,31 @@ function Dashboard() {
                     <select
                       aria-label="Filter by district"
                       value={districtFilter}
-                      onChange={(e) => setDistrictFilter(e.target.value)}
+                      onChange={(e) => {
+                        const distName = e.target.value;
+                        setDistrictFilter(distName);
+                        setSelectedCellRisk(null);
+                        setUninstrumentedLocationNotice(null);
+                        if (distName !== "All") {
+                          const distObj = getDistrictByName(distName);
+                          if (distObj) {
+                            setCustomCenter(distObj.centroid);
+                            setCustomZoom(9);
+                            const locRisk = deriveLocationSpatialRisk(
+                              distObj.name,
+                              "district",
+                              distObj.name,
+                              distObj.stateName,
+                              distObj.centroid,
+                              dataZonesRef.current,
+                            );
+                            setSelectedSpatialLocation(locRisk);
+                            setShowZoneDetails(false);
+                          }
+                        } else {
+                          setSelectedSpatialLocation(null);
+                        }
+                      }}
                       className="h-8 rounded border border-border bg-background px-2 text-xs text-foreground font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
                     >
                       <option value="All">{t("map_panel.all_districts", `All Districts in ${stateFilter}`)}</option>
@@ -589,6 +630,7 @@ function Dashboard() {
                     setSelectedCellRisk(cell);
                     setSelectedSpatialLocation(null);
                     setShowZoneDetails(false);
+                    setCustomCenter(cell.centroid);
                   }}
                 />
 

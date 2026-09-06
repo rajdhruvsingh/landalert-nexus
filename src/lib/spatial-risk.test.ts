@@ -276,4 +276,116 @@ describe("Continuous 8-State Spatial Prediction Grid Architecture", () => {
     const hitsKohima = searchGeography("kohi");
     expect(hitsKohima.some((h) => h.name.includes("Kohima"))).toBe(true);
   });
+
+  it("19: Risk Score Variation Test across geographically separated locations in all 8 states", () => {
+    const testLocations = [
+      { name: "Dibrugarh", state: "Assam", district: "Dibrugarh", coord: [27.4728, 94.912] as [number, number], terrain: "plain" },
+      { name: "Guwahati", state: "Assam", district: "Kamrup Metropolitan", coord: [26.1445, 91.7362] as [number, number], terrain: "valley" },
+      { name: "Gangtok", state: "Sikkim", district: "East Sikkim", coord: [27.3389, 88.6065] as [number, number], terrain: "mountain" },
+      { name: "Imphal", state: "Manipur", district: "Imphal West", coord: [24.817, 93.9368] as [number, number], terrain: "intermontane" },
+      { name: "Shillong", state: "Meghalaya", district: "East Khasi Hills", coord: [25.5788, 91.8933] as [number, number], terrain: "plateau" },
+      { name: "Aizawl", state: "Mizoram", district: "Aizawl", coord: [23.7271, 92.7176] as [number, number], terrain: "ridge" },
+      { name: "Kohima", state: "Nagaland", district: "Kohima", coord: [25.6751, 94.1086] as [number, number], terrain: "mountain" },
+      { name: "Agartala", state: "Tripura", district: "West Tripura", coord: [23.8315, 91.2868] as [number, number], terrain: "plain" },
+      { name: "Tawang", state: "Arunachal Pradesh", district: "Tawang", coord: [27.586, 91.859] as [number, number], terrain: "alpine" },
+    ];
+
+    const results = testLocations.map((loc) => {
+      const assessment = deriveLocationSpatialRisk(
+        loc.name,
+        "city",
+        loc.district,
+        loc.state,
+        loc.coord,
+        SAMPLE_ZONES
+      );
+      return { ...loc, assessment };
+    });
+
+    // 1. Each location resolves to correct identity and coordinates
+    for (const r of results) {
+      expect(r.assessment.location.name).toBe(r.name);
+      expect(r.assessment.location.state).toBe(r.state);
+      expect(r.assessment.location.coordinates).toEqual(r.coord);
+      expect(r.assessment.surrounding_cells_count).toBeGreaterThan(0);
+      // Scientific integrity: probability is null
+      expect(r.assessment.risk.probability).toBeNull();
+    }
+
+    // 2. Scores are not globally hardcoded: distinct locations produce multiple distinct scores
+    const distinctScores = new Set(results.map((r) => r.assessment.risk.score));
+    expect(distinctScores.size).toBeGreaterThanOrEqual(5); // At least 5 distinct scores across 9 cities
+
+    // 3. Known physical terrain differences produce correspondingly different scores:
+    // Steep mountain/alpine terrain (Gangtok, Tawang, Kohima) has much higher risk than flat alluvial plains (Agartala, Guwahati, Dibrugarh)
+    const gangtok = results.find((r) => r.name === "Gangtok")!;
+    const tawang = results.find((r) => r.name === "Tawang")!;
+    const agartala = results.find((r) => r.name === "Agartala")!;
+    const dibrugarh = results.find((r) => r.name === "Dibrugarh")!;
+
+    expect(gangtok.assessment.risk.score).toBeGreaterThan(agartala.assessment.risk.score);
+    expect(tawang.assessment.risk.score).toBeGreaterThan(dibrugarh.assessment.risk.score);
+    expect(gangtok.assessment.components.static_susceptibility).toBeGreaterThan(dibrugarh.assessment.components.static_susceptibility);
+  });
+
+  it("20: Regression Guard against constant/default 24/100 fallback score", () => {
+    // Test that mountain terrain in all 8 states does not collapse to 24/100
+    const highReliefLocations = [
+      { name: "Gangtok", state: "Sikkim", coord: [27.3389, 88.6065] as [number, number] },
+      { name: "Tawang", state: "Arunachal Pradesh", coord: [27.586, 91.859] as [number, number] },
+      { name: "Kohima", state: "Nagaland", coord: [25.6751, 94.1086] as [number, number] },
+      { name: "Cherrapunji", state: "Meghalaya", coord: [25.28, 91.73] as [number, number] },
+      { name: "Aizawl", state: "Mizoram", coord: [23.7271, 92.7176] as [number, number] },
+    ];
+
+    for (const loc of highReliefLocations) {
+      const res = deriveLocationSpatialRisk(loc.name, "city", loc.name, loc.state, loc.coord, SAMPLE_ZONES);
+      expect(res.risk.score).not.toBe(24);
+      expect(res.risk.score).toBeGreaterThanOrEqual(38); // Mountain locations evaluate at Moderate or above
+    }
+  });
+
+  it("21: Real API Spatial Assessment variation and identity verification (Dibrugarh vs Gangtok)", async () => {
+    // 1. GET risk assessment for Dibrugarh, Assam
+    const reqDibrugarh = new Request(
+      "http://localhost:3000/api/spatial/risk?lat=27.4728&lng=94.9120&city=Dibrugarh&state=Assam"
+    );
+    const resDibrugarh = await handleApiRequest(reqDibrugarh);
+    expect(resDibrugarh).not.toBeNull();
+    expect(resDibrugarh!.status).toBe(200);
+    const dataDibrugarh = await resDibrugarh!.json();
+
+    // 2. GET risk assessment for Gangtok, Sikkim
+    const reqGangtok = new Request(
+      "http://localhost:3000/api/spatial/risk?lat=27.3389&lng=88.6065&city=Gangtok&state=Sikkim"
+    );
+    const resGangtok = await handleApiRequest(reqGangtok);
+    expect(resGangtok).not.toBeNull();
+    expect(resGangtok!.status).toBe(200);
+    const dataGangtok = await resGangtok!.json();
+
+    // Verify response identity
+    expect(dataDibrugarh.location.name).toBe("Dibrugarh");
+    expect(dataDibrugarh.location.state).toBe("Assam");
+    expect(dataGangtok.location.name).toBe("Gangtok");
+    expect(dataGangtok.location.state).toBe("Sikkim");
+
+    // Coordinates must differ
+    expect(dataDibrugarh.location.coordinates).not.toEqual(dataGangtok.location.coordinates);
+
+    // Feature inputs and static susceptibility must differ
+    expect(dataGangtok.components.static_susceptibility).toBeGreaterThan(
+      dataDibrugarh.components.static_susceptibility
+    );
+
+    // Operational risk scores must differ and Gangtok must be significantly higher
+    expect(dataGangtok.risk.score).toBeGreaterThan(dataDibrugarh.risk.score);
+    expect(dataGangtok.risk.score).not.toBe(24);
+
+    // Provenance and scientific integrity
+    expect(dataDibrugarh.risk.probability).toBeNull();
+    expect(dataGangtok.risk.probability).toBeNull();
+    expect(dataDibrugarh.components.satellite_deformation.status).toBe("UNAVAILABLE");
+    expect(dataGangtok.components.satellite_deformation.status).toBe("UNAVAILABLE");
+  });
 });

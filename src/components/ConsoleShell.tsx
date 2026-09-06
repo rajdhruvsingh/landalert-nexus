@@ -91,15 +91,21 @@ export function ConsoleNav() {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return;
 
+    const matched = searchGeography(q);
+    const topItem = matched.length > 0 ? matched[0] : undefined;
+
     if (typeof window !== "undefined") {
       if (currentPath === "/") {
-        window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q } }));
+        window.dispatchEvent(new CustomEvent("landalert-filter", { detail: { query: q, item: topItem } }));
         const mapEl = document.getElementById("risk-map");
         if (mapEl) {
           mapEl.scrollIntoView({ behavior: "smooth" });
         }
       } else {
         sessionStorage.setItem("landalert_pending_search", q);
+        if (topItem) {
+          sessionStorage.setItem("landalert_pending_search_item", JSON.stringify(topItem));
+        }
         navigate({ to: "/", hash: "risk-map" });
       }
     }
