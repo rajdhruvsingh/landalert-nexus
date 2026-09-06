@@ -89,11 +89,44 @@ export const TRUSTED_INSTITUTIONAL_DOMAINS: Record<string, InstitutionalDomain> 
 };
 
 export type AppUserRole = "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
-export type OfficialVerificationStatus =
+
+/**
+ * The four values allowed by the DB CHECK constraint on user_profiles.verification_status:
+ *   CHECK (verification_status IN ('UNVERIFIED', 'PENDING_OFFICIAL_VERIFICATION', 'VERIFIED', 'REJECTED'))
+ *
+ * Use this type for anything that WRITES to user_profiles.verification_status.
+ *
+ * NOTE: Do NOT confuse with OfficialVerificationStatus below, which includes the additional
+ * "OFFICIAL_VERIFIED" signal that may appear in Supabase auth JWT metadata but is NOT
+ * a valid column value in the database.
+ */
+export type UserProfileVerificationStatus =
   | "UNVERIFIED"
   | "PENDING_OFFICIAL_VERIFICATION"
-  | "OFFICIAL_VERIFIED"
+  | "VERIFIED"
   | "REJECTED";
+
+/** Canonical DB-valid values as a runtime array for validation / test guards. */
+export const USER_PROFILE_VERIFICATION_STATUSES: readonly UserProfileVerificationStatus[] = [
+  "UNVERIFIED",
+  "PENDING_OFFICIAL_VERIFICATION",
+  "VERIFIED",
+  "REJECTED",
+] as const;
+
+/**
+ * @deprecated For DB writes, use UserProfileVerificationStatus instead.
+ *
+ * This superset type also includes "OFFICIAL_VERIFIED", which may appear as a
+ * signal in Supabase auth user_metadata / JWT claims (set externally, e.g. via
+ * admin dashboard or webhook) but is NOT a valid user_profiles.verification_status
+ * column value — writing it will violate the DB CHECK constraint.
+ *
+ * Kept for backward compat with getUserAuthorizationState() which reads raw JWT metadata.
+ */
+export type OfficialVerificationStatus =
+  | UserProfileVerificationStatus
+  | "OFFICIAL_VERIFIED";
 
 /**
  * Validates whether an email belongs to an institutional government/scientific domain.
