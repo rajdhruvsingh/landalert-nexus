@@ -18,10 +18,12 @@ services:
       resources:
         limits:
           cpus: "4.0"
-          memory: 16G
+          memory: ${WORKER_MEM_LIMIT:-7G}
         reservations:
           cpus: "2.0"
-          memory: 8G
+          memory: ${WORKER_MEM_RESERVATION:-4G}
+    env_file:
+      - .env
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}

@@ -32,8 +32,35 @@ CDSE_STAC_URL = "https://catalogue.dataspace.copernicus.eu/stac/search"
 CDSE_ODATA_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 
 
+def _load_env_fallback():
+    candidates = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+        "/app/.env",
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip().strip("'\"")
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+                break
+            except Exception:
+                pass
+
+_load_env_fallback()
+
+
 class CdseClient:
     def __init__(self, username: Optional[str] = None, password: Optional[str] = None):
+        _load_env_fallback()
         self.username = username or os.environ.get("CDSE_USERNAME")
         self.password = password or os.environ.get("CDSE_PASSWORD")
         self.access_token: Optional[str] = None

@@ -43,8 +43,35 @@ POLL_INTERVAL_SECONDS = 5
 PIPELINE_VERSION = "v1.2.0-isce2-snaphu"
 
 
+def _load_env_fallback():
+    candidates = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+        "/app/.env",
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip().strip("'\"")
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+                break
+            except Exception:
+                pass
+
+_load_env_fallback()
+
+
 class InSarWorkerDaemon:
     def __init__(self):
+        _load_env_fallback()
         self.supabase_url = os.environ.get("SUPABASE_URL", "")
         self.supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
         self.cdse_client = CdseClient()
