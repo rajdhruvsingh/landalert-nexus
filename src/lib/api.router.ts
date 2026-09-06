@@ -20,6 +20,12 @@ import { ingestLiveRainfallImpl } from "./monitoring.functions";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getSatelliteLayerStatus, fetchSatelliteTile } from "./satellite.service";
+import {
+  getCellDeformation,
+  getLocationDeformation,
+  getAllInSarProducts,
+  CANONICAL_SAR_PIPELINE_STEPS,
+} from "./insar.service";
 import { processIMDTelemetry } from "./integrations/imd.adapter";
 import { processSensorTelemetry } from "./integrations/sensors.adapter";
 import { processRoadStatusUpdate } from "./integrations/road-status.adapter";
@@ -725,6 +731,80 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           cors,
         );
       }
+    }
+
+    // 12b. Satellite InSAR Ground Deformation Endpoint
+    if (pathname === "/api/satellite/deformation" && request.method === "GET") {
+      const cellIdParam = url.searchParams.get("cellId");
+      const latParam = url.searchParams.get("lat");
+      const lngParam = url.searchParams.get("lng");
+      const cityName = url.searchParams.get("city") || "";
+      const districtName = url.searchParams.get("district") || "";
+      const stateName = url.searchParams.get("state") || "";
+
+      if (cellIdParam) {
+        const deformation = getCellDeformation(cellIdParam.trim());
+        return jsonResponse({
+          status: "success",
+          deformation,
+          scientific_integrity: {
+            zero_fabrication_prohibited: true,
+            option_a_independent_indicator: true,
+            pipeline_steps: CANONICAL_SAR_PIPELINE_STEPS,
+          },
+        }, 200, cors);
+      }
+
+      if (latParam && lngParam) {
+        const lat = parseFloat(latParam);
+        const lng = parseFloat(lngParam);
+        if (isNaN(lat) || isNaN(lng)) {
+          return errorResponse("Invalid lat/lng parameters", "INVALID_COORDINATES", 400, cors);
+        }
+        const cityDeform = getLocationDeformation(lat, lng, cityName || "Queried Location", districtName, stateName);
+        return jsonResponse({
+          status: "success",
+          ...cityDeform,
+          pipeline_steps: CANONICAL_SAR_PIPELINE_STEPS,
+        }, 200, cors);
+      }
+
+      // If city name provided, look up in geography
+      if (cityName) {
+        const allCities = getAllCities();
+        const found = allCities.find(
+          (c) =>
+            c.name.toLowerCase() === cityName.trim().toLowerCase() &&
+            (!stateName || c.stateName.toLowerCase() === stateName.trim().toLowerCase())
+        );
+        if (found) {
+          const cityDeform = getLocationDeformation(
+            found.centroid[0],
+            found.centroid[1],
+            found.name,
+            found.districtName,
+            found.stateName
+          );
+          return jsonResponse({
+            status: "success",
+            ...cityDeform,
+            pipeline_steps: CANONICAL_SAR_PIPELINE_STEPS,
+          }, 200, cors);
+        }
+      }
+
+      // Return all registered deformation products across NER
+      const allDeformation = getAllInSarProducts();
+      return jsonResponse({
+        status: "success",
+        total_registered: allDeformation.length,
+        products: allDeformation,
+        pipeline_steps: CANONICAL_SAR_PIPELINE_STEPS,
+        scientific_integrity: {
+          zero_fabrication_prohibited: true,
+          uncalibrated_features_excluded_from_ml: true,
+        },
+      }, 200, cors);
     }
 
     // 13. Physical Geotechnical In-Situ Sensor Ingestion (Inclinometers, Piezometers, Soil Probes)

@@ -87,6 +87,7 @@ export default function RiskMap({
   const [showTrueColor, setShowTrueColor] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
   const [showSpatialGrid, setShowSpatialGrid] = useState(true);
+  const [showInSarDeformation, setShowInSarDeformation] = useState(false);
 
   const selectedZone = zones.find((z) => z.id === selectedId) ?? null;
 
@@ -126,6 +127,20 @@ export default function RiskMap({
           />
           <span className="text-[0.72rem] font-semibold text-foreground">
             {t("risk_map.show_spatial_surface", "8-State Spatial Risk Surface")}
+          </span>
+        </label>
+
+        {/* InSAR Ground Deformation Layer Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showInSarDeformation}
+            onChange={(e) => setShowInSarDeformation(e.target.checked)}
+            className="rounded border-border text-violet-500"
+          />
+          <span className="text-[0.72rem] font-semibold text-foreground flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-violet-500 inline-block"></span>
+            {t("risk_map.show_insar_layer", "InSAR Ground Deformation")}
           </span>
         </label>
 
@@ -193,29 +208,46 @@ export default function RiskMap({
           />
         )}
         {/* Continuous 8-State Spatial Prediction Grid Surface */}
-        {showSpatialGrid && spatialCells.map((c) => (
-          <Rectangle
-            key={c.cell_id}
-            bounds={c.bounds}
-            pathOptions={{
-              color: riskColor(c.risk_level),
-              weight: 0.6,
-              fillColor: riskColor(c.risk_level),
-              fillOpacity: 0.22,
-            }}
-            eventHandlers={{
-              click: () => onSelectCell?.(c),
-            }}
-          >
-            <Tooltip direction="top" opacity={0.95}>
-              <div className="font-mono text-xs leading-snug">
-                <div className="font-bold">{c.district}, {c.state} <span className="font-normal opacity-70">({c.cell_id})</span></div>
-                <div>Risk: <span className="font-semibold">{t(`risk_levels.${c.risk_level}`, c.risk_level)}</span> (Score: {c.final_risk_score}/100)</div>
-                <div className="text-[0.65rem] text-muted-foreground">Susceptibility: {(c.static_susceptibility * 100).toFixed(0)}% · Elev: {c.elevation_m}m · Slope: {c.slope_deg}°</div>
-              </div>
-            </Tooltip>
-          </Rectangle>
-        ))}
+        {showSpatialGrid && spatialCells.map((c) => {
+          const hasInSar = c.provenance.satellite_deformation?.status === "AVAILABLE";
+          const strokeColor = showInSarDeformation && hasInSar ? "#8b5cf6" : riskColor(c.risk_level);
+          const fillColor = showInSarDeformation && hasInSar ? "#a78bfa" : riskColor(c.risk_level);
+          const weight = showInSarDeformation && hasInSar ? 2.0 : 0.6;
+          const fillOpacity = showInSarDeformation && hasInSar ? 0.38 : 0.22;
+
+          return (
+            <Rectangle
+              key={c.cell_id}
+              bounds={c.bounds}
+              pathOptions={{
+                color: strokeColor,
+                weight,
+                fillColor,
+                fillOpacity,
+              }}
+              eventHandlers={{
+                click: () => onSelectCell?.(c),
+              }}
+            >
+              <Tooltip direction="top" opacity={0.95}>
+                <div className="font-mono text-xs leading-snug">
+                  <div className="font-bold">{c.district}, {c.state} <span className="font-normal opacity-70">({c.cell_id})</span></div>
+                  <div>Risk: <span className="font-semibold">{t(`risk_levels.${c.risk_level}`, c.risk_level)}</span> (Score: {c.final_risk_score}/100)</div>
+                  <div className="text-[0.65rem] text-muted-foreground">Susceptibility: {(c.static_susceptibility * 100).toFixed(0)}% · Elev: {c.elevation_m}m · Slope: {c.slope_deg}°</div>
+                  {hasInSar ? (
+                    <div className="text-[0.68rem] text-violet-400 font-bold mt-0.5 border-t border-border/40 pt-0.5">
+                      🛰 InSAR: {c.provenance.satellite_deformation!.los_velocity_mean_mm_year} mm/yr ({c.provenance.satellite_deformation!.sensor})
+                    </div>
+                  ) : (
+                    <div className="text-[0.62rem] text-muted-foreground/70 mt-0.5 border-t border-border/30 pt-0.5">
+                      InSAR: UNAVAILABLE ({c.provenance.satellite_deformation?.unavailable_reason === "SAR_DECORRELATION_DENSE_CANOPY" ? "Canopy decorrelation" : "Processing pending"})
+                    </div>
+                  )}
+                </div>
+              </Tooltip>
+            </Rectangle>
+          );
+        })}
 
       {zones.map((z) => {
         const active = selectedId === z.id;

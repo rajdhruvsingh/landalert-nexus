@@ -19,6 +19,11 @@ import { haversineDistanceKm } from "./geography";
 const haversineKm = haversineDistanceKm;
 import type { RiskLevel } from "./risk";
 import type { ZoneRow } from "./monitoring.functions";
+import {
+  getCellDeformation,
+  getLocationDeformation,
+  type InSarDeformationProduct,
+} from "./insar.service";
 
 export interface SpatialCell {
   cell_id: string;
@@ -54,6 +59,7 @@ export interface CellRiskEvaluation {
     weather_source: string;
     satellite_source: string;
     satellite_status: "AVAILABLE" | "UNAVAILABLE" | "NOT_CONFIGURED";
+    satellite_deformation?: InSarDeformationProduct;
     observation_count: number;
     model_version: string;
     computed_at: string;
@@ -83,6 +89,12 @@ export interface LocationSpatialRisk {
     satellite_deformation: {
       status: "UNAVAILABLE" | "AVAILABLE";
       displacement_mm: number | null;
+      velocity_mm_year?: number | null;
+      observation_period?: { start_date: string; end_date: string } | null;
+      sensor?: string;
+      quality?: string;
+      spatial_coverage_pct?: number;
+      unavailable_reason?: string | null;
       note: string;
     };
     verified_observations_count: number;
@@ -93,6 +105,14 @@ export interface LocationSpatialRisk {
     weather_freshness_hours: number;
   };
   model_version: string;
+  model_provenance?: {
+    model_version: string;
+    active_ml_model: string;
+    feature_schema_version: string;
+    satellite_feature_integration: "OPTION_A_INDEPENDENT_INDICATOR";
+    satellite_feature_version: string;
+    inference_date: string;
+  };
   computed_at: string;
 }
 
@@ -12690,6 +12710,8 @@ export function evaluateCellRisk(
       : `Regional NWP & Telemetry Interpolation (${nearestZone.zone_name}, ${Math.round(minZoneDist)}km)`
     : "Regional NWP Climatological Model";
 
+  const deformation = getCellDeformation(cell.cell_id, cell.bounds, cell.centroid);
+
   return {
     cell_id: cell.cell_id,
     centroid: cell.centroid,
@@ -12707,8 +12729,9 @@ export function evaluateCellRisk(
     provenance: {
       terrain_source: "Survey of India DEM / GSI Geomorphology Base",
       weather_source: weatherSource,
-      satellite_source: "Copernicus Sentinel-1 SAR & Sentinel-2 Visuals Interface",
-      satellite_status: "UNAVAILABLE", // Explicitly reported as unavailable rather than pretending data exists
+      satellite_source: deformation.status === "AVAILABLE" ? deformation.source : "Copernicus Sentinel-1 InSAR Interface",
+      satellite_status: deformation.status,
+      satellite_deformation: deformation,
       observation_count: 0,
       model_version: "v0.3-spatial-surface",
       computed_at: asOfDate,
@@ -12739,6 +12762,32 @@ export function deriveLocationSpatialRisk(
     }
   }
 
+  const locationDeform = getLocationDeformation(
+    coordinates[0],
+    coordinates[1],
+    name,
+    district,
+    state
+  );
+  const isDeformAvailable = locationDeform.deformation.status === "AVAILABLE";
+  const defProd = locationDeform.deformation;
+
+  const satDeformComponent = {
+    status: isDeformAvailable ? ("AVAILABLE" as const) : ("UNAVAILABLE" as const),
+    displacement_mm: defProd.cumulative_displacement_mm,
+    velocity_mm_year: defProd.los_velocity_mean_mm_year,
+    observation_period: defProd.observation_period,
+    sensor: defProd.sensor,
+    quality: defProd.quality,
+    spatial_coverage_pct: defProd.spatial_coverage_pct,
+    unavailable_reason: defProd.unavailable_reason,
+    note: isDeformAvailable
+      ? `${defProd.los_velocity_mean_mm_year} mm/yr (${defProd.sensor}, ${defProd.observation_period?.start_date} to ${defProd.observation_period?.end_date})`
+      : defProd.unavailable_reason === "SAR_DECORRELATION_DENSE_CANOPY"
+      ? "C-band SAR phase decorrelation due to dense mountain forest canopy."
+      : "Sentinel-1 InSAR ground deformation processing pending for this cell.",
+  };
+
   if (surrounding.length === 0) {
     return {
       location: { name, type, district, state, coordinates },
@@ -12754,11 +12803,7 @@ export function deriveLocationSpatialRisk(
         dynamic_trigger_score: 15,
         soil_moisture_index: null,
         rainfall_3d_mm: null,
-        satellite_deformation: {
-          status: "UNAVAILABLE",
-          displacement_mm: null,
-          note: "No spatial cells within reach of location.",
-        },
+        satellite_deformation: satDeformComponent,
         verified_observations_count: 0,
       },
       surrounding_cells_count: 0,
@@ -12767,6 +12812,14 @@ export function deriveLocationSpatialRisk(
         weather_freshness_hours: 999,
       },
       model_version: "v0.3-spatial-surface",
+      model_provenance: {
+        model_version: "v0.3-spatial-surface",
+        active_ml_model: "v0.2-lr-trained",
+        feature_schema_version: "v1.0.0",
+        satellite_feature_integration: "OPTION_A_INDEPENDENT_INDICATOR",
+        satellite_feature_version: "insar-v1.0-indep",
+        inference_date: new Date().toISOString(),
+      },
       computed_at: new Date().toISOString(),
     };
   }
@@ -12814,11 +12867,7 @@ export function deriveLocationSpatialRisk(
       dynamic_trigger_score: avgTrigger,
       soil_moisture_index: soilMoistureProxy,
       rainfall_3d_mm: estimatedRainfall3d,
-      satellite_deformation: {
-        status: "UNAVAILABLE",
-        displacement_mm: null,
-        note: "Sentinel-1 InSAR deformation layer pending provider connection. Visual layers available.",
-      },
+      satellite_deformation: satDeformComponent,
       verified_observations_count: 0,
     },
     surrounding_cells_count: surrounding.length,
@@ -12827,6 +12876,14 @@ export function deriveLocationSpatialRisk(
       weather_freshness_hours: 1.5,
     },
     model_version: "v0.3-spatial-surface",
+    model_provenance: {
+      model_version: "v0.3-spatial-surface",
+      active_ml_model: "v0.2-lr-trained",
+      feature_schema_version: "v1.0.0",
+      satellite_feature_integration: "OPTION_A_INDEPENDENT_INDICATOR",
+      satellite_feature_version: "insar-v1.0-indep",
+      inference_date: new Date().toISOString(),
+    },
     computed_at: new Date().toISOString(),
   };
 }

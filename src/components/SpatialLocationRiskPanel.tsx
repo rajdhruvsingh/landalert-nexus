@@ -46,13 +46,43 @@ export default function SpatialLocationRiskPanel({
       ? Math.round(locationRisk!.components.soil_moisture_index * 100)
       : null;
 
-  const satelliteStatus = isCell
-    ? cellRisk!.provenance.satellite_status
-    : locationRisk!.components.satellite_deformation.status;
+  const isDeformAvailable = isCell
+    ? cellRisk?.provenance.satellite_status === "AVAILABLE"
+    : locationRisk?.components.satellite_deformation.status === "AVAILABLE";
 
-  const satelliteSummary = isCell
-    ? "NASA GPM / Sentinel InSAR deformation boundary unconfigured (No fake signal)"
-    : locationRisk!.components.satellite_deformation.note;
+  const deformVelocity = isCell
+    ? cellRisk?.provenance.satellite_deformation?.los_velocity_mean_mm_year
+    : locationRisk?.components.satellite_deformation.velocity_mm_year;
+
+  const deformDisplacement = isCell
+    ? cellRisk?.provenance.satellite_deformation?.cumulative_displacement_mm
+    : locationRisk?.components.satellite_deformation.displacement_mm;
+
+  const deformPeriod = isCell
+    ? cellRisk?.provenance.satellite_deformation?.observation_period
+    : locationRisk?.components.satellite_deformation.observation_period;
+
+  const deformSensor = isCell
+    ? cellRisk?.provenance.satellite_deformation?.sensor ?? "Sentinel-1 C-SAR"
+    : locationRisk?.components.satellite_deformation.sensor ?? "Sentinel-1 C-SAR";
+
+  const deformQuality = isCell
+    ? cellRisk?.provenance.satellite_deformation?.quality
+    : locationRisk?.components.satellite_deformation.quality;
+
+  const deformCoverage = isCell
+    ? cellRisk?.provenance.satellite_deformation?.spatial_coverage_pct
+    : locationRisk?.components.satellite_deformation.spatial_coverage_pct;
+
+  const deformReason = isCell
+    ? cellRisk?.provenance.satellite_deformation?.unavailable_reason
+    : locationRisk?.components.satellite_deformation.unavailable_reason;
+
+  const deformReasonFormatted = deformReason === "SAR_DECORRELATION_DENSE_CANOPY"
+    ? t("spatial_risk.sar_decorrelation", "C-band phase decorrelation (dense canopy)")
+    : deformReason === "PENDING_SAR_INTERFEROMETRIC_PROCESSING"
+    ? t("spatial_risk.sar_processing_pending", "SAR interferometric processing pending")
+    : t("spatial_risk.sar_unconfigured", "No convergent orbit acquisition");
 
   const verifiedObs = isCell
     ? cellRisk!.provenance.observation_count
@@ -123,16 +153,61 @@ export default function SpatialLocationRiskPanel({
         </div>
       </div>
 
-      {/* Grid of 4 Signals */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        {/* 1. Static Susceptibility */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="col-span-1 rounded border border-border bg-card/80 p-3 flex flex-col justify-between">
+          <div className="text-xs font-medium text-muted-foreground">
+            {t("spatial_risk.operational_score", "Operational Risk Score")}
+          </div>
+          <div className="flex items-baseline gap-1 my-1">
+            <span className={`text-4xl font-extrabold font-mono ${color.text}`}>
+              {score}
+            </span>
+            <span className="text-xs font-mono text-muted-foreground">/100</span>
+          </div>
+          <div className="text-[0.68rem] text-muted-foreground leading-tight">
+            {t("spatial_risk.heuristic_note", "Combined static terrain susceptibility + dynamic weather trigger.")}
+          </div>
+        </div>
+
+        <div className="col-span-1 md:col-span-2 rounded border border-border/80 bg-muted/20 p-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-primary" />
+              {t("spatial_risk.statistical_prob_title", "Statistical Landslide Probability")}
+            </span>
+            <span className="text-[0.65rem] font-mono uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+              {probability !== null ? "CALIBRATED" : "UNAVAILABLE"}
+            </span>
+          </div>
+          <div className="my-1.5">
+            {probability !== null ? (
+              <div className="text-2xl font-bold font-mono text-foreground">
+                {(probability * 100).toFixed(1)}%
+              </div>
+            ) : (
+              <div className="text-xs font-sans text-muted-foreground leading-snug">
+                {t(
+                  "spatial_risk.prob_unavailable_explanation",
+                  "Not empirically calibrated for this coordinate. Uncalibrated probabilities are withheld per scientific integrity rules."
+                )}
+              </div>
+            )}
+          </div>
+          <div className="text-[0.65rem] font-mono text-muted-foreground/80 flex items-center justify-between">
+            <span>Model: {modelVersion}</span>
+            <span>Confidence: {confidence}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <div className="rounded border border-border bg-secondary/20 p-2.5 space-y-1">
           <div className="flex items-center gap-1.5 text-muted-foreground font-medium text-[0.72rem]">
             <Mountain className="w-3.5 h-3.5 text-amber-500" />
-            <span>{t("spatial_risk.static_susceptibility", "Static Susceptibility")}</span>
+            <span>{t("spatial_risk.static_susceptibility", "Terrain Susceptibility")}</span>
           </div>
           <div className="text-base font-bold font-mono text-foreground">
-            {susceptibilityScore}%
+            {staticSuscPct}%
           </div>
           <div className="text-[0.65rem] text-muted-foreground leading-tight">
             {isCell
@@ -141,7 +216,6 @@ export default function SpatialLocationRiskPanel({
           </div>
         </div>
 
-        {/* 2. Dynamic Weather Trigger */}
         <div className="rounded border border-border bg-secondary/20 p-2.5 space-y-1">
           <div className="flex items-center gap-1.5 text-muted-foreground font-medium text-[0.72rem]">
             <CloudRain className="w-3.5 h-3.5 text-sky-500" />
@@ -157,21 +231,66 @@ export default function SpatialLocationRiskPanel({
           </div>
         </div>
 
-        {/* 3. Satellite Deformation / Sentinel */}
-        <div className="rounded border border-border bg-secondary/20 p-2.5 space-y-1">
-          <div className="flex items-center gap-1.5 text-muted-foreground font-medium text-[0.72rem]">
-            <Satellite className="w-3.5 h-3.5 text-violet-500" />
-            <span>{t("spatial_risk.satellite_signal", "Satellite Deformation")}</span>
+        <div className="rounded border border-border bg-secondary/20 p-2.5 space-y-1.5" id="satellite-deformation-card">
+          <div className="flex items-center justify-between text-muted-foreground font-medium text-[0.72rem]">
+            <div className="flex items-center gap-1.5">
+              <Satellite className="w-3.5 h-3.5 text-violet-500" />
+              <span>{t("spatial_risk.satellite_signal", "Satellite Deformation")}</span>
+            </div>
+            <span
+              className={`text-[0.62rem] font-mono px-1.5 py-0.5 rounded font-bold ${
+                isDeformAvailable
+                  ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
+                  : "bg-muted text-muted-foreground border border-border"
+              }`}
+            >
+              {isDeformAvailable ? "AVAILABLE" : "UNAVAILABLE"}
+            </span>
           </div>
-          <div className="text-xs font-bold font-mono uppercase text-muted-foreground">
-            {satelliteStatus === "AVAILABLE" ? "AVAILABLE" : "UNAVAILABLE"}
-          </div>
-          <div className="text-[0.65rem] text-muted-foreground leading-tight truncate" title={satelliteSummary}>
-            {satelliteStatus === "AVAILABLE" ? satelliteSummary : t("spatial_risk.satellite_unconfigured", "No fabricated signal; InSAR awaiting provider setup")}
-          </div>
+
+          {isDeformAvailable ? (
+            <div className="space-y-1 text-xs">
+              <div className="flex items-baseline gap-2">
+                <span className="text-base font-bold font-mono text-foreground">
+                  {deformVelocity !== null && deformVelocity !== undefined
+                    ? `${deformVelocity > 0 ? "+" : ""}${deformVelocity}`
+                    : "—"}
+                </span>
+                <span className="text-xs font-mono text-muted-foreground">mm/year (LOS)</span>
+              </div>
+              {deformDisplacement !== null && deformDisplacement !== undefined && (
+                <div className="text-[0.68rem] text-muted-foreground font-mono">
+                  Cumulative: {deformDisplacement > 0 ? "+" : ""}{deformDisplacement} mm
+                </div>
+              )}
+              <div className="text-[0.65rem] text-muted-foreground leading-tight space-y-0.5 pt-0.5 border-t border-border/40">
+                <div>Source: <span className="font-medium text-foreground">{deformSensor}</span></div>
+                {deformPeriod && (
+                  <div>Period: <span className="font-mono text-foreground">{deformPeriod.start_date} → {deformPeriod.end_date}</span></div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span>Quality: <span className="font-medium text-foreground">{deformQuality ?? "Standard"}</span></span>
+                  {deformCoverage !== undefined && (
+                    <span>Coverage: <span className="font-mono text-foreground">{deformCoverage}%</span></span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1 text-xs">
+              <div className="text-[0.72rem] font-medium text-amber-600 dark:text-amber-400">
+                {deformReasonFormatted}
+              </div>
+              <div className="text-[0.65rem] text-muted-foreground leading-tight space-y-0.5 pt-0.5 border-t border-border/40">
+                <div>Source: <span className="font-medium text-foreground">{deformSensor}</span></div>
+                <div className="text-[0.62rem] text-muted-foreground italic">
+                  {t("spatial_risk.scientific_integrity_no_fake", "Strict integrity policy: No synthetic or 0 mm/yr values substituted.")}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* 4. Confidence & Field Observations */}
         <div className="rounded border border-border bg-secondary/20 p-2.5 space-y-1">
           <div className="flex items-center gap-1.5 text-muted-foreground font-medium text-[0.72rem]">
             <ShieldAlert className="w-3.5 h-3.5 text-emerald-500" />
@@ -186,7 +305,6 @@ export default function SpatialLocationRiskPanel({
         </div>
       </div>
 
-      {/* Probability & Methodology Transparency Note */}
       <div className="rounded border border-border/60 bg-muted/30 p-2.5 flex items-start gap-2 text-xs font-sans text-muted-foreground">
         <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
         <div className="space-y-0.5">
@@ -201,6 +319,10 @@ export default function SpatialLocationRiskPanel({
                 {t("spatial_risk.probability_uncalibrated_notice", "Statistical probability is reported as UNAVAILABLE because empirical landslide frequency has not undergone formal isotonic probability calibration for this specific coordinate. An operational, data-driven Risk Score (0-100) combining static susceptibility and dynamic trigger conditions is provided instead.")}
               </span>
             )}
+          </p>
+
+          <p className="text-[0.66rem] leading-relaxed text-muted-foreground/90 pt-0.5">
+            {t("spatial_risk.insar_option_a_notice", "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.2-lr-trained without uncalibrated weight injection.")}
           </p>
 
           {!isCell && locationRisk && (

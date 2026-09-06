@@ -342,7 +342,8 @@
     "slide_tooltip": "{{severity}} slide · {{date}}",
     "layers_title": "Layers & Grid",
     "spatial_coverage_info": "Continuous 0.25° spatial landslide risk prediction grid across all 8 Northeast states.",
-    "show_spatial_surface": "8-State Spatial Risk Surface"
+    "show_spatial_surface": "8-State Spatial Risk Surface",
+    "show_insar_layer": "InSAR Ground Deformation"
   },
   "system_health": {
     "button_label": "System Health",
@@ -588,6 +589,11 @@
     "transparency_title": "Scientific Integrity & Statistical Probability Policy",
     "probability_calibrated": "Calibrated statistical probability: {{prob}}%",
     "probability_uncalibrated_notice": "Statistical probability is reported as UNAVAILABLE because empirical landslide frequency has not undergone formal isotonic probability calibration for this specific coordinate. An operational, data-driven Risk Score (0-100) combining static susceptibility and dynamic trigger conditions is provided instead.",
-    "aggregation_summary": "Derived from {{count}} surrounding 0.25° spatial grid cells via Inverse-Distance Weighting (IDW)."
+    "aggregation_summary": "Derived from {{count}} surrounding 0.25° spatial grid cells via Inverse-Distance Weighting (IDW).",
+    "sar_decorrelation": "C-band phase decorrelation (dense canopy)",
+    "sar_processing_pending": "SAR interferometric processing pending",
+    "sar_unconfigured": "No convergent orbit acquisition",
+    "scientific_integrity_no_fake": "Strict integrity policy: No synthetic or 0 mm/yr values substituted.",
+    "insar_option_a_notice": "Satellite InSAR Ground Motion: Evaluated independently under Option A (independent indicator) alongside active ML model v0.2-lr-trained without uncalibrated weight injection."
   }
 }

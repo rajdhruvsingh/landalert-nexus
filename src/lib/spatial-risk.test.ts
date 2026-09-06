@@ -182,7 +182,12 @@ describe("Continuous 8-State Spatial Prediction Grid Architecture", () => {
       expect(locRisk.risk.score).toBeLessThanOrEqual(100);
       expect(locRisk.risk.probability).toBeNull(); // No fabricated probability
       expect(locRisk.surrounding_cells_count).toBeGreaterThan(0);
-      expect(locRisk.components.satellite_deformation.status).toBe("UNAVAILABLE"); // No fabricated satellite data
+      expect(["AVAILABLE", "UNAVAILABLE"]).toContain(locRisk.components.satellite_deformation.status);
+      if (locRisk.components.satellite_deformation.status === "AVAILABLE") {
+        expect(locRisk.components.satellite_deformation.velocity_mm_year).not.toBeNull();
+      } else {
+        expect(locRisk.components.satellite_deformation.displacement_mm).toBeNull();
+      }
     }
   });
 
@@ -386,6 +391,7 @@ describe("Continuous 8-State Spatial Prediction Grid Architecture", () => {
     expect(dataDibrugarh.risk.probability).toBeNull();
     expect(dataGangtok.risk.probability).toBeNull();
     expect(dataDibrugarh.components.satellite_deformation.status).toBe("UNAVAILABLE");
-    expect(dataGangtok.components.satellite_deformation.status).toBe("UNAVAILABLE");
+    expect(dataGangtok.components.satellite_deformation.status).toBe("AVAILABLE");
+    expect(dataGangtok.components.satellite_deformation.velocity_mm_year).toBeLessThan(0); // Valid LOS deformation
   });
 });
