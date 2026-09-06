@@ -42,7 +42,8 @@ export type InSarProcessingStatus =
   | "PENDING_PIPELINE"
   | "PROCESSING_PENDING"
   | "DECORRELATED"
-  | "UNAVAILABLE";
+  | "UNAVAILABLE"
+  | "STALE";
 
 export type InSarQuality = "HIGH" | "MODERATE" | "LOW" | "UNAVAILABLE";
 
@@ -68,8 +69,8 @@ export interface InSarDeformationProduct {
   bounds: [[number, number], [number, number]]; // [[south, west], [north, east]]
   centroid: [number, number]; // [lat, lng]
   status: "AVAILABLE" | "UNAVAILABLE" | "PROCESSING" | "FAILED" | "STALE";
-  measurement_type: "LOS_DEFORMATION_VELOCITY";
-  unit: "mm/year";
+  measurement_type: "LOS_DEFORMATION_VELOCITY" | "PAIR_DISPLACEMENT";
+  unit: "mm/year" | "mm";
   los_velocity_mean_mm_year: number | null; // Negative = subsidence/movement away from satellite (LOS)
   los_velocity_max_mm_year: number | null;
   cumulative_displacement_mm: number | null;
@@ -218,7 +219,7 @@ export function ingestInSarProduct(product: InSarDeformationProduct): void {
         "SCIENTIFIC_INTEGRITY_VIOLATION: InSAR product declared AVAILABLE without valid velocity, displacement, or observation period."
       );
     }
-    if (product.spatial_coverage_pct <= 0 || product.spatial_coverage_pct > 100) {
+    if (product.spatial_coverage_pct !== null && (product.spatial_coverage_pct <= 0 || product.spatial_coverage_pct > 100)) {
       throw new Error(
         "SCIENTIFIC_INTEGRITY_VIOLATION: Invalid spatial_coverage_pct in InSAR product."
       );
@@ -277,7 +278,7 @@ export function getCellDeformation(
   let cellCentroid: [number, number] = centroid || [26.0, 92.0];
   if (!centroid && cellId.startsWith("cell-")) {
     const parts = cellId.replace("cell-", "").split("-");
-    if (parts.length === 2) {
+    if (parts.length === 2 && parts[0] !== undefined && parts[1] !== undefined) {
       const lat = parseFloat(parts[0]);
       const lng = parseFloat(parts[1]);
       if (!isNaN(lat) && !isNaN(lng)) {
@@ -307,7 +308,7 @@ export function getCellDeformation(
     observation_period: null,
     temporal_baseline_days: null,
     coherence_mean: null,
-    spatial_coverage_pct: 0,
+    spatial_coverage_pct: null,
     sensor: "Sentinel-1 C-SAR",
     orbit_pass: null,
     wavelength_cm: 5.546,

@@ -225,8 +225,9 @@ export async function searchSentinel1Acquisitions(
     // Coordinate bounding box overlap check
     const coords = (acq.footprint_geojson as any)?.coordinates?.[0] as number[][] | undefined;
     if (coords && coords.length > 0) {
-      const lngs = coords.map((c) => c[0]);
-      const lats = coords.map((c) => c[1]);
+      const lngs = coords.map((c) => c[0]).filter((v): v is number => typeof v === "number");
+      const lats = coords.map((c) => c[1]).filter((v): v is number => typeof v === "number");
+      if (lngs.length === 0 || lats.length === 0) continue;
       const fMinLng = Math.min(...lngs);
       const fMaxLng = Math.max(...lngs);
       const fMinLat = Math.min(...lats);
@@ -275,7 +276,7 @@ export async function ingestAcquisitions(
             relative_orbit: r.relative_orbit,
             sensing_start: r.sensing_start,
             sensing_stop: r.sensing_stop,
-            footprint_geojson: r.footprint_geojson,
+            footprint_geojson: r.footprint_geojson as any,
             download_url: r.download_url,
             checksum_sha256: r.checksum_sha256,
             source: r.source,

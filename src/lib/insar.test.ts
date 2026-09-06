@@ -84,7 +84,7 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
       productType: "SLC",
     });
     expect(acqs.length).toBeGreaterThan(0);
-    const first = acqs[0];
+    const first = acqs[0]!;
     expect(first.satellite).toMatch(/Sentinel-1[A-C]/);
     expect(first.sensor).toBe("C-SAR");
     expect(first.mode).toBe("IW");
@@ -205,9 +205,12 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
       bounds: [[25.0, 91.0], [25.25, 91.25]],
       centroid: [25.125, 91.125],
       status: "AVAILABLE",
+      measurement_type: "LOS_DEFORMATION_VELOCITY",
+      unit: "mm/year",
       los_velocity_mean_mm_year: -8.5,
       los_velocity_max_mm_year: -14.2,
       cumulative_displacement_mm: -21.0,
+      temporal_trend: "INCREASING_DEFORMATION",
       observation_period: { start_date: "2024-01-01", end_date: "2025-12-31" },
       temporal_baseline_days: 730,
       coherence_mean: 0.68,
@@ -316,13 +319,16 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
       bounds: [[25.0, 91.0], [25.25, 91.25]],
       centroid: [25.125, 91.125],
       status: "STALE",
+      measurement_type: "LOS_DEFORMATION_VELOCITY",
+      unit: "mm/year",
       los_velocity_mean_mm_year: null,
       los_velocity_max_mm_year: null,
       cumulative_displacement_mm: null,
+      temporal_trend: "INSUFFICIENT_DATA",
       observation_period: null,
       temporal_baseline_days: null,
       coherence_mean: null,
-      spatial_coverage_pct: 0,
+      spatial_coverage_pct: null,
       sensor: "Sentinel-1 C-SAR",
       orbit_pass: null,
       wavelength_cm: 5.546,
@@ -344,9 +350,12 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
       bounds: [[25.0, 91.0], [25.25, 91.25]],
       centroid: [25.125, 91.125],
       status: "AVAILABLE",
+      measurement_type: "LOS_DEFORMATION_VELOCITY",
+      unit: "mm/year",
       los_velocity_mean_mm_year: null, // VIOLATION
       los_velocity_max_mm_year: null,
       cumulative_displacement_mm: null,
+      temporal_trend: "INSUFFICIENT_DATA",
       observation_period: null,
       temporal_baseline_days: null,
       coherence_mean: null,
@@ -370,13 +379,16 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
       bounds: [[25.0, 91.0], [25.25, 91.25]],
       centroid: [25.125, 91.125],
       status: "UNAVAILABLE",
+      measurement_type: "LOS_DEFORMATION_VELOCITY",
+      unit: "mm/year",
       los_velocity_mean_mm_year: 0.0, // VIOLATION: Cannot substitute zero
       los_velocity_max_mm_year: null,
       cumulative_displacement_mm: 0.0,
+      temporal_trend: "INSUFFICIENT_DATA",
       observation_period: null,
       temporal_baseline_days: null,
       coherence_mean: null,
-      spatial_coverage_pct: 0,
+      spatial_coverage_pct: null,
       sensor: "Sentinel-1 C-SAR",
       orbit_pass: null,
       wavelength_cm: 5.546,
@@ -458,9 +470,12 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
       bounds: [[26.125, 91.625], [26.375, 91.875]],
       centroid: [26.25, 91.75],
       status: "AVAILABLE",
+      measurement_type: "PAIR_DISPLACEMENT",
+      unit: "mm",
       los_velocity_mean_mm_year: null, // Single pair: NO long-term velocity
       los_velocity_max_mm_year: null,
       cumulative_displacement_mm: -6.5,
+      temporal_trend: "INSUFFICIENT_DATA",
       observation_period: { start_date: "2024-01-01", end_date: "2024-01-13" },
       temporal_baseline_days: 12,
       coherence_mean: 0.55,

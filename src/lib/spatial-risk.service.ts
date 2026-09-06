@@ -58,7 +58,7 @@ export interface CellRiskEvaluation {
     terrain_source: string;
     weather_source: string;
     satellite_source: string;
-    satellite_status: "AVAILABLE" | "UNAVAILABLE" | "NOT_CONFIGURED";
+    satellite_status: "AVAILABLE" | "UNAVAILABLE" | "PROCESSING" | "FAILED" | "STALE" | "NOT_CONFIGURED";
     satellite_deformation?: InSarDeformationProduct;
     observation_count: number;
     model_version: string;
@@ -93,7 +93,7 @@ export interface LocationSpatialRisk {
       observation_period?: { start_date: string; end_date: string } | null;
       sensor?: string;
       quality?: string;
-      spatial_coverage_pct?: number;
+      spatial_coverage_pct?: number | null;
       unavailable_reason?: string | null;
       note: string;
     };
@@ -12757,7 +12757,7 @@ export function deriveLocationSpatialRisk(
   if (surrounding.length === 0) {
     // Fallback to nearest 1 cell if radius misses
     const allSorted = findSurroundingCells(coordinates[0], coordinates[1], 120.0);
-    if (allSorted.length > 0) {
+    if (allSorted.length > 0 && allSorted[0]) {
       surrounding.push(allSorted[0]);
     }
   }

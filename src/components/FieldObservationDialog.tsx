@@ -98,14 +98,15 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { isOnline, connectivityState, checkHealth } = useConnectivityStatus();
-  const [fieldErrors, setFieldErrors] = useState<{ zone?: string; observer?: string; rainfall?: string; general?: string }>({});
+  type FieldErrors = { zone?: string; observer?: string; rainfall?: string; general?: string };
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   // 1. Live Zones from Database and Regional Geographic Hierarchy
   const [zones, setZones] = useState(FALLBACK_ZONES);
   const initialZone = FALLBACK_ZONES.find((z) => z.id === initialZoneId) ?? FALLBACK_ZONES[0]!;
   const [selectedState, setSelectedState] = useState<string>(initialZone.state);
   const [selectedDistrict, setSelectedDistrict] = useState<string>(initialZone.district);
-  const [zoneId, setZoneId] = useState<number>(initialZone.id);
+  const [zoneId, setZoneId] = useState<number | null>(initialZone.id);
 
   useEffect(() => {
     async function fetchRealZones() {
@@ -182,7 +183,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     const districtZones = getZonesByDistrict(firstDistrict);
     setZoneId(districtZones.length > 0 ? districtZones[0]!.id : null);
     setGpsZoneMessage(null);
-    setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
+    setFieldErrors((prev) => ({ ...prev, zone: undefined as string | undefined, general: undefined as string | undefined }));
   };
 
   const handleDistrictChange = (newDistrict: string) => {
@@ -190,7 +191,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     const districtZones = getZonesByDistrict(newDistrict);
     setZoneId(districtZones.length > 0 ? districtZones[0]!.id : null);
     setGpsZoneMessage(null);
-    setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
+    setFieldErrors((prev) => ({ ...prev, zone: undefined as string | undefined, general: undefined as string | undefined }));
   };
 
   function autoLocateFromGps(lat: number, lng: number) {
@@ -573,7 +574,8 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
     }
 
     const record: Omit<FieldObservationInput, "idempotency_key" | "client_timestamp"> = {
-      zone_id: zoneId,
+      // zoneId validated non-null at line ~434 before we reach this point
+      zone_id: zoneId!,
       state: selectedState,
       district: selectedDistrict,
       observed_at: new Date().toISOString(),
@@ -611,7 +613,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
         });
 
         if (res.success && res.syncedCount > 0) {
-          pruneQueue([fullRecord.idempotency_key]);
+          pruneQueue([fullRecord.idempotency_key].filter((k): k is string => k !== undefined));
           const trustNotice =
             userRole === "PUBLIC_USER"
               ? t("field_observation.trust_notice_citizen", "Submitted for official review (unverified citizen signal).")
@@ -773,7 +775,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                   value={zoneId ? String(zoneId) : ""}
                   onValueChange={(v) => {
                     setZoneId(v ? Number(v) : null);
-                    setFieldErrors((prev) => ({ ...prev, zone: undefined, general: undefined }));
+                    setFieldErrors((prev) => ({ ...prev, zone: undefined as string | undefined, general: undefined as string | undefined }));
                   }}
                 >
                   <SelectTrigger id="zoneSelect" aria-label={t("field_observation.zone_label", "Instrumented Monitoring Zone")} className="bg-surface border-border font-mono text-xs h-8">
@@ -826,7 +828,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
                 value={rainfallMm}
                 onChange={(e) => {
                   setRainfallMm(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, rainfall: undefined, general: undefined }));
+                  setFieldErrors((prev) => ({ ...prev, rainfall: undefined as string | undefined, general: undefined as string | undefined }));
                 }}
                 className="bg-secondary/40 border-border font-mono text-xs"
               />
@@ -1039,7 +1041,7 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
               value={observerId}
               onChange={(e) => {
                 setObserverId(e.target.value);
-                setFieldErrors((prev) => ({ ...prev, observer: undefined, general: undefined }));
+                setFieldErrors((prev) => ({ ...prev, observer: undefined as string | undefined, general: undefined as string | undefined }));
               }}
               className="bg-secondary/40 border-border font-mono text-xs"
             />

@@ -1035,8 +1035,10 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
             return errorResponse("Missing required cell_id parameter", "INVALID_PARAMS", 400, cors);
           }
           const job = await createInSarProcessingJob(cellId);
-          // Execute pipeline asynchronously
-          executeJobPipeline(job.id).catch(() => {});
+          // In test environment, execute simulated pipeline; in production, dedicated worker claims QUEUED jobs
+          if (process.env.NODE_ENV === "test") {
+            executeJobPipeline(job.id).catch(() => {});
+          }
 
           return jsonResponse({
             status: "accepted",
