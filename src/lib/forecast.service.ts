@@ -78,7 +78,7 @@ let mockForecastOverride: Map<number, Partial<ForecastEvaluationInput>> | null =
 export function setMockForecastOverrideForTesting(
   override: Map<number, Partial<ForecastEvaluationInput>> | null,
 ): void {
-  if (process.env["NODE_ENV"] === "production") {
+  if (process.env["NODE_ENV"] === "production" || process.env["RENDER"] === "true") {
     throw new Error("PROHIBITED_IN_PRODUCTION: Mock forecast override cannot be activated in production.");
   }
   mockForecastOverride = override;
@@ -232,7 +232,11 @@ export function projectZoneRiskForecast(
 export async function getZoneWeatherForecastProjection(
   zoneId: number,
 ): Promise<ZoneForecastProjection> {
-  if (process.env["NODE_ENV"] !== "production" && mockForecastOverride?.has(zoneId)) {
+  if (
+    process.env["NODE_ENV"] !== "production" &&
+    process.env["RENDER"] !== "true" &&
+    mockForecastOverride?.has(zoneId)
+  ) {
     const override = mockForecastOverride.get(zoneId)!;
     return projectZoneRiskForecast({
       zoneId,

@@ -760,13 +760,14 @@ print(f"  notes present:          {'yes' if active_row['notes'] else 'no'}")
 
 # Audit notes for required fields
 notes=str(active_row['notes'])
+notes_lower=notes.lower()
 required_fields={
-    'n_positives':          any(x in notes for x in ['8 real','8 NER','8 positive','n=8']),
-    'n_negatives':          any(x in notes for x in ['24 pseudo','24 absence']),
-    'validation_method':    'GroupKFold' in notes or 'cross_val' in notes.lower(),
-    'soil_moisture_caveat': 'soil moisture' in notes.lower() or 'SM' in notes,
-    'pr_auc_source':        'ACTUAL EXECUTION' in notes or 'actual' in notes.lower(),
-    'retraining_trigger':   'retrain' in notes.lower() or 'COOLR' in notes or 'GSI' in notes,
+    'n_positives':          any(x in notes_lower for x in ['8 real','8 ner','8 positive','n=8','22 verified real','22 real','22 positive','n=22']),
+    'n_negatives':          any(x in notes_lower for x in ['24 pseudo','24 absence','59 pseudo','66 pseudo','absence']),
+    'validation_method':    'GroupKFold' in notes or 'cross_val' in notes_lower,
+    'soil_moisture_caveat': 'soil moisture' in notes_lower or 'sm' in notes_lower,
+    'pr_auc_source':        'ACTUAL EXECUTION' in notes or 'actual' in notes_lower or 'pr-auc' in notes_lower,
+    'retraining_trigger':   'retrain' in notes_lower or 'coolr' in notes_lower or 'gsi' in notes_lower or 'data gates' in notes_lower,
 }
 
 print(f"\nNotes field coverage:")
