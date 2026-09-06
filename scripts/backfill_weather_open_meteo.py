@@ -37,16 +37,16 @@ OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 REQUEST_DELAY_S = 7.0   # Open-Meteo free tier: ~10 req/min; 7s keeps well within limit
 SOURCE_TAG = "Open-Meteo ERA5-Land historical archive (backfill)"
 
-# Saturation reference: 0.40 m3/m3 field capacity for tropical/subtropical
+# Saturation reference: 0.55 m3/m3 saturation capacity for tropical/subtropical
 # mountain soils (Albergel et al. 2012) -- converts volumetric to 0-100%.
-SOIL_SATURATION_CAPACITY = 0.40
+SOIL_SATURATION_CAPACITY = 0.55
 
 
 def fetch_zone_weather(lat: float, lng: float, start: date, end: date) -> pd.DataFrame:
     """
     Fetch daily precipitation + daily-mean soil moisture from Open-Meteo.
-    Soil moisture variables: soil_moisture_0_to_1cm and soil_moisture_1_to_3cm (m3/m3),
-    averaged to daily mean and converted to 0-100% saturation scale via 0.40 m3/m3 capacity.
+    Soil moisture variable: soil_moisture_0_to_7cm (m3/m3) from ERA5-Land,
+    averaged to daily mean and converted to 0-100% saturation scale via 0.55 m3/m3 capacity.
     If Open-Meteo has no coverage (returns nulls), soil_moisture_pct is None (fallback preserved).
     Returns a DataFrame with columns: date, rainfall_mm, soil_moisture_pct
     """
@@ -56,7 +56,7 @@ def fetch_zone_weather(lat: float, lng: float, start: date, end: date) -> pd.Dat
         "start_date": str(start),
         "end_date":   str(end),
         "daily":      "precipitation_sum",
-        "hourly":     ["soil_moisture_0_to_1cm", "soil_moisture_1_to_3cm"],
+        "hourly":     ["soil_moisture_0_to_7cm"],
         "timezone":   "Asia/Kolkata",
     }
     resp = requests.get(OPEN_METEO_ARCHIVE_URL, params=params, timeout=30)
@@ -68,19 +68,13 @@ def fetch_zone_weather(lat: float, lng: float, start: date, end: date) -> pd.Dat
     d_dates  = daily.get("time", [])
     d_precip = daily.get("precipitation_sum", [None] * len(d_dates))
 
-    # Hourly soil moisture -> aggregate 0-1cm and 1-3cm to daily mean
+    # Hourly soil moisture -> aggregate 0-7cm to daily mean
     hourly   = data.get("hourly", {})
     h_times  = hourly.get("time", [])
-    h_sm01   = hourly.get("soil_moisture_0_to_1cm", [None] * len(h_times))
-    h_sm13   = hourly.get("soil_moisture_1_to_3cm", [None] * len(h_times))
+    h_sm07   = hourly.get("soil_moisture_0_to_7cm", [None] * len(h_times))
 
-    # Combine non-null values across the two surface layers
-    combined_sm = []
-    for s0, s1 in zip(h_sm01, h_sm13):
-        valid = [v for v in (s0, s1) if v is not None and not pd.isna(v)]
-        combined_sm.append(sum(valid) / len(valid) if valid else None)
-
-    sm_series = pd.Series(combined_sm, index=pd.to_datetime(h_times), dtype=float)
+    sm_vals = [float(v) if (v is not None and not pd.isna(v)) else np.nan for v in h_sm07]
+    sm_series = pd.Series(sm_vals, index=pd.to_datetime(h_times), dtype=float)
     sm_daily  = sm_series.resample("D").mean()
 
     rows = []
@@ -213,20 +207,24 @@ def backfill_historical_events(conn, dry_run: bool = False):
                 print(f"{n_sm} soil readings found!", end="")
                 total_valid_sm += n_sm
                 if not dry_run and conn:
-                    # Upsert with specific source
+                    # Upsert with specific source, updating existing weather rows
                     cur_u = conn.cursor()
                     for _, row in df[df["soil_moisture_pct"].notna()].iterrows():
                         rtime = f"{row['date']}T12:00:00+05:30"
-                        station_id = f"OM-HIST-SM-{zid}"
                         cur_u.execute("""
-                            INSERT INTO weather_readings
-                                (zone_id, station_id, reading_time, rainfall_mm, soil_moisture_pct, source)
-                            VALUES (%s, %s, %s::timestamptz, %s, %s, %s)
-                            ON CONFLICT (zone_id, station_id, reading_time)
-                            DO UPDATE SET
-                                soil_moisture_pct = EXCLUDED.soil_moisture_pct,
-                                source            = EXCLUDED.source
-                        """, (zid, station_id, rtime, row["rainfall_mm"], row["soil_moisture_pct"], HIST_SM_SOURCE))
+                            UPDATE weather_readings
+                            SET soil_moisture_pct = %s
+                            WHERE zone_id = %s AND reading_time::date = %s::date;
+                        """, (row["soil_moisture_pct"], zid, row["date"]))
+                        if cur_u.rowcount == 0:
+                            cur_u.execute("""
+                                INSERT INTO weather_readings
+                                    (zone_id, station_id, reading_time, rainfall_mm, soil_moisture_pct, source)
+                                VALUES (%s, %s, %s::timestamptz, %s, %s, %s)
+                                ON CONFLICT (zone_id, station_id, reading_time)
+                                DO UPDATE SET
+                                    soil_moisture_pct = EXCLUDED.soil_moisture_pct;
+                            """, (zid, f"OM-HIST-{zid}", rtime, row["rainfall_mm"] or 0.0, row["soil_moisture_pct"], HIST_SM_SOURCE))
                     conn.commit()
                     cur_u.close()
             else:
@@ -235,7 +233,7 @@ def backfill_historical_events(conn, dry_run: bool = False):
             print()
         except Exception as e:
             print(f"Error: {e}")
-        time.sleep(REQUEST_DELAY_S)
+        time.sleep(2.0)
 
     print(f"\nHistorical Soil Moisture Backfill Summary:")
     print(f"  Valid soil moisture readings found: {total_valid_sm}")

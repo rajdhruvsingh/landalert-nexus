@@ -161,6 +161,14 @@ def compute_soil_moisture_features(zone_id, as_of_date, weather_df):
     latest_val = float(latest_row["soil_moisture_pct"] / 100.0)
     age_days = (as_of - latest_row["reading_date"]).days
 
+    # If the latest reading is older than 14 days, there is no recent observation -> fallback
+    if age_days > 14:
+        return {
+            "soil_moisture_latest": 0.5,
+            "soil_moisture_7d_trend": 0.0,
+            "soil_moisture_status": "fallback",
+        }
+
     # Status determination
     status = "stale" if age_days > 3 else "measured"
 

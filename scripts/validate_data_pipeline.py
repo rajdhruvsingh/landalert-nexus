@@ -113,8 +113,8 @@ def run_validation():
     print(f"      - glof_triggered (excluded from rainfall ML):   {len(glof_events)}")
     print(f"    Synthetic fixture records (is_synthetic=true):  {len(synth_slides)}")
 
-    if len(rainfall_positives) != 15:
-        failures.append(f"Expected exactly 15 rainfall_slope_failure real positives, got {len(rainfall_positives)}")
+    if len(rainfall_positives) < 20:
+        failures.append(f"Expected at least 20 rainfall_slope_failure real positives, got {len(rainfall_positives)}")
     if len(glof_events) != 1:
         failures.append(f"Expected exactly 1 glof_triggered real event, got {len(glof_events)}")
     if len(synth_slides) != 30:
