@@ -38,7 +38,8 @@ export interface FieldObservationInput {
   geo_captured_at?: string | undefined;
   consent_given?: boolean | undefined;
   submitter_role?: string | undefined;
-  review_status?: ("PENDING_REVIEW" | "APPROVED" | "REJECTED") | undefined;
+  // Note: initial status is set server-side based on submitter_role.
+  // Do NOT pass review_status — that column does not exist on field_observations.
 }
 
 export interface SyncResult {
@@ -126,7 +127,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     road_status: "open" | "restricted" | "blocked" | "unknown" | null;
     observer_id: string;
     idempotency_key: string;
-    status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+    status: "SUBMITTED" | "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "ACTIONABLE";
     is_training_eligible: boolean;
     source: string;
     media_urls: string[];
@@ -136,7 +137,6 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
     geo_accuracy_m: number | null;
     geo_captured_at: string | null;
     consent_given: boolean;
-    review_status: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
   }> = [];
 
   const acknowledgedKeys: string[] = [];
@@ -166,12 +166,11 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       r.submitter_role === "ADMIN" ||
       (r.observer_id && /^(official|ddma|gsi|sdma|admin)/i.test(r.observer_id));
 
-    const reviewStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = isOfficial
-      ? "APPROVED"
-      : "PENDING_REVIEW";
-    const status: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" = isOfficial
-      ? "OFFICIAL_VERIFIED"
-      : "PENDING_VERIFICATION";
+    // Public reporters submit with SUBMITTED status; official submitters go directly to
+    // PENDING_VERIFICATION (they have already done a first-pass triage on-site).
+    const status: "SUBMITTED" | "PENDING_VERIFICATION" = isOfficial
+      ? "PENDING_VERIFICATION"
+      : "SUBMITTED";
     const source = isOfficial ? "OFFICIAL_SURVEY" : "PUBLIC_REPORT";
 
     validRows.push({
@@ -185,7 +184,7 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       observer_id: r.observer_id ?? "field_worker",
       idempotency_key: key,
       status,
-      is_training_eligible: isOfficial,
+      is_training_eligible: false, // set to true only after VERIFIED via official-auth.service
       source,
       media_urls: r.media_urls ?? [],
       media_metadata: r.media_metadata ?? [],
@@ -194,7 +193,6 @@ export async function syncFieldObservations(records: FieldObservationInput[]): P
       geo_accuracy_m: r.geo_accuracy_m ?? null,
       geo_captured_at: r.geo_captured_at ?? null,
       consent_given: r.consent_given ?? true,
-      review_status: reviewStatus,
     });
 
     acknowledgedKeys.push(key);
@@ -230,10 +228,10 @@ with conn.cursor() as cur:
     for r in rows:
         cur.execute("""
             INSERT INTO public.field_observations 
-            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given, review_status)
+            (zone_id, observer_id, observed_at, client_timestamp, rainfall_mm, soil_condition, visual_signs, road_status, idempotency_key, sync_status, status, is_training_eligible, source, media_urls, media_metadata, geo_lat, geo_lng, geo_accuracy_m, geo_captured_at, consent_given)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'synced', %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source'], r['media_urls'], json.dumps(r['media_metadata']), r['geo_lat'], r['geo_lng'], r['geo_accuracy_m'], r['geo_captured_at'], r['consent_given'], r['review_status']))
+        """, (r['zone_id'], r['observer_id'], r['observed_at'], r['client_timestamp'], r['rainfall_mm'], r['soil_condition'], r['visual_signs'], r['road_status'], r['idempotency_key'], r['status'], r['is_training_eligible'], r['source'], r['media_urls'], json.dumps(r['media_metadata']), r['geo_lat'], r['geo_lng'], r['geo_accuracy_m'], r['geo_captured_at'], r['consent_given']))
 conn.commit()
 conn.close()
 `;

@@ -413,7 +413,7 @@ export type Database = {
           synced_at: string;
           visual_signs: string | null;
           zone_id: number;
-          status?: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          status?: "SUBMITTED" | "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "ACTIONABLE";
           is_training_eligible?: boolean;
           source?: string;
           verified_by?: string | null;
@@ -433,7 +433,7 @@ export type Database = {
           synced_at?: string;
           visual_signs?: string | null;
           zone_id: number;
-          status?: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          status?: "SUBMITTED" | "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "ACTIONABLE";
           is_training_eligible?: boolean;
           source?: string;
           verified_by?: string | null;
@@ -453,7 +453,7 @@ export type Database = {
           synced_at?: string;
           visual_signs?: string | null;
           zone_id?: number;
-          status?: "PENDING_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          status?: "SUBMITTED" | "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "ACTIONABLE";
           is_training_eligible?: boolean;
           source?: string;
           verified_by?: string | null;
@@ -479,7 +479,7 @@ export type Database = {
           department: string | null;
           designation: string | null;
           role: "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
-          verification_status: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          verification_status: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "VERIFIED" | "REJECTED";
           dispatch_authorized: boolean;
           verified_by: string | null;
           verified_at: string | null;
@@ -495,7 +495,7 @@ export type Database = {
           department?: string | null;
           designation?: string | null;
           role?: "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
-          verification_status?: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          verification_status?: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "VERIFIED" | "REJECTED";
           dispatch_authorized?: boolean;
           verified_by?: string | null;
           verified_at?: string | null;
@@ -511,7 +511,7 @@ export type Database = {
           department?: string | null;
           designation?: string | null;
           role?: "PUBLIC_USER" | "VERIFIED_OFFICIAL" | "DISPATCHER" | "ADMIN";
-          verification_status?: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "OFFICIAL_VERIFIED" | "REJECTED";
+          verification_status?: "UNVERIFIED" | "PENDING_OFFICIAL_VERIFICATION" | "VERIFIED" | "REJECTED";
           dispatch_authorized?: boolean;
           verified_by?: string | null;
           verified_at?: string | null;

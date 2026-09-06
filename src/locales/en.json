@@ -544,5 +544,22 @@
     "no_records": "No observations found matching the search filter.",
     "footer_count": "Showing {{count}} ground observations",
     "client_recorded": "Client recorded:"
+  },
+  "location": {
+    "card_title": "Your Current Location",
+    "live_detected": "Sector Verified",
+    "detecting": "Detecting location and evaluating landslide risk for your current sector…",
+    "locating": "Locating…",
+    "refresh": "Refresh my location",
+    "refresh_title": "Refresh GPS location",
+    "assessment_title": "Zone Landslide Risk Assessment",
+    "no_explanation": "Standard baseline monitoring active. No heightened hazard conditions detected at this time.",
+    "coverage_notice": "Official NER Landslide Early Warning Sector",
+    "view_on_map": "Focus zone on map",
+    "outside_region_title": "You're outside our currently monitored region",
+    "outside_region_desc": "LandAlert-Nexus currently provides high-resolution early warning coverage for 15 designated hill zones across the North Eastern Region of India (Assam, Arunachal Pradesh, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura). Your current coordinates fall outside these monitored operational sectors. You can explore the regional map below to review active alerts and risk levels.",
+    "enable_title": "Enable location to see risk in your area",
+    "enable_desc": "Allow location access to view real-time landslide risk and early warnings for your current zone.",
+    "retry": "Enable Location"
   }
 }
