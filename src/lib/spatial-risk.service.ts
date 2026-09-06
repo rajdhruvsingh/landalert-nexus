@@ -12782,7 +12782,11 @@ export function deriveLocationSpatialRisk(
     spatial_coverage_pct: defProd.spatial_coverage_pct,
     unavailable_reason: defProd.unavailable_reason,
     note: isDeformAvailable
-      ? `${defProd.los_velocity_mean_mm_year} mm/yr (${defProd.sensor}, ${defProd.observation_period?.start_date} to ${defProd.observation_period?.end_date})`
+      ? (defProd.los_velocity_mean_mm_year !== null
+          ? `${defProd.los_velocity_mean_mm_year} mm/yr (${defProd.sensor}, ${defProd.observation_period?.start_date} to ${defProd.observation_period?.end_date})`
+          : defProd.cumulative_displacement_mm !== null
+          ? `${defProd.cumulative_displacement_mm} mm LOS displacement (${defProd.sensor}, ${defProd.observation_period?.start_date} to ${defProd.observation_period?.end_date})`
+          : `Ground deformation available (${defProd.sensor})`)
       : defProd.unavailable_reason === "SAR_DECORRELATION_DENSE_CANOPY"
       ? "C-band SAR phase decorrelation due to dense mountain forest canopy."
       : "Sentinel-1 InSAR ground deformation processing pending for this cell.",

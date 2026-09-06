@@ -451,4 +451,46 @@ describe("Section 28 — Comprehensive 24-Point Satellite InSAR Production Verif
     expect(locRisk.model_provenance?.active_ml_model).toBe("v0.2-lr-trained");
     expect(locRisk.model_provenance?.satellite_feature_integration).toBe("OPTION_A_INDEPENDENT_INDICATOR");
   });
+
+  it("25. Pair vs Velocity Semantics: ensures note never renders 'null mm/yr' for single pairs", () => {
+    const pairProduct: InSarDeformationProduct = {
+      cell_id: "cell-26.25-91.75",
+      bounds: [[26.125, 91.625], [26.375, 91.875]],
+      centroid: [26.25, 91.75],
+      status: "AVAILABLE",
+      los_velocity_mean_mm_year: null, // Single pair: NO long-term velocity
+      los_velocity_max_mm_year: null,
+      cumulative_displacement_mm: -6.5,
+      observation_period: { start_date: "2024-01-01", end_date: "2024-01-13" },
+      temporal_baseline_days: 12,
+      coherence_mean: 0.55,
+      spatial_coverage_pct: 45.0,
+      sensor: "Sentinel-1 C-SAR",
+      orbit_pass: "ASCENDING",
+      wavelength_cm: 5.546,
+      processing_pipeline: "ISCE2/SNAPHU",
+      processing_status: "COMPLETED",
+      quality: "MODERATE",
+      unavailable_reason: null,
+      source: "Copernicus Sentinel-1",
+      last_processed_at: "2026-02-01T00:00:00Z",
+    };
+    ingestInSarProduct(pairProduct);
+
+    const locRisk = deriveLocationSpatialRisk("Guwahati Hills", "city", "Kamrup Metropolitan", "Assam", [26.18, 91.75]);
+    const note = locRisk.components.satellite_deformation.note;
+    expect(note).not.toContain("null mm/yr");
+    expect(note).toContain("-6.5 mm LOS displacement");
+  });
+
+  it("26. API Null-Preservation: ensures /api/satellite/deformation does not convert null spatial_coverage_pct to 0", async () => {
+    const defReq = new Request("http://localhost:3000/api/satellite/deformation?cellId=cell-27.25-88.50", { method: "GET" });
+    const defRes = await handleApiRequest(defReq);
+    expect(defRes?.status).toBe(200);
+    const defData = await defRes?.json();
+    expect(defData.deformation.status).toBe("UNAVAILABLE");
+    expect(defData.deformation.spatial_coverage_pct).toBeNull();
+    expect(defData.deformation.spatial_coverage_pct).not.toBe(0);
+  });
 });
+

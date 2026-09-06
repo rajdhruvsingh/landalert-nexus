@@ -72,6 +72,19 @@ def _load_env_fallback():
 
 _load_env_fallback()
 
+# Canonical coordinates for North Eastern Region (NER) 0.25-degree cells:
+# cell_id -> (lat, lon, elevation_m, location_name)
+NER_CELL_COORDINATES: Dict[str, Tuple[float, float, float, str]] = {
+    "cell-26.25-91.75": (26.18, 91.75, 55.0, "Guwahati Hills, Assam"),
+    "cell-27.25-88.50": (27.33, 88.61, 1650.0, "Gangtok, Sikkim"),
+    "cell-25.50-91.75": (25.57, 91.88, 1525.0, "Shillong Plateau, Meghalaya"),
+    "cell-27.00-93.50": (27.08, 93.60, 320.0, "Itanagar, Arunachal Pradesh"),
+    "cell-25.75-94.00": (25.67, 94.11, 1444.0, "Kohima, Nagaland"),
+    "cell-24.75-94.00": (24.81, 93.94, 786.0, "Imphal, Manipur"),
+    "cell-23.75-92.75": (23.73, 92.72, 1132.0, "Aizawl, Mizoram"),
+    "cell-23.75-91.25": (23.83, 91.28, 15.0, "Agartala, Tripura"),
+}
+
 
 class InSarWorkerDaemon:
     def __init__(self):
@@ -299,7 +312,7 @@ class InSarWorkerDaemon:
                     cumulative_displacement_mm, temporal_trend, observation_start, observation_end,
                     temporal_baseline_days, coherence_mean, spatial_coverage_pct, quality,
                     unavailable_reason, sensor, orbit_pass, processing_pipeline, updated_at
-                ) VALUES (%s, 'UNAVAILABLE', NULL, NULL, NULL, 'INSUFFICIENT_DATA', NULL, NULL, NULL, NULL, 0, 'UNAVAILABLE', %s, 'Sentinel-1 C-SAR', NULL, 'Dedicated InSAR Worker v1.2.0 (ISCE2/SNAPHU)', NOW())
+                ) VALUES (%s, 'UNAVAILABLE', NULL, NULL, NULL, 'INSUFFICIENT_DATA', NULL, NULL, NULL, NULL, NULL, 'UNAVAILABLE', %s, 'Sentinel-1 C-SAR', NULL, 'Dedicated InSAR Worker v1.2.0 (ISCE2/SNAPHU)', NOW())
                 ON CONFLICT (cell_id) DO UPDATE SET
                     status = EXCLUDED.status,
                     quality = EXCLUDED.quality,
@@ -496,7 +509,7 @@ class InSarWorkerDaemon:
             """
             trend = "INSUFFICIENT_DATA" if product_status == "UNAVAILABLE" else "STABLE"
             coh_db = round(mean_coherence, 3) if mean_coherence is not None else None
-            cov_db = round(valid_pixel_pct, 2) if valid_pixel_pct is not None else 0.0
+            cov_db = round(valid_pixel_pct, 2) if (product_status != "UNAVAILABLE" and valid_pixel_pct is not None) else None
             self._execute_sql(sql_prod, (
                 cell_id, product_status, los_velocity_mm_yr, max_displacement_mm,
                 cumulative_displacement_mm, trend, master_time[:10], slave_time[:10],
@@ -562,7 +575,7 @@ class InSarWorkerDaemon:
             self.pipeline.cleanup_temporary_rasters(job_dir)
 
     def run_forever(self):
-        """Main worker loop: polls jobs and processes them."""
+        """Main worker loop: polls QUEUED jobs and processes them using DB-supplied cell geometry."""
         logger.info(f"Starting InSAR Processing Worker Daemon ({WORKER_ID})...")
         self.run_self_test()
 
@@ -570,11 +583,37 @@ class InSarWorkerDaemon:
             try:
                 job = self._claim_next_job()
                 if job:
+                    cell_id = job.get("cell_id", "")
+                    # Look up canonical coordinates for this cell_id
+                    cell_info = NER_CELL_COORDINATES.get(cell_id)
+                    if cell_info is None:
+                        # Attempt to parse lat/lon from the cell_id format "cell-LAT-LON"
+                        try:
+                            parts = cell_id.replace("cell-", "").split("-")
+                            parsed_lat = float(parts[0])
+                            parsed_lon = float(parts[1])
+                            cell_info = (parsed_lat, parsed_lon, 500.0, cell_id)
+                            logger.warning(
+                                f"Cell {cell_id} not in NER_CELL_COORDINATES; "
+                                f"parsed coordinates ({parsed_lat}, {parsed_lon}) — elevation defaulted to 500m."
+                            )
+                        except (ValueError, IndexError):
+                            logger.error(
+                                f"Cannot resolve coordinates for cell_id='{cell_id}'. "
+                                "Skipping job to avoid processing wrong location."
+                            )
+                            self._update_stage(job["id"], "FAILED", 0, {
+                                "error_message": f"UNRESOLVABLE_CELL_ID: '{cell_id}' has no registered coordinates."
+                            })
+                            continue
+
+                    target_lat, target_lon, elevation_m, location_name = cell_info
                     self.process_job_for_cell(
-                        cell_id=job["cell_id"],
-                        target_lat=27.33,
-                        target_lon=88.61,
-                        location_name="Gangtok",
+                        cell_id=cell_id,
+                        target_lat=target_lat,
+                        target_lon=target_lon,
+                        location_name=location_name,
+                        elevation_m=elevation_m,
                     )
                 else:
                     time.sleep(POLL_INTERVAL_SECONDS)

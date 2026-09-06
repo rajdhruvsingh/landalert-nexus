@@ -115,7 +115,4 @@ class StorageManager:
             logger.info(f"Persisted final InSAR product to {dest_path}")
             return dest_path
 
-        # If dummy / simulated test mode, create zero-byte placeholder for tracking
-        with open(dest_path, "w") as f:
-            f.write(f"# InSAR Deformation Product for cell {cell_id}, job {job_id}\n")
-        return dest_path
+        raise FileNotFoundError(f"InSAR product raster not found: {source_product_path}")

@@ -295,3 +295,33 @@ def test_provenance_completeness():
         assert obs_end is not None
         assert dt is not None
 
+
+def test_ner_cell_coordinates_registration():
+    """Verify that all 8 North Eastern Region (NER) states are registered in NER_CELL_COORDINATES."""
+    from workers.insar.worker import NER_CELL_COORDINATES
+
+    expected_states = [
+        "Assam", "Sikkim", "Meghalaya", "Arunachal Pradesh",
+        "Nagaland", "Manipur", "Mizoram", "Tripura"
+    ]
+    registered_names = " ".join([info[3] for info in NER_CELL_COORDINATES.values()])
+    for state in expected_states:
+        assert state in registered_names, f"State '{state}' missing from NER_CELL_COORDINATES"
+
+    for cell_id, (lat, lon, elev, name) in NER_CELL_COORDINATES.items():
+        assert cell_id.startswith("cell-")
+        assert 20.0 <= lat <= 30.0, f"Latitude {lat} out of NER bounds for {cell_id}"
+        assert 87.0 <= lon <= 98.0, f"Longitude {lon} out of NER bounds for {cell_id}"
+        assert elev >= 0.0, f"Invalid elevation {elev} for {cell_id}"
+        assert len(name) > 0
+
+
+def test_storage_no_fake_raster_archive(tmp_path):
+    """Verify that StorageManager refuses to fabricate dummy .tif placeholders for non-existent files."""
+    from workers.insar.storage import StorageManager
+    mgr = StorageManager(base_cache_dir=str(tmp_path / "cache"), base_workspace_dir=str(tmp_path / "workspace"))
+
+    with pytest.raises(FileNotFoundError, match="InSAR product raster not found"):
+        mgr.archive_final_product("job-dummy-test", "cell-dummy", "/non/existent/product.tif")
+
+

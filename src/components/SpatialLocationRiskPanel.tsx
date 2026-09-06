@@ -308,7 +308,7 @@ export default function SpatialLocationRiskPanel({
                 )}
                 <div className="flex items-center justify-between">
                   <span>Quality: <span className="font-medium text-foreground">{deformQuality ?? "Standard"}</span></span>
-                  {deformCoverage !== undefined && (
+                  {deformCoverage !== undefined && deformCoverage !== null && (
                     <span>Coverage: <span className="font-mono text-foreground">{deformCoverage}%</span></span>
                   )}
                 </div>

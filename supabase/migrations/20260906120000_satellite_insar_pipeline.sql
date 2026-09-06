@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS public.insar_deformation_products (
   observation_end DATE,
   temporal_baseline_days INT,
   coherence_mean NUMERIC(4,3),
-  spatial_coverage_pct NUMERIC(5,2) DEFAULT 0,
+  spatial_coverage_pct NUMERIC(5,2) DEFAULT NULL,
   quality TEXT NOT NULL CHECK (quality IN ('HIGH', 'MODERATE', 'LOW', 'UNAVAILABLE')),
   unavailable_reason TEXT,
   sensor TEXT NOT NULL DEFAULT 'Sentinel-1 C-SAR',
