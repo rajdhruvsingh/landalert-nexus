@@ -176,7 +176,7 @@ def test_repeated_result_forensic_detection():
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
     cur.execute(
-        "SELECT cell_id, status, cumulative_displacement_mm, los_velocity_mean_mm_year, coherence_mean, unavailable_reason "
+        "SELECT cell_id, status, cumulative_displacement_mm, los_velocity_mean_mm_year, coherence_mean, unavailable_reason, spatial_coverage_pct "
         "FROM public.insar_deformation_products;"
     )
     rows = cur.fetchall()
@@ -187,11 +187,12 @@ def test_repeated_result_forensic_detection():
     available_displacements = []
     available_coherences = []
 
-    for cell_id, status, cum_disp, vel, coh, reason in rows:
-        # Invariant 1: UNAVAILABLE must NEVER have non-null deformation
+    for cell_id, status, cum_disp, vel, coh, reason, cov in rows:
+        # Invariant 1: UNAVAILABLE must NEVER have non-null deformation or non-null coverage
         if status == "UNAVAILABLE":
             assert cum_disp is None, f"Cell {cell_id} is UNAVAILABLE but has deformation {cum_disp}"
             assert vel is None, f"Cell {cell_id} is UNAVAILABLE but has velocity {vel}"
+            assert cov is None, f"Cell {cell_id} is UNAVAILABLE but has non-null coverage {cov}"
             assert reason is not None, f"Cell {cell_id} is UNAVAILABLE but lacks scientific reason"
             assert reason in (
                 "SAR_DECORRELATION_DENSE_CANOPY",
