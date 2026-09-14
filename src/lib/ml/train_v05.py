@@ -78,7 +78,7 @@ load_dotenv()
 
 DATABASE_URL: str | None = (os.getenv("DATABASE_URL") or "").strip() or None
 
-# ─── Hyperparameters ────────────────────────────────────────────────────────
+# Hyperparameters ─────────────────────────────────────────────────────────
 PSEUDO_ABSENCE_RATIO = 3       # negatives per positive event
 # RF clearly outperformed XGBoost in CV (0.6443 vs 0.6053), so weight it more heavily.
 ENSEMBLE_WEIGHTS = {"rf": 0.7, "xgb": 0.3}
@@ -86,6 +86,12 @@ CV_FOLDS = 5
 RF_N_ESTIMATORS = 400
 XGB_N_ESTIMATORS = 400
 RANDOM_SEED = 42
+# RF regularization — increased to close the large in-sample vs CV gap (0.9865 vs 0.6429)
+RF_MIN_SAMPLES_LEAF = 8   # was 3; larger leaves prevent memorizing noise
+RF_MAX_DEPTH = 15         # was None (unlimited); caps tree complexity
+RF_MAX_FEATURES = 0.4     # was 'sqrt' (~4/19); 40% adds feature diversity
+RF_CALIB_CV = 5           # was 3; more stable calibration on small data
+XGB_CALIB_CV = 5          # was 3
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -287,13 +293,14 @@ def _train_ensemble(
             RandomForestClassifier(
                 n_estimators=RF_N_ESTIMATORS,
                 class_weight="balanced",
-                max_features="sqrt",
-                min_samples_leaf=3,
+                max_features=RF_MAX_FEATURES,
+                min_samples_leaf=RF_MIN_SAMPLES_LEAF,
+                max_depth=RF_MAX_DEPTH,
                 random_state=RANDOM_SEED,
                 n_jobs=-1,
             ),
             method="sigmoid",
-            cv=3,
+            cv=RF_CALIB_CV,
         )
         rf_cv.fit(X_tr, y_tr)
         rf_p = rf_cv.predict_proba(X_val)[:, 1]
@@ -311,7 +318,7 @@ def _train_ensemble(
             n_jobs=-1,
             verbosity=0,
         )
-        xgb_cv = CalibratedClassifierCV(xgb_base, method="sigmoid", cv=3)
+        xgb_cv = CalibratedClassifierCV(xgb_base, method="sigmoid", cv=XGB_CALIB_CV)
         xgb_cv.fit(X_tr, y_tr)
         xgb_p = xgb_cv.predict_proba(X_val)[:, 1]
 
@@ -352,13 +359,14 @@ def _train_ensemble(
         RandomForestClassifier(
             n_estimators=RF_N_ESTIMATORS,
             class_weight="balanced",
-            max_features="sqrt",
-            min_samples_leaf=3,
+            max_features=RF_MAX_FEATURES,
+            min_samples_leaf=RF_MIN_SAMPLES_LEAF,
+            max_depth=RF_MAX_DEPTH,
             random_state=RANDOM_SEED,
             n_jobs=-1,
         ),
         method="sigmoid",
-        cv=3,
+        cv=RF_CALIB_CV,
     )
     rf_final.fit(X_scaled, y)
 
@@ -376,7 +384,7 @@ def _train_ensemble(
             verbosity=0,
         ),
         method="sigmoid",
-        cv=3,
+        cv=XGB_CALIB_CV,
     )
     xgb_final.fit(X_scaled, y)
 
