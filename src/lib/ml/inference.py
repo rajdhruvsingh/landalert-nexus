@@ -47,8 +47,24 @@ _raw_db_url = os.getenv("DATABASE_URL")
 DATABASE_URL = _raw_db_url.strip() if _raw_db_url and _raw_db_url.strip() else None
 _is_production = os.getenv("NODE_ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
 
-# Fallback artifact path when registry is unreachable
-_FALLBACK_ARTIFACT_PATH = "models/v0.4-lr-trained.json"
+# Preferred artifact paths (newest first).
+# The inference engine uses the first path that exists on disk.
+_V05_ARTIFACT_PATH = "models/v0.5-rf-xgb-ensemble.json"
+_V04_ARTIFACT_PATH = "models/v0.4-lr-trained.json"
+
+# Resolve to v0.5 if the companion joblib files are present, else degrade to v0.4 LR.
+def _resolve_fallback_artifact() -> str:
+    v05_rf  = "models/v0.5-rf-xgb-ensemble-rf.joblib"
+    v05_xgb = "models/v0.5-rf-xgb-ensemble-xgb.joblib"
+    if (
+        os.path.isfile(_V05_ARTIFACT_PATH)
+        and os.path.isfile(v05_rf)
+        and os.path.isfile(v05_xgb)
+    ):
+        return _V05_ARTIFACT_PATH
+    return _V04_ARTIFACT_PATH
+
+_FALLBACK_ARTIFACT_PATH = _resolve_fallback_artifact()
 
 def get_active_artifact_path_from_registry(db_url: str = None) -> str:
     """
