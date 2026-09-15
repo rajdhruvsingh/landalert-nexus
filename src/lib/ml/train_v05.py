@@ -39,7 +39,8 @@ import joblib
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit
+from sklearn.frozen import FrozenEstimator
 from sklearn.metrics import (
     average_precision_score,
     precision_recall_curve,
@@ -78,21 +79,31 @@ load_dotenv()
 
 DATABASE_URL: str | None = (os.getenv("DATABASE_URL") or "").strip() or None
 
-# Hyperparameters ─────────────────────────────────────────────────────────
-PSEUDO_ABSENCE_RATIO = 3       # negatives per positive event
-# RF clearly outperformed XGBoost in CV (0.6443 vs 0.6053), so weight it more heavily.
-ENSEMBLE_WEIGHTS = {"rf": 0.7, "xgb": 0.3}
+# ── Hyperparameters (Overfitting Audit 2026-09-14) ────────────────────────
+# Audit found: 11 feature pairs r>0.85, in-sample/CV gap=0.336 → 6 fixes applied.
+# FIX 6: ratio 3→4 (more diverse absences, less pattern memorisation per zone)
+PSEUDO_ABSENCE_RATIO = 4
+# FIX 1: window ±3d→±30d (rain_30d at day+4 still carries event rainfall signal)
+PSEUDO_ABSENCE_EXCLUSION_DAYS = 30
+ENSEMBLE_WEIGHTS = {"rf": 0.7, "xgb": 0.3}   # data-driven from previous CV
 CV_FOLDS = 5
-RF_N_ESTIMATORS = 400
-XGB_N_ESTIMATORS = 400
 RANDOM_SEED = 42
-# RF regularization — increased to close the large in-sample vs CV gap (0.9865 vs 0.6429)
-RF_MIN_SAMPLES_LEAF = 8   # was 3; larger leaves prevent memorizing noise
-RF_MAX_DEPTH = 15         # was None (unlimited); caps tree complexity
-RF_MAX_FEATURES = 0.4     # was 'sqrt' (~4/19); 40% adds feature diversity
-RF_CALIB_CV = 5           # was 3; more stable calibration on small data
-XGB_CALIB_CV = 5          # was 3
-# ────────────────────────────────────────────────────────────────────────────
+
+# FIX 2: RF — aggressive regularisation for 1,868 samples × 19 features
+RF_N_ESTIMATORS     = 300   # was 400
+RF_MIN_SAMPLES_LEAF = 20    # was 8  → coarser leaves, less noise-fitting
+RF_MAX_DEPTH        = 10    # was 15 → hard depth cap
+RF_MAX_FEATURES     = 0.35  # was 0.4 → fewer features/split → more diverse trees
+RF_MAX_SAMPLES      = 0.75  # NEW: bootstrap 75% of data per tree (↓ variance)
+
+# FIX 3: XGBoost — L1/L2 + child-weight + split-gain regularisation
+XGB_N_ESTIMATORS     = 300  # was 400
+XGB_MAX_DEPTH        = 5    # was 6
+XGB_MIN_CHILD_WEIGHT = 5    # NEW: min ΣInstance-weight in child leaf
+XGB_GAMMA            = 0.1  # NEW: min split gain required
+XGB_REG_ALPHA        = 0.1  # NEW: L1 weight regularisation
+XGB_REG_LAMBDA       = 2.0  # NEW: L2 weight regularisation (default 1.0)
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _get_git_commit() -> str:
@@ -210,7 +221,7 @@ def _build_feature_matrix(
 
     rng = np.random.default_rng(RANDOM_SEED)
     absence_count = 0
-    max_attempts = target_absences * 25
+    max_attempts = target_absences * 30  # more attempts needed with ±30d window
 
     for _ in range(max_attempts):
         if absence_count >= target_absences:
@@ -219,9 +230,10 @@ def _build_feature_matrix(
         zid = int(rng.choice(zone_ids))
         rand_ts = pd.Timestamp(all_dates[int(rng.integers(0, len(all_dates)))])
 
-        # Exclude dates within ±3 days of any real event in this zone
+        # FIX 1: exclude ±PSEUDO_ABSENCE_EXCLUSION_DAYS around any event in this zone.
+        # rain_30d at day+4 post-event still accumulates the event's rainfall signal.
         near_event = any(
-            abs((rand_ts.date() - d).days) <= 3
+            abs((rand_ts.date() - d).days) <= PSEUDO_ABSENCE_EXCLUSION_DAYS
             for (z, d) in pos_lookup
             if z == zid
         )
@@ -244,7 +256,7 @@ def _build_feature_matrix(
         groups.append(str(z_row.get("district", f"zone_{zid}")))
         absence_count += 1
 
-    print(f"[Train]   → {absence_count} pseudo-absences generated.")
+    print(f"[Train]   → {absence_count} pseudo-absences generated (±{PSEUDO_ABSENCE_EXCLUSION_DAYS}d exclusion window).")
 
     X = np.array(rows, dtype=np.float64)
     y = np.array(labels, dtype=np.int32)
@@ -259,6 +271,42 @@ def _build_feature_matrix(
     return X, y, groups_arr
 
 
+# ─── Training helpers ─────────────────────────────────────────────────────────
+
+def _make_rf() -> RandomForestClassifier:
+    """FIX 2: regularized RF base estimator (no calibration wrapper)."""
+    return RandomForestClassifier(
+        n_estimators=RF_N_ESTIMATORS,
+        class_weight="balanced",
+        max_features=RF_MAX_FEATURES,
+        min_samples_leaf=RF_MIN_SAMPLES_LEAF,
+        max_depth=RF_MAX_DEPTH,
+        max_samples=RF_MAX_SAMPLES,
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+    )
+
+
+def _make_xgb(spw: float) -> "xgb.XGBClassifier":
+    """FIX 3: regularized XGBoost base estimator."""
+    return xgb.XGBClassifier(
+        n_estimators=XGB_N_ESTIMATORS,
+        max_depth=XGB_MAX_DEPTH,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        scale_pos_weight=spw,
+        min_child_weight=XGB_MIN_CHILD_WEIGHT,
+        gamma=XGB_GAMMA,
+        reg_alpha=XGB_REG_ALPHA,
+        reg_lambda=XGB_REG_LAMBDA,
+        eval_metric="aucpr",
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+        verbosity=0,
+    )
+
+
 # ─── Training ─────────────────────────────────────────────────────────────────
 
 def _train_ensemble(
@@ -267,19 +315,31 @@ def _train_ensemble(
     groups: np.ndarray,
 ) -> tuple:
     """
-    Trains RF (calibrated) + XGBoost (calibrated) with Spatial GroupKFold CV.
-    Returns (rf_final, xgb_final, scaler, metrics).
+    FIX 4 — CV loop: raw predict_proba, no inner CalibratedClassifierCV.
+      PR-AUC is rank-invariant to monotonic transforms; calibration inside each
+      outer fold on ~250 samples adds noise (inner-CV leakage) with zero PR-AUC benefit.
+
+    FIX 5 — Final model: prefit Platt calibration on a clean district holdout.
+      GroupShuffleSplit(test_size=0.20) creates an 80% train / 20% calibration
+      partition respecting district groups. Base estimators are trained on 80%.
+      CalibratedClassifierCV(cv='prefit') fits the Platt sigmoid only on the
+      held-out 20% — no inner CV, zero calibration leakage.
+
+    Returns (rf_calibrated, xgb_calibrated, scaler, metrics).
     """
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
     n_pos = int(y.sum())
     n_neg = int((y == 0).sum())
-    spw = float(n_neg) / max(n_pos, 1)   # XGBoost scale_pos_weight
+    spw = float(n_neg) / max(n_pos, 1)
 
+    # ── Cross-validation (FIX 4: raw probabilities) ───────────────────────
     gkf = GroupKFold(n_splits=CV_FOLDS)
-
-    print(f"\n[Train] Spatial GroupKFold CV (n_splits={CV_FOLDS})…")
+    print(
+        f"\n[Train] Spatial GroupKFold CV (n_splits={CV_FOLDS})"
+        f" — raw proba, no inner calibration (FIX 4)…"
+    )
     fold_pr_aucs_rf:  list[float] = []
     fold_pr_aucs_xgb: list[float] = []
     fold_pr_aucs_ens: list[float] = []
@@ -288,41 +348,14 @@ def _train_ensemble(
         X_tr, X_val = X_scaled[train_idx], X_scaled[val_idx]
         y_tr, y_val = y[train_idx], y[val_idx]
 
-        # ── RandomForest (Platt-calibrated) ───────────────────────────────
-        rf_cv = CalibratedClassifierCV(
-            RandomForestClassifier(
-                n_estimators=RF_N_ESTIMATORS,
-                class_weight="balanced",
-                max_features=RF_MAX_FEATURES,
-                min_samples_leaf=RF_MIN_SAMPLES_LEAF,
-                max_depth=RF_MAX_DEPTH,
-                random_state=RANDOM_SEED,
-                n_jobs=-1,
-            ),
-            method="sigmoid",
-            cv=RF_CALIB_CV,
-        )
-        rf_cv.fit(X_tr, y_tr)
-        rf_p = rf_cv.predict_proba(X_val)[:, 1]
+        rf_raw = _make_rf()
+        rf_raw.fit(X_tr, y_tr)
+        rf_p = rf_raw.predict_proba(X_val)[:, 1]
 
-        # ── XGBoost (Platt-calibrated) ────────────────────────────────────
-        xgb_base = xgb.XGBClassifier(
-            n_estimators=XGB_N_ESTIMATORS,
-            max_depth=6,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            scale_pos_weight=spw,
-            eval_metric="aucpr",
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            verbosity=0,
-        )
-        xgb_cv = CalibratedClassifierCV(xgb_base, method="sigmoid", cv=XGB_CALIB_CV)
-        xgb_cv.fit(X_tr, y_tr)
-        xgb_p = xgb_cv.predict_proba(X_val)[:, 1]
+        xgb_raw = _make_xgb(spw)
+        xgb_raw.fit(X_tr, y_tr)
+        xgb_p = xgb_raw.predict_proba(X_val)[:, 1]
 
-        # ── Blend ─────────────────────────────────────────────────────────
         w_rf  = ENSEMBLE_WEIGHTS["rf"]
         w_xgb = ENSEMBLE_WEIGHTS["xgb"]
         ens_p = w_rf * rf_p + w_xgb * xgb_p
@@ -330,89 +363,75 @@ def _train_ensemble(
         pr_rf  = average_precision_score(y_val, rf_p)
         pr_xgb = average_precision_score(y_val, xgb_p)
         pr_ens = average_precision_score(y_val, ens_p)
-
         fold_pr_aucs_rf.append(pr_rf)
         fold_pr_aucs_xgb.append(pr_xgb)
         fold_pr_aucs_ens.append(pr_ens)
 
-        print(
-            f"  Fold {fold_idx + 1}: "
-            f"RF PR-AUC={pr_rf:.4f}  XGB PR-AUC={pr_xgb:.4f}  "
-            f"Ensemble PR-AUC={pr_ens:.4f}"
-        )
+        print(f"  Fold {fold_idx + 1}: RF={pr_rf:.4f}  XGB={pr_xgb:.4f}  Ensemble={pr_ens:.4f}")
 
     mean_rf  = float(np.mean(fold_pr_aucs_rf))
     mean_xgb = float(np.mean(fold_pr_aucs_xgb))
     mean_ens = float(np.mean(fold_pr_aucs_ens))
-
     print(
-        f"\n[Train] CV Summary:\n"
-        f"  RF only   : PR-AUC = {mean_rf:.4f}\n"
-        f"  XGBoost   : PR-AUC = {mean_xgb:.4f}\n"
-        f"  Ensemble  : PR-AUC = {mean_ens:.4f}  "
-        f"({'↑' if mean_ens > 0.6037 else '↓'} vs v0.4 LR = 0.6037)"
+        f"\n[Train] CV: RF={mean_rf:.4f}  XGB={mean_xgb:.4f}  "
+        f"Ensemble={mean_ens:.4f} ({'↑' if mean_ens > 0.6037 else '↓'} vs v0.4 LR=0.6037)"
     )
 
-    # ── Final models on full training set ─────────────────────────────────
-    print("\n[Train] Training final models on full dataset…")
-    rf_final = CalibratedClassifierCV(
-        RandomForestClassifier(
-            n_estimators=RF_N_ESTIMATORS,
-            class_weight="balanced",
-            max_features=RF_MAX_FEATURES,
-            min_samples_leaf=RF_MIN_SAMPLES_LEAF,
-            max_depth=RF_MAX_DEPTH,
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-        ),
-        method="sigmoid",
-        cv=RF_CALIB_CV,
-    )
-    rf_final.fit(X_scaled, y)
+    # ── Final model: 80% train / 20% calibration district split (FIX 5) ──
+    print("\n[Train] Building final model — prefit calibration on 20% district holdout (FIX 5)…")
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=RANDOM_SEED)
+    tr_idx, cal_idx = next(gss.split(X_scaled, y, groups))
+    X_tr_f, X_cal = X_scaled[tr_idx], X_scaled[cal_idx]
+    y_tr_f, y_cal = y[tr_idx], y[cal_idx]
+    print(f"[Train]   Base train={len(y_tr_f)}  Calibration holdout={len(y_cal)}")
 
-    xgb_final = CalibratedClassifierCV(
-        xgb.XGBClassifier(
-            n_estimators=XGB_N_ESTIMATORS,
-            max_depth=6,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            scale_pos_weight=spw,
-            eval_metric="aucpr",
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            verbosity=0,
-        ),
-        method="sigmoid",
-        cv=XGB_CALIB_CV,
-    )
-    xgb_final.fit(X_scaled, y)
+    rf_base = _make_rf()
+    rf_base.fit(X_tr_f, y_tr_f)
+    # FrozenEstimator = sklearn 1.9+ replacement for cv='prefit'
+    # Wraps already-fitted estimator; CalibratedClassifierCV then uses
+    # all of X_cal/y_cal purely for sigmoid calibration, no inner CV.
+    rf_final = CalibratedClassifierCV(FrozenEstimator(rf_base), method="sigmoid")
+    rf_final.fit(X_cal, y_cal)
 
-    # In-sample Recall@80% for reporting (not a hold-out estimate)
+    xgb_base = _make_xgb(spw)
+    xgb_base.fit(X_tr_f, y_tr_f)
+    xgb_final = CalibratedClassifierCV(FrozenEstimator(xgb_base), method="sigmoid")
+    xgb_final.fit(X_cal, y_cal)
+
+    # In-sample check — report the overfit gap explicitly
     rf_p_full  = rf_final.predict_proba(X_scaled)[:, 1]
     xgb_p_full = xgb_final.predict_proba(X_scaled)[:, 1]
-    ens_p_full = (
-        ENSEMBLE_WEIGHTS["rf"] * rf_p_full + ENSEMBLE_WEIGHTS["xgb"] * xgb_p_full
-    )
+    ens_p_full = ENSEMBLE_WEIGHTS["rf"] * rf_p_full + ENSEMBLE_WEIGHTS["xgb"] * xgb_p_full
     prec_arr, recall_arr, _ = precision_recall_curve(y, ens_p_full)
     recall_at_80 = (
-        float(recall_arr[prec_arr >= 0.80].max())
-        if (prec_arr >= 0.80).any()
-        else 0.0
+        float(recall_arr[prec_arr >= 0.80].max()) if (prec_arr >= 0.80).any() else 0.0
     )
-    print(f"[Train] Recall@80% Precision (in-sample, indicative): {recall_at_80:.4f}")
+    in_sample_pr = round(float(average_precision_score(y, ens_p_full)), 4)
+    gap = round(in_sample_pr - mean_ens, 4)
+    print(f"[Train] In-sample PR-AUC={in_sample_pr:.4f}  CV PR-AUC={mean_ens:.4f}  Gap={gap:.4f}")
 
     metrics = {
         "validation_strategy": f"Spatial GroupKFold n={CV_FOLDS} by district",
         "pr_auc": round(mean_ens, 4),
         "pr_auc_rf_only": round(mean_rf, 4),
         "pr_auc_xgb_only": round(mean_xgb, 4),
+        "pr_auc_in_sample": in_sample_pr,
+        "overfitting_gap": gap,
         "recall_at_80_precision": round(recall_at_80, 4),
         "prevalence": round(float(y.mean()), 4),
         "baseline_lr_v04_pr_auc": 0.6037,
+        "audit_fixes": [
+            f"pseudo_absence_exclusion_days={PSEUDO_ABSENCE_EXCLUSION_DAYS}",
+            f"pseudo_absence_ratio={PSEUDO_ABSENCE_RATIO}",
+            f"rf_min_samples_leaf={RF_MIN_SAMPLES_LEAF}_max_depth={RF_MAX_DEPTH}_max_samples={RF_MAX_SAMPLES}",
+            f"xgb_min_child_weight={XGB_MIN_CHILD_WEIGHT}_gamma={XGB_GAMMA}_alpha={XGB_REG_ALPHA}_lambda={XGB_REG_LAMBDA}",
+            "cv_raw_proba_no_inner_calibration",
+            "final_prefit_calibration_on_20pct_district_holdout",
+        ],
     }
 
     return rf_final, xgb_final, scaler, metrics
+
 
 
 # ─── Feature importance extraction ──────────────────────────────────────────
