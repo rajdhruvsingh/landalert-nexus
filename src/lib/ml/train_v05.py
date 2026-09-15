@@ -81,8 +81,8 @@ DATABASE_URL: str | None = (os.getenv("DATABASE_URL") or "").strip() or None
 
 # ── Hyperparameters (Overfitting Audit 2026-09-14) ────────────────────────
 # Audit found: 11 feature pairs r>0.85, in-sample/CV gap=0.336 → 6 fixes applied.
-# FIX 6: ratio 3→4 (more diverse absences, less pattern memorisation per zone)
-PSEUDO_ABSENCE_RATIO = 4
+# Grid search 2026-09-15: tested 2:1 to 6:1; 2:1 gives peak CV PR-AUC = 0.7696 (worst fold = 0.6337)
+PSEUDO_ABSENCE_RATIO = 2
 # FIX 1: window ±3d→±30d (rain_30d at day+4 still carries event rainfall signal)
 PSEUDO_ABSENCE_EXCLUSION_DAYS = 30
 ENSEMBLE_WEIGHTS = {"rf": 0.7, "xgb": 0.3}   # data-driven from previous CV

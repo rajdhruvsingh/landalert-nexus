@@ -408,7 +408,7 @@ describe("REST API Router (/api/*)", () => {
         data_freshness: { soil_moisture_status: string };
       };
       expect(body.zone_id).toBe(1);
-      expect(body.model_version).toBe("v0.4-lr-trained");
+      expect(["v0.4-lr-trained", "v0.5-rf-xgb-ensemble"]).toContain(body.model_version);
       expect(body.probability).toBeGreaterThanOrEqual(0.0);
       expect(body.probability).toBeLessThanOrEqual(1.0);
       expect(body.risk_score).toBeGreaterThanOrEqual(0.0);
