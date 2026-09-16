@@ -1,11 +1,29 @@
-# Python dependencies for LandAlert-Nexus ML inference layer.
-# Used by Render build: pip install -r requirements.txt
-# Python version: 3.11+ (tested on 3.13.13)
-
+asgiref==3.12.1
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+cryptography==50.0.1
+dj-database-url==3.1.2
+Django==5.2.17
+django-cors-headers==4.9.0
+djangorestframework==3.18.1
+gunicorn==26.2.0
+idna==3.19
+joblib==1.5.3
+narwhals==2.26.0
 numpy==2.4.3
 pandas==3.0.3
-scikit-learn==1.9.0
-joblib==1.5.3
 psycopg2-binary==2.9.12
+pycparser==3.0
+PyJWT==2.14.0
+python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
+requests==2.34.2
+scikit-learn==1.9.0
+scipy==1.18.1
+six==1.17.0
+sqlparse==0.6.0
+threadpoolctl==3.7.0
+urllib3==2.7.0
+whitenoise==6.12.0
 xgboost==2.1.4

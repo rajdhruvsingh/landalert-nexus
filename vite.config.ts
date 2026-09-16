@@ -42,6 +42,12 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: "::",
       port: 8080,
+      proxy: {
+        "/api": {
+          target: process.env["DJANGO_BACKEND_URL"] || "http://127.0.0.1:8000",
+          changeOrigin: true,
+        },
+      },
     },
     plugins: [
       tailwindcss(),

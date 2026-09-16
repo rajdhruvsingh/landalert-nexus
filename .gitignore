@@ -53,3 +53,6 @@ insar_cache/
 insar_workspace/
 scratch/
 supabase/.temp/
+*.sqlite3
+fetch_log.txt
+fetch_ne_landslides.sh

@@ -15,9 +15,12 @@
     "format": "prettier --write .",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
+    "test:backend": "([ -f .venv/bin/pytest ] && .venv/bin/pytest backend/tests/test_api_endpoints.py) || python3 -m pytest backend/tests/test_api_endpoints.py",
     "test:ml-leakage": "python3 scripts/test_ml_leakage.py",
     "test:ml-audit": "python3 scripts/ml_audit_pipeline.py",
-    "test:all": "vitest run --config vitest.config.ts && python3 scripts/test_ml_leakage.py"
+    "test:all": "vitest run --config vitest.config.ts && (([ -f .venv/bin/pytest ] && .venv/bin/pytest backend/tests/test_api_endpoints.py) || python3 -m pytest backend/tests/test_api_endpoints.py)",
+    "backend:dev": "([ -f .venv/bin/python ] && .venv/bin/python backend/manage.py runserver 0.0.0.0:8000) || python3 backend/manage.py runserver 0.0.0.0:8000",
+    "backend:prod": "([ -f .venv/bin/gunicorn ] && .venv/bin/gunicorn --chdir backend config.wsgi:application --bind 0.0.0.0:8000 --workers 2) || gunicorn --chdir backend config.wsgi:application --bind 0.0.0.0:8000 --workers 2"
   },
   "overrides": {
     "rolldown": "1.2.1"

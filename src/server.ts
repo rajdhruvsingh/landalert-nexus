@@ -49,9 +49,27 @@ import { handleApiRequest } from "./lib/api.router";
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      const apiResponse = await handleApiRequest(request);
-      if (apiResponse) {
-        return apiResponse;
+      const url = new URL(request.url);
+      if (url.pathname.startsWith("/api/")) {
+        const djangoBackendUrl = process.env["DJANGO_BACKEND_URL"];
+        if (djangoBackendUrl) {
+          try {
+            const targetUrl = new URL(url.pathname + url.search, djangoBackendUrl);
+            const body = ["GET", "HEAD"].includes(request.method) ? undefined : await request.blob();
+            return await fetch(targetUrl.toString(), {
+              method: request.method,
+              headers: request.headers,
+              body,
+            });
+          } catch (proxyError) {
+            console.warn("Proxy to Django backend failed, using fallback handler:", proxyError);
+          }
+        }
+
+        const apiResponse = await handleApiRequest(request);
+        if (apiResponse) {
+          return apiResponse;
+        }
       }
 
       const handler = await getServerEntry();
