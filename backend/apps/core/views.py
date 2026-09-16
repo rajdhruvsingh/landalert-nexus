@@ -28,3 +28,18 @@ def spa_index_view(request):
 </html>""",
         content_type="text/html",
     )
+
+def api_404_view(request, unmatched_path=""):
+    """
+    Standardized JSON error envelope for non-existent /api/* routes.
+    """
+    from django.http import JsonResponse
+    from datetime import datetime, timezone
+
+    payload = {
+        "error": f"Endpoint not found: {request.path}",
+        "code": "NOT_FOUND",
+        "status": 404,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    return JsonResponse(payload, status=404)

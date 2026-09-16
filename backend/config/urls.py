@@ -6,7 +6,7 @@ Routes all REST APIs under /api/* and delegates frontend SPA routes.
 """
 
 from django.urls import path, include, re_path
-from apps.core.views import spa_index_view
+from apps.core.views import spa_index_view, api_404_view
 
 urlpatterns = [
     # API endpoints
@@ -17,6 +17,9 @@ urlpatterns = [
     path("api/", include("apps.gis.urls")),
     path("api/", include("apps.satellite.urls")),
     path("api/", include("apps.integrations.urls")),
+
+    # Standardized JSON error response for unknown /api/* endpoints
+    re_path(r"^api/.*$", api_404_view, name="api-404"),
 
     # SPA Frontend fallback for non-API routes
     re_path(r"^(?!api/).*$", spa_index_view, name="spa-index"),

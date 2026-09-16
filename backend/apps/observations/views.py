@@ -30,15 +30,21 @@ class ObservationReviewView(APIView):
             return api_error("Forbidden: Only verified government officials, dispatchers, or administrators can review observations", "FORBIDDEN", 403)
 
         data = request.data or {}
-        obs_id = data.get("observationId")
-        status = str(data.get("status") or "").upper()
-        notes = str(data.get("verificationNotes") or "").strip()
-
+        obs_id = data.get("observation_id") or data.get("observationId") or data.get("id")
         if not obs_id:
-            return api_error("Missing observationId", "INVALID_INPUT", 400)
+            return api_error("observation_id is required", "MISSING_OBSERVATION_ID", 400)
 
+        status = str(data.get("new_status") or data.get("status") or "").upper()
         if status not in ("VERIFIED", "REJECTED"):
-            return api_error("Invalid status (must be VERIFIED or REJECTED)", "INVALID_STATUS", 400)
+            return api_error("new_status must be 'VERIFIED' or 'REJECTED'", "INVALID_STATUS", 400)
+
+        notes = str(data.get("verification_notes") or data.get("verificationNotes") or "").strip()
+        if status == "REJECTED" and len(notes) < 5:
+            return api_error(
+                "A rejection reason (verification_notes, min 5 chars) is required when rejecting an observation",
+                "MISSING_REJECTION_REASON",
+                400,
+            )
 
         obs = FieldObservation.objects.filter(id=obs_id).first()
         if not obs:
@@ -61,15 +67,20 @@ class ObservationReviewView(APIView):
             result="SUCCESS",
             actor_email=user.email,
             institution=user.institution,
-            details={"reviewStatus": status},
+            details={"reviewStatus": status, "isTrainingEligible": obs.is_training_eligible},
             reason=notes,
         )
 
         return api_response({
+            "ok": True,
             "reviewed": True,
+            "observation_id": str(obs.id),
             "observationId": str(obs.id),
+            "new_status": status,
             "status": status,
+            "reviewed_by": user.id,
             "verifiedBy": user.email,
+            "reviewed_at": obs.verified_at.isoformat(),
             "verifiedAt": obs.verified_at.isoformat(),
         })
 
@@ -89,15 +100,23 @@ class ObservationDeleteView(APIView):
         if not (user.is_official or user.is_admin):
             return api_error("Forbidden: Only verified government officials, dispatchers, or administrators can delete observations", "FORBIDDEN", 403)
 
-        target_id = obs_id or request.data.get("observationId")
+        data = request.data if isinstance(request.data, dict) else {}
+        target_id = (
+            obs_id
+            or data.get("observation_id")
+            or data.get("observationId")
+            or data.get("id")
+            or request.query_params.get("id")
+            or request.query_params.get("observation_id")
+        )
         if not target_id:
-            return api_error("Missing observationId", "INVALID_INPUT", 400)
+            return api_error("observation_id is required", "MISSING_OBSERVATION_ID", 400)
 
         obs = FieldObservation.objects.filter(id=target_id).first()
         if not obs:
             return api_error(f"Observation {target_id} not found", "NOT_FOUND", 404)
 
-        reason = str(request.data.get("reason") or "Deleted by authorized official").strip()
+        reason = str(data.get("reason") or request.query_params.get("reason") or "Deleted by authorized official").strip()
         obs.delete()
 
         log_audit_event(
@@ -112,7 +131,15 @@ class ObservationDeleteView(APIView):
             reason=reason,
         )
 
-        return api_response({"success": True, "deleted": True, "observationId": str(target_id)})
+        return api_response({
+            "ok": True,
+            "success": True,
+            "deleted": True,
+            "observation_id": str(target_id),
+            "observationId": str(target_id),
+            "deleted_by": user.id,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+        })
 
 class SyncObservationsView(APIView):
     throttle_classes = [ObservationSyncThrottle]
@@ -185,13 +212,30 @@ class FieldObservationUploadView(APIView):
         file_name = f"{file_id}{ext}"
         storage_url = f"/api/field-observations/media/{file_name}"
 
+        # Save locally if public directory exists or can be created
+        try:
+            from django.conf import settings
+            upload_dir = settings.REPO_ROOT / "public" / "uploads" / "field-media"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            with open(upload_dir / file_name, "wb+") as dest:
+                for chunk in uploaded_file.chunks():
+                    dest.write(chunk)
+        except Exception:
+            pass
+
         return api_response({
             "uploaded": True,
+            "success": True,
             "fileId": file_id,
             "fileName": file_name,
+            "name": file_name,
             "fileUrl": storage_url,
+            "url": storage_url,
+            "storagePath": file_name,
             "contentType": content_type,
+            "mimeType": content_type,
             "fileSize": uploaded_file.size,
+            "size": uploaded_file.size,
             "uploadedAt": datetime.now(timezone.utc).isoformat(),
         }, status=201)
 
@@ -205,6 +249,7 @@ class FieldObservationStatusView(APIView):
         except Exception:
             total, verified, pending, rejected = 0, 0, 0, 0
         return api_response({
+            "mediaUploadEnabled": True,
             "total": total,
             "verified": verified,
             "pending": pending,
@@ -212,6 +257,19 @@ class FieldObservationStatusView(APIView):
             "pipeline_status": "ONLINE",
             "last_synced_at": datetime.now(timezone.utc).isoformat(),
         })
+
+class FieldObservationMediaView(APIView):
+    def get(self, request, filename):
+        from django.conf import settings
+        from django.http import FileResponse, Http404
+        import mimetypes
+
+        upload_path = settings.REPO_ROOT / "public" / "uploads" / "field-media" / filename
+        if upload_path.exists() and upload_path.is_file():
+            content_type, _ = mimetypes.guess_type(str(upload_path))
+            return FileResponse(open(upload_path, "rb"), content_type=content_type or "application/octet-stream")
+
+        return api_error(f"Media file not found: {filename}", "FILE_NOT_FOUND", 404)
 
 class SyncPackageView(APIView):
     def get(self, request):

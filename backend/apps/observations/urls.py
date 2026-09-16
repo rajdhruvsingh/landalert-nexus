@@ -5,6 +5,7 @@ from .views import (
     SyncObservationsView,
     FieldObservationUploadView,
     FieldObservationStatusView,
+    FieldObservationMediaView,
     SyncPackageView,
 )
 
@@ -16,4 +17,5 @@ urlpatterns = [
     path("sync/package", SyncPackageView.as_view(), name="sync-package"),
     path("field-observations/upload", FieldObservationUploadView.as_view(), name="field-observations-upload"),
     path("field-observations/status", FieldObservationStatusView.as_view(), name="field-observations-status"),
+    path("field-observations/media/<path:filename>", FieldObservationMediaView.as_view(), name="field-observations-media"),
 ]

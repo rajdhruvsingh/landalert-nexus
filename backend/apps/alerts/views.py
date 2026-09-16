@@ -170,20 +170,84 @@ class AlertRetractView(APIView):
 
 class SimulateView(APIView):
     def post(self, request):
-        # Simulation is strictly disabled in production
-        return api_error(
-            "Forbidden: Simulation endpoints are disabled in production to protect data integrity.",
-            "SIMULATION_DISABLED",
-            403,
-        )
+        import os
+        if os.getenv("ENABLE_SIMULATION") != "true":
+            return api_error(
+                "Simulation functionality is disabled in production environment",
+                "SIMULATION_DISABLED",
+                403,
+            )
+
+        data = request.data or {}
+        try:
+            zone_id = int(data.get("zoneId"))
+            rainfall_mm = float(data.get("rainfallMm"))
+            if zone_id < 1 or zone_id > 15 or rainfall_mm < 0:
+                return api_error("Invalid zoneId or rainfallMm", "INVALID_INPUT", 400)
+        except (ValueError, TypeError):
+            return api_error("Invalid zoneId or rainfallMm", "INVALID_INPUT", 400)
+
+        return api_response({
+            "simulated": True,
+            "zoneId": zone_id,
+            "rainfallMm": rainfall_mm,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
 class LocalsActiveView(APIView):
     def get(self, request):
         alerts = get_active_locals_alerts()
-        return api_response({"active_alerts": alerts, "count": len(alerts)})
+        return api_response({"ok": True, "active_alerts": alerts, "alerts": alerts, "count": len(alerts)})
 
 class LocalsCheckView(APIView):
     def post(self, request):
         observations = request.data.get("observations") or []
         res = evaluate_observations_for_locals_escalation(observations)
-        return api_response(res)
+        return api_response({
+            "ok": True,
+            "created_count": res.get("new_alerts_count", 0),
+            "created_alerts": res.get("active_alerts", []),
+            **res,
+        })
+
+class LocalsResolveView(APIView):
+    def post(self, request, alert_id):
+        auth_header = request.META.get("HTTP_AUTHORIZATION")
+        user = authenticate_token(auth_header)
+        if not user:
+            return api_error("Authentication required to resolve LOCALS alert", "UNAUTHORIZED", 401)
+
+        if not (user.is_official or user.is_admin or user.is_cron):
+            return api_error("Forbidden: Only VERIFIED_OFFICIAL, DISPATCHER, or ADMIN may resolve LOCALS alerts", "FORBIDDEN", 403)
+
+        data = request.data or {}
+        resolution = str(data.get("resolution") or "").strip()
+        if resolution not in ("CONFIRMED_HAZARD", "FALSE_PATTERN"):
+            return api_error("resolution must be 'CONFIRMED_HAZARD' or 'FALSE_PATTERN'", "INVALID_RESOLUTION", 400)
+
+        note = str(data.get("note") or "").strip()
+        if len(note) < 5:
+            return api_error("A resolution note of at least 5 characters is required", "MISSING_NOTE", 400)
+
+        from .locals import resolve_locals_alert
+        resolve_res = resolve_locals_alert(alert_id, resolution, note)
+        if not resolve_res.get("success"):
+            return api_error(resolve_res.get("error") or "Resolution failed", "RESOLUTION_FAILED", 400)
+
+        log_audit_event(
+            actor_user_id=user.id,
+            actor_role=user.role,
+            action=f"LOCALS_ALERT_RESOLVED_{resolution}",
+            target_type="locals_alert",
+            target_id=str(alert_id),
+            result="SUCCESS",
+            actor_email=user.email,
+            institution=user.institution,
+            reason=note,
+        )
+
+        return api_response({
+            "ok": True,
+            "alert": resolve_res.get("alert"),
+            "resolved_at": datetime.now(timezone.utc).isoformat(),
+        })

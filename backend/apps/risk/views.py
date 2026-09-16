@@ -40,6 +40,16 @@ class RiskPredictionView(APIView):
         except ValueError:
             return api_error("Invalid zone ID format", "INVALID_ZONE_ID", 400)
 
+        if as_of_date is not None and as_of_date != "":
+            from datetime import timedelta
+            try:
+                parsed_dt = datetime.fromisoformat(as_of_date.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                if parsed_dt > now + timedelta(days=1):
+                    return api_error("asOfDate cannot be more than 24 hours into the future", "INVALID_DATE", 400)
+            except Exception:
+                return api_error("asOfDate must be a valid ISO 8601 date string", "INVALID_DATE", 400)
+
         try:
             engine = get_inference_engine()
             res = engine.predict_zone(zone_id=zone_id, as_of_date=as_of_date)

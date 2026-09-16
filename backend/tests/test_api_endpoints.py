@@ -169,3 +169,86 @@ class TestAlertsAndObservations:
         data = resp.json()
         assert "zones" in data
         assert "active_model" in data
+
+    def test_field_observations_status_has_capability_flag(self, client):
+        resp = client.get("/api/field-observations/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("mediaUploadEnabled") is True
+
+    def test_unknown_route_returns_json_404(self, client):
+        resp = client.get("/api/unknown-route")
+        assert resp.status_code == 404
+        data = resp.json()
+        assert data["code"] == "NOT_FOUND"
+        assert "Endpoint not found" in data["error"]
+
+    def test_locals_resolve_unauthorized(self, client):
+        resp = client.post("/api/locals/alert-123/resolve", {"resolution": "CONFIRMED_HAZARD", "note": "Valid hazard confirmed"}, content_type="application/json")
+        assert resp.status_code == 401
+        data = resp.json()
+        assert data["code"] == "UNAUTHORIZED"
+
+    def test_locals_resolve_authorized(self, client):
+        # Create a mock active alert first
+        from apps.alerts.locals import _ACTIVE_LOCALS_ALERTS
+        _ACTIVE_LOCALS_ALERTS.append({"alert_id": "alert-test-1", "zone_id": 1, "status": "ACTIVE"})
+
+        headers = {"HTTP_AUTHORIZATION": "Bearer test-authenticated-official"}
+        payload = {"resolution": "CONFIRMED_HAZARD", "note": "Verified field tension cracks"}
+        resp = client.post("/api/locals/alert-test-1/resolve", payload, content_type="application/json", **headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["alert"]["status"] == "RESOLVED"
+
+    def test_locals_resolve_missing_note(self, client):
+        headers = {"HTTP_AUTHORIZATION": "Bearer test-authenticated-official"}
+        payload = {"resolution": "CONFIRMED_HAZARD", "note": "no"}
+        resp = client.post("/api/locals/alert-test-1/resolve", payload, content_type="application/json", **headers)
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["code"] == "MISSING_NOTE"
+
+    def test_observation_review_requires_rejection_reason(self, client):
+        import uuid
+        from datetime import datetime, timezone
+        from apps.observations.models import FieldObservation
+        test_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        FieldObservation.objects.create(id=test_id, zone_id=1, status="SUBMITTED", observed_at=now, client_timestamp=now)
+
+        headers = {"HTTP_AUTHORIZATION": "Bearer test-authenticated-official"}
+        payload = {"observation_id": test_id, "new_status": "REJECTED", "verification_notes": "no"}
+        resp = client.post("/api/observations/review", payload, content_type="application/json", **headers)
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["code"] == "MISSING_REJECTION_REASON"
+
+    def test_observation_delete_success(self, client):
+        import uuid
+        from datetime import datetime, timezone
+        from apps.observations.models import FieldObservation
+        del_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        FieldObservation.objects.create(id=del_id, zone_id=1, status="SUBMITTED", observed_at=now, client_timestamp=now)
+
+        headers = {"HTTP_AUTHORIZATION": "Bearer test-authenticated-admin"}
+        resp = client.delete(f"/api/observations/{del_id}", **headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted"] is True
+        assert data["observation_id"] == del_id
+
+    def test_risk_prediction_invalid_date(self, client):
+        resp = client.get("/api/risk-prediction?zoneId=1&asOfDate=not-a-valid-date")
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["code"] == "INVALID_DATE"
+
+    def test_simulate_endpoint_disabled_by_default(self, client):
+        resp = client.post("/api/simulate", {"zoneId": 1, "rainfallMm": 45.0}, content_type="application/json")
+        assert resp.status_code == 403
+        data = resp.json()
+        assert data["code"] == "SIMULATION_DISABLED"
+
