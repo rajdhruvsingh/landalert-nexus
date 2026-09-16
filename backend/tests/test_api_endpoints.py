@@ -252,3 +252,37 @@ class TestAlertsAndObservations:
         data = resp.json()
         assert data["code"] == "SIMULATION_DISABLED"
 
+    def test_field_observation_upload_disabled_by_flag(self, client, monkeypatch):
+        monkeypatch.setenv("MEDIA_UPLOAD_ENABLED", "false")
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fake_image = SimpleUploadedFile("test.jpg", b"image data", content_type="image/jpeg")
+        headers = {"HTTP_AUTHORIZATION": "Bearer test-authenticated-citizen"}
+        resp = client.post("/api/field-observations/upload", {"file": fake_image, "zoneId": 1}, **headers)
+        assert resp.status_code == 403
+        data = resp.json()
+        assert data["code"] == "MEDIA_UPLOAD_DISABLED"
+
+    def test_field_observation_upload_and_retrieve_local(self, client, monkeypatch):
+        monkeypatch.setenv("MEDIA_UPLOAD_ENABLED", "true")
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fake_image = SimpleUploadedFile("test_sample.jpg", b"\xff\xd8\xff\xe0testjpeg", content_type="image/jpeg")
+        headers = {"HTTP_AUTHORIZATION": "Bearer test-authenticated-citizen"}
+        resp = client.post("/api/field-observations/upload", {"file": fake_image, "zoneId": 1}, **headers)
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["uploaded"] is True
+        assert "fileName" in data
+        assert data["storageBackend"] in ("supabase", "local")
+
+        # Retrieve media
+        filename = data["fileName"]
+        media_resp = client.get(f"/api/field-observations/media/{filename}")
+        assert media_resp.status_code in (200, 302)
+
+    def test_field_observation_media_supabase_redirect_when_missing_locally(self, client, monkeypatch):
+        from django.conf import settings
+        monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
+        resp = client.get("/api/field-observations/media/non-existent-file-999.jpg")
+        assert resp.status_code == 302
+        assert "https://example.supabase.co/storage/v1/object/public/field-media/non-existent-file-999.jpg" in resp.headers["Location"]
+

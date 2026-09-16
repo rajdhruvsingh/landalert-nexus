@@ -39,10 +39,9 @@ services:
 
     # ---------------------------------------------------------------------------
     # Start
-    # Render injects $PORT automatically. Nitro reads PORT env var.
-    # HOST is explicitly set to 0.0.0.0 so Render's proxy can reach the process.
+    # Runs dual-engine production startup: Gunicorn on 127.0.0.1:8000 and Node SSR on $PORT
     # ---------------------------------------------------------------------------
-    startCommand: HOST=0.0.0.0 node .output/server/index.mjs
+    startCommand: bash ./scripts/start-production.sh
 
     # ---------------------------------------------------------------------------
     # Health check — must return 2xx for Render to mark deployment healthy.
@@ -121,6 +120,19 @@ services:
 
       - key: SATELLITE_LAYER_ENABLED
         value: "false"
+
+      # ── Django DRF Backend ───────────────────────────────────────────────────
+      - key: DJANGO_SECRET_KEY
+        sync: false
+
+      - key: DJANGO_DEBUG
+        value: "false"
+
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost,127.0.0.1"
+
+      - key: GUNICORN_WORKERS
+        value: "2"
 
   # ── LOCALS Auto-Escalation Check Cron ───────────────────────────────────────
   # Evaluates pending observations for GPS-proximity clustering every 15 minutes.

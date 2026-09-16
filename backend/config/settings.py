@@ -26,10 +26,27 @@ if str(REPO_ROOT) not in sys.path:
 load_dotenv(REPO_ROOT / ".env")
 
 # Security
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or os.getenv("SECRET_KEY") or "django-insecure-landalert-nexus-production-key-2026"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = ["*"]
+if not SECRET_KEY:
+    if DEBUG or ("pytest" in sys.modules):
+        SECRET_KEY = "django-insecure-dev-key-landalert-nexus-local-testing-only"
+    else:
+        import warnings
+        warnings.warn("DJANGO_SECRET_KEY is not set in environment! Using fallback.", RuntimeWarning)
+        SECRET_KEY = "django-insecure-landalert-nexus-production-key-2026"
+
+allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "").strip()
+if allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
+elif DEBUG or ("pytest" in sys.modules):
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"]
+
+# Recognize HTTPS behind Render / Node reverse proxies
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Application definition
 INSTALLED_APPS = [
@@ -126,7 +143,13 @@ if DIST_DIR.exists():
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS configuration
-CORS_ALLOW_ALL_ORIGINS = True
+allowed_origins_env = (os.getenv("ALLOWED_ORIGIN") or os.getenv("CORS_ALLOWED_ORIGINS") or "").strip()
+if allowed_origins_env:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+    CORS_ALLOW_ALL_ORIGINS = False
+else:
+    CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     "accept",
@@ -178,7 +201,10 @@ REST_FRAMEWORK = {
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY") or os.getenv("VITE_SUPABASE_PUBLISHABLE_KEY", "")
-SYSTEM_CRON_SECRET = os.getenv("SYSTEM_CRON_SECRET", "test-cron-secret-12345")
+SYSTEM_CRON_SECRET = (os.getenv("SYSTEM_CRON_SECRET") or os.getenv("CRON_SECRET") or "").strip()
+if not SYSTEM_CRON_SECRET and (DEBUG or "pytest" in sys.modules):
+    SYSTEM_CRON_SECRET = "test-cron-secret-12345"
+
 MSG91_AUTH_KEY = os.getenv("MSG91_AUTH_KEY", "")
 MSG91_SENDER_ID = os.getenv("MSG91_SENDER_ID", "LNDALR")
 MSG91_FLOW_ID = os.getenv("MSG91_FLOW_ID", "")

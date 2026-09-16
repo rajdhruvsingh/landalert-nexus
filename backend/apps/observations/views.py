@@ -191,6 +191,9 @@ class FieldObservationUploadView(APIView):
     throttle_classes = [MediaUploadThrottle]
 
     def post(self, request):
+        if os.getenv("MEDIA_UPLOAD_ENABLED", "true").lower() in ("false", "0", "no"):
+            return api_error("Observation media uploads are currently disabled", "MEDIA_UPLOAD_DISABLED", 403)
+
         auth_header = request.META.get("HTTP_AUTHORIZATION")
         user = authenticate_token(auth_header)
         if not user:
@@ -212,14 +215,38 @@ class FieldObservationUploadView(APIView):
         file_name = f"{file_id}{ext}"
         storage_url = f"/api/field-observations/media/{file_name}"
 
-        # Save locally if public directory exists or can be created
+        # Read file chunks into memory buffer
+        file_bytes = b"".join(uploaded_file.chunks())
+
+        # 1. Attempt upload to Supabase Storage ('field-media' bucket)
+        from django.conf import settings
+        supabase_url = (getattr(settings, "SUPABASE_URL", "") or os.getenv("SUPABASE_URL", "")).rstrip("/")
+        supabase_key = getattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+        uploaded_to_supabase = False
+
+        if supabase_url and supabase_key:
+            try:
+                import requests
+                endpoint = f"{supabase_url}/storage/v1/object/field-media/{file_name}"
+                headers = {
+                    "Authorization": f"Bearer {supabase_key}",
+                    "apikey": supabase_key,
+                    "Content-Type": content_type,
+                    "x-upsert": "true",
+                }
+                resp = requests.post(endpoint, headers=headers, data=file_bytes, timeout=10)
+                if resp.status_code in (200, 201):
+                    storage_url = f"{supabase_url}/storage/v1/object/public/field-media/{file_name}"
+                    uploaded_to_supabase = True
+            except Exception:
+                uploaded_to_supabase = False
+
+        # 2. Mirror/fallback to local disk container storage
         try:
-            from django.conf import settings
             upload_dir = settings.REPO_ROOT / "public" / "uploads" / "field-media"
             upload_dir.mkdir(parents=True, exist_ok=True)
             with open(upload_dir / file_name, "wb+") as dest:
-                for chunk in uploaded_file.chunks():
-                    dest.write(chunk)
+                dest.write(file_bytes)
         except Exception:
             pass
 
@@ -237,10 +264,12 @@ class FieldObservationUploadView(APIView):
             "fileSize": uploaded_file.size,
             "size": uploaded_file.size,
             "uploadedAt": datetime.now(timezone.utc).isoformat(),
+            "storageBackend": "supabase" if uploaded_to_supabase else "local",
         }, status=201)
 
 class FieldObservationStatusView(APIView):
     def get(self, request):
+        media_enabled = os.getenv("MEDIA_UPLOAD_ENABLED", "true").lower() not in ("false", "0", "no")
         try:
             total = FieldObservation.objects.count()
             verified = FieldObservation.objects.filter(review_status="VERIFIED").count()
@@ -249,7 +278,7 @@ class FieldObservationStatusView(APIView):
         except Exception:
             total, verified, pending, rejected = 0, 0, 0, 0
         return api_response({
-            "mediaUploadEnabled": True,
+            "mediaUploadEnabled": media_enabled,
             "total": total,
             "verified": verified,
             "pending": pending,
@@ -261,13 +290,18 @@ class FieldObservationStatusView(APIView):
 class FieldObservationMediaView(APIView):
     def get(self, request, filename):
         from django.conf import settings
-        from django.http import FileResponse, Http404
+        from django.http import FileResponse, HttpResponseRedirect
         import mimetypes
 
         upload_path = settings.REPO_ROOT / "public" / "uploads" / "field-media" / filename
         if upload_path.exists() and upload_path.is_file():
             content_type, _ = mimetypes.guess_type(str(upload_path))
             return FileResponse(open(upload_path, "rb"), content_type=content_type or "application/octet-stream")
+
+        supabase_url = (getattr(settings, "SUPABASE_URL", "") or os.getenv("SUPABASE_URL", "")).rstrip("/")
+        if supabase_url:
+            public_url = f"{supabase_url}/storage/v1/object/public/field-media/{filename}"
+            return HttpResponseRedirect(public_url)
 
         return api_error(f"Media file not found: {filename}", "FILE_NOT_FOUND", 404)
 
