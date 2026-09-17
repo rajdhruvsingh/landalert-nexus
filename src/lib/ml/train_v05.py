@@ -174,6 +174,21 @@ def _build_feature_matrix(
     labels: list[int] = []
     groups: list[str] = []
 
+    # Pre-index weather by zone for fast O(1) feature calculation
+    weather_by_zone = {}
+    w_clean = weather_df.copy()
+    if not pd.api.types.is_datetime64_any_dtype(w_clean["reading_date"]):
+        w_clean["reading_date"] = pd.to_datetime(w_clean["reading_date"])
+    if getattr(w_clean["reading_date"].dt, "tz", None) is not None:
+        w_clean["reading_date"] = w_clean["reading_date"].dt.tz_localize(None)
+
+    for zid in zones_indexed.index:
+        weather_by_zone[zid] = (
+            w_clean[w_clean["zone_id"] == zid]
+            .sort_values("reading_date")
+            .set_index("reading_date")
+        )
+
     # ── Positives ──────────────────────────────────────────────────────────
     print("\n[Train] Extracting features for positive events…")
     skipped_pos = 0
@@ -189,7 +204,7 @@ def _build_feature_matrix(
         as_of = pd.Timestamp(ev["event_date"])
 
         feats, _ = extract_features_for_zone(
-            z_row, as_of, weather_df, events_df, temporal_proximity=True
+            z_row, as_of, weather_by_zone, events_df, temporal_proximity=True
         )
         if feats is None:
             skipped_pos += 1
@@ -199,7 +214,6 @@ def _build_feature_matrix(
         labels.append(1)
         groups.append(str(z_row.get("district", f"zone_{zid}")))
 
-
     n_pos = len(labels)
     print(f"[Train]   → {n_pos} positives extracted  ({skipped_pos} skipped — insufficient history).")
 
@@ -207,21 +221,23 @@ def _build_feature_matrix(
     print("[Train] Generating pseudo-absences…")
     target_absences = n_pos * PSEUDO_ABSENCE_RATIO
 
-    # Build a fast lookup: {(zone_id, date) → True}
-    pos_lookup: set[tuple[int, object]] = set(
-        (int(ev["zone_id"]), pd.Timestamp(ev["event_date"]).date())
-        for _, ev in events_df.iterrows()
-    )
+    # Precompute excluded dates per zone for instant O(1) checks
+    from collections import defaultdict
+    excluded_dates_by_zone = defaultdict(set)
+    for _, ev in events_df.iterrows():
+        zid = int(ev["zone_id"])
+        ev_dt = pd.Timestamp(ev["event_date"]).date()
+        for delta in range(-PSEUDO_ABSENCE_EXCLUSION_DAYS, PSEUDO_ABSENCE_EXCLUSION_DAYS + 1):
+            excluded_dates_by_zone[zid].add(ev_dt + pd.Timedelta(days=delta))
 
-    weather_df["reading_date"] = pd.to_datetime(weather_df["reading_date"])
-    min_date = weather_df["reading_date"].min() + pd.Timedelta(days=35)
-    max_date = weather_df["reading_date"].max()
+    min_date = w_clean["reading_date"].min() + pd.Timedelta(days=35)
+    max_date = w_clean["reading_date"].max()
     all_dates = pd.date_range(min_date, max_date, freq="D")
     zone_ids = list(zones_indexed.index)
 
     rng = np.random.default_rng(RANDOM_SEED)
     absence_count = 0
-    max_attempts = target_absences * 30  # more attempts needed with ±30d window
+    max_attempts = target_absences * 30
 
     for _ in range(max_attempts):
         if absence_count >= target_absences:
@@ -232,12 +248,7 @@ def _build_feature_matrix(
 
         # FIX 1: exclude ±PSEUDO_ABSENCE_EXCLUSION_DAYS around any event in this zone.
         # rain_30d at day+4 post-event still accumulates the event's rainfall signal.
-        near_event = any(
-            abs((rand_ts.date() - d).days) <= PSEUDO_ABSENCE_EXCLUSION_DAYS
-            for (z, d) in pos_lookup
-            if z == zid
-        )
-        if near_event:
+        if rand_ts.date() in excluded_dates_by_zone[zid]:
             continue
 
         if zid not in zones_indexed.index:
@@ -246,7 +257,7 @@ def _build_feature_matrix(
         z_row = zones_indexed.loc[zid].copy()
         z_row["id"] = zid
         feats, _ = extract_features_for_zone(
-            z_row, rand_ts, weather_df, events_df, temporal_proximity=True
+            z_row, rand_ts, weather_by_zone, events_df, temporal_proximity=True
         )
         if feats is None:
             continue

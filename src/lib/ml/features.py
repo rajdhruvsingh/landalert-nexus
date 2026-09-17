@@ -81,14 +81,22 @@ def compute_rainfall_features(zone_id, as_of_date, weather_df, i_coef, i_exp, e_
     as_of = pd.Timestamp(as_of_date)
     if as_of.tzinfo is not None:
         as_of = as_of.tz_localize(None)
-    w_df = weather_df.copy()
-    if not pd.api.types.is_datetime64_any_dtype(w_df["reading_date"]):
-        w_df["reading_date"] = pd.to_datetime(w_df["reading_date"])
-    if getattr(w_df["reading_date"].dt, "tz", None) is not None:
-        w_df["reading_date"] = w_df["reading_date"].dt.tz_localize(None)
-    zone_wx = w_df[
-        (w_df["zone_id"] == zone_id) & (w_df["reading_date"] < as_of)
-    ].sort_values("reading_date").set_index("reading_date")
+
+    if isinstance(weather_df.index, pd.DatetimeIndex):
+        zone_wx = weather_df.loc[weather_df.index < as_of]
+        if "zone_id" in zone_wx.columns:
+            zone_wx = zone_wx[zone_wx["zone_id"] == zone_id]
+    else:
+        w_df = weather_df
+        if not pd.api.types.is_datetime64_any_dtype(w_df["reading_date"]):
+            w_df = w_df.copy()
+            w_df["reading_date"] = pd.to_datetime(w_df["reading_date"])
+        if getattr(w_df["reading_date"].dt, "tz", None) is not None:
+            w_df = w_df.copy()
+            w_df["reading_date"] = w_df["reading_date"].dt.tz_localize(None)
+        zone_wx = w_df[
+            (w_df["zone_id"] == zone_id) & (w_df["reading_date"] < as_of)
+        ].sort_values("reading_date").set_index("reading_date")
 
     if zone_wx.empty:
         return None
@@ -139,16 +147,27 @@ def compute_soil_moisture_features(zone_id, as_of_date, weather_df):
     as_of = pd.Timestamp(as_of_date)
     if as_of.tzinfo is not None:
         as_of = as_of.tz_localize(None)
-    w_df = weather_df.copy()
-    if not pd.api.types.is_datetime64_any_dtype(w_df["reading_date"]):
-        w_df["reading_date"] = pd.to_datetime(w_df["reading_date"])
-    if getattr(w_df["reading_date"].dt, "tz", None) is not None:
-        w_df["reading_date"] = w_df["reading_date"].dt.tz_localize(None)
-    sm = w_df[
-        (w_df["zone_id"] == zone_id)
-        & (w_df["reading_date"] < as_of)
-        & (w_df["soil_moisture_pct"].notna())
-    ].sort_values("reading_date")
+
+    if isinstance(weather_df.index, pd.DatetimeIndex):
+        zone_wx = weather_df.loc[weather_df.index < as_of]
+        if "zone_id" in zone_wx.columns:
+            zone_wx = zone_wx[zone_wx["zone_id"] == zone_id]
+        sm = zone_wx[zone_wx["soil_moisture_pct"].notna()].reset_index()
+        if "reading_date" not in sm.columns:
+            sm = sm.rename(columns={sm.columns[0]: "reading_date"})
+    else:
+        w_df = weather_df
+        if not pd.api.types.is_datetime64_any_dtype(w_df["reading_date"]):
+            w_df = w_df.copy()
+            w_df["reading_date"] = pd.to_datetime(w_df["reading_date"])
+        if getattr(w_df["reading_date"].dt, "tz", None) is not None:
+            w_df = w_df.copy()
+            w_df["reading_date"] = w_df["reading_date"].dt.tz_localize(None)
+        sm = w_df[
+            (w_df["zone_id"] == zone_id)
+            & (w_df["reading_date"] < as_of)
+            & (w_df["soil_moisture_pct"].notna())
+        ].sort_values("reading_date")
 
     if sm.empty:
         return {
@@ -216,13 +235,21 @@ def compute_proximity_features(centroid_lat, centroid_lng, real_events_df, as_of
             "historical_event_density": 0.0,
         }
 
-    dists = loc.apply(
-        lambda r: haversine_km(centroid_lat, centroid_lng, float(r["lat"]), float(r["lng"])),
-        axis=1,
-    )
+    lats_arr = loc["lat"].to_numpy(dtype=float)
+    lngs_arr = loc["lng"].to_numpy(dtype=float)
+
+    r_earth = 6371.0
+    clat = math.radians(centroid_lat)
+    clng = math.radians(centroid_lng)
+    p2 = np.radians(lats_arr)
+    dp = p2 - clat
+    dl = np.radians(lngs_arr) - clng
+    a = np.sin(dp / 2.0) ** 2 + math.cos(clat) * np.cos(p2) * np.sin(dl / 2.0) ** 2
+    dists = r_earth * 2.0 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
     return {
-        "dist_to_nearest_event_km": float(dists.min()),
-        "historical_event_density": min(int((dists <= 50.0).sum()) / 4.0, 1.0),
+        "dist_to_nearest_event_km": float(np.min(dists)),
+        "historical_event_density": min(int(np.sum(dists <= 50.0)) / 4.0, 1.0),
     }
 
 def compute_temporal_features(as_of_date):
@@ -241,10 +268,11 @@ def extract_features_for_zone(zone_row, as_of_date, weather_df, real_events_df, 
     Returns (feature_dict, metadata_dict). If weather data is missing, returns (None, None).
     """
     zid = int(zone_row["id"])
+    w_src = weather_df.get(zid, weather_df) if isinstance(weather_df, dict) else weather_df
     rain_d = compute_rainfall_features(
         zid,
         as_of_date,
-        weather_df,
+        w_src,
         float(zone_row["threshold_i_coefficient"]),
         float(zone_row["threshold_i_exponent"]),
         float(zone_row["threshold_e_mm"]),
@@ -252,7 +280,7 @@ def extract_features_for_zone(zone_row, as_of_date, weather_df, real_events_df, 
     if rain_d is None:
         return None, None
 
-    soil_d = compute_soil_moisture_features(zid, as_of_date, weather_df)
+    soil_d = compute_soil_moisture_features(zid, as_of_date, w_src)
     sm_status = soil_d.pop("soil_moisture_status")
 
     # Task 3: Use 90th-percentile slope per hazard mitigation principle, falling back to mean_slope_deg
