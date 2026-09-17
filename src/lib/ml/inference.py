@@ -66,6 +66,18 @@ def _resolve_fallback_artifact() -> str:
 
 _FALLBACK_ARTIFACT_PATH = _resolve_fallback_artifact()
 
+# Regional calibrated cutoffs for fold-belt terranes with compressed probability distributions.
+# Terranes 1 (Sikkim), 2 (Arunachal), and 5 (Craton/Schuppen) use standard production cutoffs (38, 56, 74).
+# Terrane 3 (Nagaland: Kohima, Dimapur) uses calibrated flysch cutoffs (20, 32, 50).
+# Terrane 4 (Surma Basin: Mizoram & Tripura) uses calibrated Neogene cutoffs (26, 42, 60).
+REGIONAL_TERRANE_CUTOFFS = {
+    "Kohima": {"moderate": 20.0, "high": 32.0, "severe": 50.0, "terrane": "Indo-Burman Wedge & Naga Hills"},
+    "Dimapur": {"moderate": 20.0, "high": 32.0, "severe": 50.0, "terrane": "Indo-Burman Wedge & Naga Hills"},
+    "Aizawl": {"moderate": 26.0, "high": 42.0, "severe": 60.0, "terrane": "Surma Basin & Mizo Fold Belt"},
+    "Lunglei": {"moderate": 26.0, "high": 42.0, "severe": 60.0, "terrane": "Surma Basin & Mizo Fold Belt"},
+    "Dhalai": {"moderate": 26.0, "high": 42.0, "severe": 60.0, "terrane": "Surma Basin & Mizo Fold Belt"},
+}
+
 def get_active_artifact_path_from_registry(db_url: str = None) -> str:
     """
     Queries the registry (public.risk_model_config) for the sole authorized
@@ -240,7 +252,9 @@ class LandslideRiskInferenceEngine:
 
             # 6. Execute ML prediction
             proba = self.artifact.predict_proba(feats)
-            risk_score, risk_level = self.artifact.compute_risk_score(proba)
+            district_name = str(z_row["district"])
+            regional_cutoffs = REGIONAL_TERRANE_CUTOFFS.get(district_name)
+            risk_score, risk_level = self.artifact.compute_risk_score(proba, cutoffs=regional_cutoffs)
             explanation = self.artifact.explain(feats)
 
             # When soil moisture is in fallback mode (unmeasured neutral value),
@@ -259,30 +273,49 @@ class LandslideRiskInferenceEngine:
                 explanation["top_categories"].sort(key=lambda item: abs(item["net_contribution"]), reverse=True)
 
             # 7. Regional confidence and safety conjunction gating
-            district_name = str(z_row["district"])
             reg_conf_map = getattr(self.artifact, "metrics", {}).get("regional_confidence", {})
             reg_info = reg_conf_map.get(district_name, {"confidence_tier": "moderate", "cv_pr_auc": 0.6755})
             confidence_tier = reg_info.get("confidence_tier", "moderate")
             regional_pr_auc = reg_info.get("cv_pr_auc", 0.6755)
+            terrane_name = reg_info.get("terrane_name", regional_cutoffs["terrane"] if regional_cutoffs else "")
 
             # Conjunction gate for SEVERE evacuation alerts:
-            threshold_exceeded = bool(feats.get("threshold_exceedance_flag", 0) == 1 or feats.get("rain_3d_vs_e_thr", 0) >= 1.0)
+            # Standard threshold: 3-day intensity exceeds Das et al. 2018 or zone E-threshold
+            # Fold-belt threshold: For Nagaland/Mizoram, prolonged 7-day rainfall >= 80mm
+            # indicates critical saturation in weathered clay-shale flysch beds
+            is_fold_belt = district_name in REGIONAL_TERRANE_CUTOFFS
+            fold_belt_exceeded = is_fold_belt and (
+                feats.get("rain_7d", 0.0) >= 80.0 or feats.get("rain_3d_vs_e_thr", 0.0) >= 0.85
+            )
+            threshold_exceeded = bool(
+                feats.get("threshold_exceedance_flag", 0) == 1
+                or feats.get("rain_3d_vs_e_thr", 0) >= 1.0
+                or fold_belt_exceeded
+            )
             effective_risk_level = risk_level
             confidence_warning = None
             physical_override = False
 
+            # Severe floor: uses regional severe cutoff or 76.0
+            severe_floor = regional_cutoffs["severe"] if regional_cutoffs else 76.0
+
             # Dual-Gate Safety Override:
-            # If 3-day rainfall exceeds the empirical geotechnical threshold (Das et al. 2018),
-            # physical pore pressure exceeds shear resistance. Floor score at 76 (SEVERE)
-            # to guarantee that dangerous storms are never suppressed by statistical ML false negatives.
+            # If rainfall exceeds geotechnical threshold, physical pore pressure exceeds shear resistance.
+            # Floor score at severe_floor (Severe) to prevent statistical false negatives from suppressing evacuation alerts.
             if threshold_exceeded:
                 physical_override = True
-                if risk_score < 76.0:
-                    risk_score = 76.0
-                    effective_risk_level = "SEVERE"
+                if risk_score < severe_floor:
+                    risk_score = severe_floor
+                    effective_risk_level = "Severe"
 
-            if risk_level == "SEVERE" and confidence_tier == "low" and not threshold_exceeded:
-                effective_risk_level = "HIGH"
+            if is_fold_belt:
+                confidence_warning = (
+                    f"District {district_name} ({terrane_name}): Evaluated under regional calibrated thresholds "
+                    f"(moderate={regional_cutoffs['moderate']}, severe={regional_cutoffs['severe']}) with "
+                    "deep clay-shale prolonged rainfall geotechnical override."
+                )
+            elif risk_level == "Severe" and confidence_tier == "low" and not threshold_exceeded:
+                effective_risk_level = "High"
                 confidence_warning = (
                     f"Advisory capped at HIGH. Regional model generalization in {district_name} is LOW (PR-AUC {regional_pr_auc}). "
                     "Physical rainfall threshold exceedance or on-ground verification required before broadcasting SEVERE evacuation orders."
@@ -327,8 +360,10 @@ class LandslideRiskInferenceEngine:
                 "canonical_features": feats,
                 "regional_confidence": {
                     "tier": confidence_tier,
+                    "calibration_status": "calibrated_fold_belt" if is_fold_belt else "standard_production",
                     "cv_pr_auc": regional_pr_auc,
                     "threshold_exceeded": threshold_exceeded,
+                    "physical_override": physical_override,
                     "warning": confidence_warning,
                 },
                 "data_freshness": {

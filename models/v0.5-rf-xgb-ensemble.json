@@ -120,7 +120,21 @@
   "cutoffs": {
     "moderate": 38.0,
     "high": 56.0,
-    "severe": 74.0
+    "severe": 74.0,
+    "regional_cutoffs": {
+      "Indo-Burman Wedge & Naga Hills (Nagaland)": {
+        "districts": ["Kohima", "Dimapur"],
+        "moderate": 20.0,
+        "high": 32.0,
+        "severe": 50.0
+      },
+      "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)": {
+        "districts": ["Aizawl", "Lunglei", "Dhalai"],
+        "moderate": 26.0,
+        "high": 42.0,
+        "severe": 60.0
+      }
+    }
   },
   "metrics": {
     "validation_strategy": "Invariant Pre-Registered Geological Terranes CV (n=5, fold-isolated)",

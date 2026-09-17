@@ -203,17 +203,19 @@ class ModelArtifact:
             "all_features": feat_contrib,
         }
 
-    def compute_risk_score(self, proba: float) -> tuple:
+    def compute_risk_score(self, proba: float, cutoffs: dict = None) -> tuple:
         """
         Maps probability to an operational risk score (0-100) and risk category.
         Score = proba × 100 clamped to [0, 100].
+        If cutoffs is provided, uses regional calibrated cutoffs; otherwise uses model cutoffs.
         """
         score = round(min(max(proba * 100.0, 0.0), 100.0), 1)
-        if score >= self.cutoffs["severe"]:
+        c = cutoffs or self.cutoffs
+        if score >= c["severe"]:
             lvl = "Severe"
-        elif score >= self.cutoffs["high"]:
+        elif score >= c["high"]:
             lvl = "High"
-        elif score >= self.cutoffs["moderate"]:
+        elif score >= c["moderate"]:
             lvl = "Moderate"
         else:
             lvl = "Low"
