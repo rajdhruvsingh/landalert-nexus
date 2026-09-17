@@ -296,33 +296,35 @@ def _build_feature_matrix(
 
 # ─── Training helpers ─────────────────────────────────────────────────────────
 
+# ─── Training helpers ─────────────────────────────────────────────────────────
+
 def _make_rf() -> RandomForestClassifier:
-    """Regularized RF base estimator for hard-negative terrain classification."""
+    """Deeply regularized RF to restrict in-sample memorization and close overfit gap <0.20."""
     return RandomForestClassifier(
         n_estimators=250,
         class_weight="balanced",
-        max_features=0.35,
-        min_samples_leaf=20,
-        max_depth=8,
-        max_samples=0.75,
+        max_features=0.30,
+        min_samples_leaf=30,
+        max_depth=6,
+        max_samples=0.70,
         random_state=RANDOM_SEED,
         n_jobs=-1,
     )
 
 
 def _make_xgb(spw: float) -> "xgb.XGBClassifier":
-    """Regularized XGBoost base estimator with subsampling and L1/L2 penalties."""
+    """Deeply regularized XGBoost with conservative tree depth and strong L1/L2 shrinkage."""
     return xgb.XGBClassifier(
         n_estimators=250,
-        max_depth=4,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.6,
+        max_depth=3,
+        learning_rate=0.04,
+        subsample=0.75,
+        colsample_bytree=0.55,
         scale_pos_weight=spw,
-        min_child_weight=8,
-        gamma=0.2,
-        reg_alpha=0.5,
-        reg_lambda=2.0,
+        min_child_weight=12,
+        gamma=0.3,
+        reg_alpha=1.0,
+        reg_lambda=3.0,
         eval_metric="aucpr",
         random_state=RANDOM_SEED,
         n_jobs=-1,
@@ -338,7 +340,7 @@ def _train_ensemble(
     groups: np.ndarray,
 ) -> tuple:
     """
-    Spatial GroupKFold CV with fold-isolated scaling and out-of-fold metrics.
+    Spatial GroupKFold CV with fold-isolated scaling, regional confidence mapping, and out-of-fold metrics.
     """
     n_pos = int(y.sum())
     n_neg = int((y == 0).sum())
@@ -352,9 +354,13 @@ def _train_ensemble(
     fold_pr_aucs_rf:  list[float] = []
     fold_pr_aucs_xgb: list[float] = []
     fold_pr_aucs_ens: list[float] = []
+    fold_districts:   dict[int, list[str]] = {}
     oof_preds = np.zeros(len(y), dtype=np.float64)
 
     for fold_idx, (train_idx, val_idx) in enumerate(gkf.split(X, y, groups)):
+        val_dists = sorted(list(set(groups[val_idx].tolist())))
+        fold_districts[fold_idx] = val_dists
+
         # Fold-isolated preprocessing — zero leakage from validation folds
         fold_scaler = StandardScaler()
         X_tr = fold_scaler.fit_transform(X[train_idx])
@@ -381,7 +387,7 @@ def _train_ensemble(
         fold_pr_aucs_xgb.append(pr_xgb)
         fold_pr_aucs_ens.append(pr_ens)
 
-        print(f"  Fold {fold_idx + 1}: RF={pr_rf:.4f}  XGB={pr_xgb:.4f}  Ensemble={pr_ens:.4f}")
+        print(f"  Fold {fold_idx + 1}: RF={pr_rf:.4f}  XGB={pr_xgb:.4f}  Ensemble={pr_ens:.4f}  (Districts: {', '.join(val_dists)})")
 
     mean_rf  = float(np.mean(fold_pr_aucs_rf))
     mean_xgb = float(np.mean(fold_pr_aucs_xgb))
@@ -391,6 +397,17 @@ def _train_ensemble(
         f"\n[Train] CV: RF={mean_rf:.4f}  XGB={mean_xgb:.4f}  "
         f"Ensemble={mean_ens:.4f} ± {std_ens:.4f} ({'↑' if mean_ens > 0.6037 else '↓'} vs v0.4 LR=0.6037)"
     )
+
+    # Build district-to-confidence tier mapping
+    regional_confidence: dict[str, dict] = {}
+    for f_idx, dists in fold_districts.items():
+        score = fold_pr_aucs_ens[f_idx]
+        conf_tier = "high" if score >= 0.72 else ("moderate" if score >= 0.60 else "low")
+        for d in dists:
+            regional_confidence[d] = {
+                "cv_pr_auc": round(score, 4),
+                "confidence_tier": conf_tier,
+            }
 
     # Out-of-fold Precision-Recall curve
     prec_oof, recall_oof, _ = precision_recall_curve(y, oof_preds)
@@ -442,14 +459,15 @@ def _train_ensemble(
         "recall_at_80_precision": round(oof_recall_at_80, 4),
         "prevalence": round(float(y.mean()), 4),
         "baseline_lr_v04_pr_auc": 0.6037,
+        "regional_confidence": regional_confidence,
         "audit_fixes": [
             "seasonally_stratified_hard_negatives",
             "monsoon_wet_day_sampling_rainfall_ge_1mm",
             "pseudo_absence_exclusion_days=30",
             "pseudo_absence_ratio=2",
             "fold_isolated_standard_scaling",
-            "rf_min_samples_leaf=20_max_depth=8_max_samples=0.75",
-            "xgb_colsample_bytree=0.6_min_child_weight=8_gamma=0.2_alpha=0.5_lambda=2.0",
+            "deep_regularization_rf_depth_6_leaf_30",
+            "deep_regularization_xgb_depth_3_alpha_1_lambda_3",
             "final_prefit_calibration_on_20pct_district_holdout",
         ],
     }

@@ -33,46 +33,46 @@
   },
   "parameters": {
     "rf_feature_importances": [
-      0.0028774203439755476,
-      0.0034991705520568566,
-      0.006387661298739553,
-      0.012680009412230145,
-      0.05765507458136799,
-      0.048950988600805254,
-      0.017792617512325828,
-      0.00018923925732915992,
-      0.0038292146030080585,
-      0.058686322171091,
-      0.01955093080827509,
-      0.029984285357921428,
-      0.03136848210945219,
-      0.0026708137265096512,
-      0.14349447632303763,
-      0.029942412587954638,
-      0.1655854140557475,
-      0.1379545162083106,
-      0.22690095048986192
+      0.0018869235654712668,
+      0.0020012027189997604,
+      0.004795321894448891,
+      0.013143900625423062,
+      0.06743326589670996,
+      0.04033900148303824,
+      0.020973269503156654,
+      0.0001588680174323703,
+      0.002473848399400516,
+      0.04877775400980951,
+      0.013442469358686863,
+      0.026976037286479886,
+      0.03058758857965928,
+      0.002687076292865591,
+      0.11169889375732915,
+      0.02813464341725547,
+      0.19131338130748257,
+      0.13669048646952214,
+      0.2564860674168288
     ],
     "xgb_feature_importances": [
-      0.00815556664019823,
-      0.00888117030262947,
-      0.013484292663633823,
-      0.014709223993122578,
-      0.034693364053964615,
-      0.024394260719418526,
-      0.02017284370958805,
-      0.0048360638320446014,
-      0.008966040797531605,
-      0.04378911107778549,
-      0.020982684567570686,
-      0.038075149059295654,
-      0.04095782712101936,
-      0.015593007206916809,
-      0.05388271436095238,
-      0.04854961857199669,
-      0.0523126944899559,
-      0.05995393544435501,
-      0.4876103699207306
+      0.009551038034260273,
+      0.009064662270247936,
+      0.01806681789457798,
+      0.016296736896038055,
+      0.038236986845731735,
+      0.034311693161726,
+      0.028517374768853188,
+      0.0,
+      0.009690353646874428,
+      0.051150985062122345,
+      0.019806629046797752,
+      0.049091655761003494,
+      0.056136757135391235,
+      0.016458112746477127,
+      0.05919737368822098,
+      0.054551415145397186,
+      0.0656294971704483,
+      0.060694947838783264,
+      0.4035470187664032
     ],
     "scaler_mean": [
       16.479636616362264,
@@ -124,43 +124,105 @@
   },
   "metrics": {
     "validation_strategy": "Spatial GroupKFold n=5 by district (leakage-free, fold-isolated)",
-    "pr_auc": 0.6697,
-    "pr_auc_std": 0.1173,
+    "pr_auc": 0.6755,
+    "pr_auc_std": 0.115,
     "fold_pr_aucs": [
-      0.756,
-      0.7569,
-      0.691,
-      0.4413,
-      0.7035
+      0.7634,
+      0.7552,
+      0.6704,
+      0.455,
+      0.7335
     ],
-    "pr_auc_rf_only": 0.6716,
-    "pr_auc_xgb_only": 0.6477,
-    "pr_auc_in_sample": 0.8802,
-    "overfitting_gap": 0.2105,
-    "recall_at_80_precision": 0.2705,
+    "pr_auc_rf_only": 0.6711,
+    "pr_auc_xgb_only": 0.6621,
+    "pr_auc_in_sample": 0.8338,
+    "overfitting_gap": 0.1583,
+    "recall_at_80_precision": 0.256,
     "prevalence": 0.3333,
     "baseline_lr_v04_pr_auc": 0.6037,
+    "regional_confidence": {
+      "East Sikkim": {
+        "cv_pr_auc": 0.7634,
+        "confidence_tier": "high"
+      },
+      "Noney": {
+        "cv_pr_auc": 0.7634,
+        "confidence_tier": "high"
+      },
+      "West Jaintia Hills": {
+        "cv_pr_auc": 0.7634,
+        "confidence_tier": "high"
+      },
+      "Dibang Valley": {
+        "cv_pr_auc": 0.7552,
+        "confidence_tier": "high"
+      },
+      "Papum Pare": {
+        "cv_pr_auc": 0.7552,
+        "confidence_tier": "high"
+      },
+      "Tamenglong": {
+        "cv_pr_auc": 0.7552,
+        "confidence_tier": "high"
+      },
+      "Dimapur": {
+        "cv_pr_auc": 0.6704,
+        "confidence_tier": "moderate"
+      },
+      "Lunglei": {
+        "cv_pr_auc": 0.6704,
+        "confidence_tier": "moderate"
+      },
+      "Mangan": {
+        "cv_pr_auc": 0.6704,
+        "confidence_tier": "moderate"
+      },
+      "Dhalai": {
+        "cv_pr_auc": 0.455,
+        "confidence_tier": "low"
+      },
+      "Karbi Anglong": {
+        "cv_pr_auc": 0.455,
+        "confidence_tier": "low"
+      },
+      "Kohima": {
+        "cv_pr_auc": 0.455,
+        "confidence_tier": "low"
+      },
+      "Aizawl": {
+        "cv_pr_auc": 0.7335,
+        "confidence_tier": "high"
+      },
+      "Dima Hasao": {
+        "cv_pr_auc": 0.7335,
+        "confidence_tier": "high"
+      },
+      "East Khasi Hills": {
+        "cv_pr_auc": 0.7335,
+        "confidence_tier": "high"
+      }
+    },
     "audit_fixes": [
       "seasonally_stratified_hard_negatives",
       "monsoon_wet_day_sampling_rainfall_ge_1mm",
       "pseudo_absence_exclusion_days=30",
       "pseudo_absence_ratio=2",
       "fold_isolated_standard_scaling",
-      "rf_min_samples_leaf=20_max_depth=8_max_samples=0.75",
-      "xgb_colsample_bytree=0.6_min_child_weight=8_gamma=0.2_alpha=0.5_lambda=2.0",
+      "deep_regularization_rf_depth_6_leaf_30",
+      "deep_regularization_xgb_depth_3_alpha_1_lambda_3",
       "final_prefit_calibration_on_20pct_district_holdout"
     ]
   },
-  "dataset_fingerprint": "4f0c99799611e91274b100ba3e2fbd9f296b46a7a9af8b501baf90f4afd01d67",
+  "dataset_fingerprint": "e20d4bd3620b3c104f73fccfaffdf47fc493acf0063798e9427124e9d5e495ab",
   "sample_counts": {
     "positives": 4203,
     "pseudo_absences": 8406,
     "total": 12609
   },
   "provenance": {
-    "created_at": "2026-09-17T14:39:54.777144+00:00",
-    "git_commit": "8d1e9b03f5c5ebd02f634c6bf07eb90fc35ce45d",
+    "created_at": "2026-09-17T14:46:18.100551+00:00",
+    "git_commit": "027859bd1197d596ea1228bc2607c11b21590249",
     "xgboost_version": "2.1.4",
-    "notes": "Production model v0.5-rf-xgb-ensemble. RF (300 trees, Platt-calibrated) + XGBoost (300 rounds, Platt-calibrated), 70% RF / 30% XGB blend. Trained on 4203 real NER rainfall-triggered landslides and 8406 pseudo-absences. Validation: Spatial GroupKFold n=5 by district. CV PR-AUC = 0.6697 (vs 0.6037 baseline with LR v0.4). COOLR/GSI retraining trigger: re-evaluate when >= 200 new events are ingested."
+    "notes": "Production model v0.5-rf-xgb-ensemble. RF (300 trees, Platt-calibrated) + XGBoost (300 rounds, Platt-calibrated), 70% RF / 30% XGB blend. Trained on 4203 real NER rainfall-triggered landslides and 8406 pseudo-absences. Validation: Spatial GroupKFold n=5 by district. CV PR-AUC = 0.6755 (vs 0.6037 baseline with LR v0.4). COOLR/GSI retraining trigger: re-evaluate when >= 200 new events are ingested."
   }
 }

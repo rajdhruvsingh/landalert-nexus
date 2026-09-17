@@ -258,7 +258,32 @@ class LandslideRiskInferenceEngine:
                 # Re-sort top_categories by absolute contribution
                 explanation["top_categories"].sort(key=lambda item: abs(item["net_contribution"]), reverse=True)
 
-            # 7. Construct dynamic explanation text
+            # 7. Regional confidence and safety conjunction gating
+            district_name = str(z_row["district"])
+            reg_conf_map = getattr(self.artifact, "metrics", {}).get("regional_confidence", {})
+            reg_info = reg_conf_map.get(district_name, {"confidence_tier": "moderate", "cv_pr_auc": 0.6755})
+            confidence_tier = reg_info.get("confidence_tier", "moderate")
+            regional_pr_auc = reg_info.get("cv_pr_auc", 0.6755)
+
+            # Conjunction gate for SEVERE evacuation alerts:
+            # In low-confidence regions, SEVERE tier requires empirical threshold exceedance or physical sensor validation.
+            threshold_exceeded = bool(feats.get("threshold_exceedance_flag", 0) == 1 or feats.get("rain_3d_vs_e_thr", 0) >= 1.0)
+            effective_risk_level = risk_level
+            confidence_warning = None
+
+            if risk_level == "SEVERE" and confidence_tier == "low" and not threshold_exceeded:
+                effective_risk_level = "HIGH"
+                confidence_warning = (
+                    f"Advisory capped at HIGH. Regional model generalization in {district_name} is LOW (PR-AUC {regional_pr_auc}). "
+                    "Physical rainfall threshold exceedance or on-ground verification required before broadcasting SEVERE evacuation orders."
+                )
+            elif confidence_tier == "low":
+                confidence_warning = (
+                    f"Regional model generalization in {district_name} is LOW (PR-AUC {regional_pr_auc}). "
+                    "Predictions should be corroborated with empirical rainfall thresholds and local field sensors."
+                )
+
+            # 8. Construct dynamic explanation text
             top_cat = explanation["top_categories"][0]["category"].replace("_", " ")
             secondary_cats = [c["category"].replace("_", " ") for c in explanation["top_categories"][1:3]]
 
@@ -268,24 +293,31 @@ class LandslideRiskInferenceEngine:
                 f"(vs zone threshold ratio: {feats['rain_3d_vs_e_thr']:.2f}). "
                 f"Soil moisture: {feats['soil_moisture_latest']*100.0:.1f}% ({sm_status}). "
                 f"Terrain slope: {float(z_row.get('slope_p90_deg', z_row['mean_slope_deg'])):.1f}° (p90 hazard slope). "
-                f"Model: {self.artifact.model_version} (ML Probability: {proba:.3f}). "
-                f"Combined operational score: {risk_score}/100 → {risk_level}."
+                f"Model: {self.artifact.model_version} (ML Probability: {proba:.3f}, Regional Confidence: {confidence_tier.upper()} [PR-AUC {regional_pr_auc}]). "
+                f"Combined operational score: {risk_score}/100 → {effective_risk_level}."
             )
 
             return {
                 "status": data_state,
                 "zone_id": zone_id,
                 "zone_name": str(z_row["zone_name"]),
-                "district": str(z_row["district"]),
+                "district": district_name,
                 "state": str(z_row["state"]),
                 "model_version": self.artifact.model_version,
                 "feature_schema_version": FEATURE_SCHEMA_VERSION,
                 "probability": round(proba, 4),
                 "risk_score": risk_score,
-                "risk_level": risk_level,
+                "risk_level": effective_risk_level,
+                "raw_risk_level": risk_level,
                 "explanation_narrative": narrative,
                 "factor_attribution": explanation,
                 "canonical_features": feats,
+                "regional_confidence": {
+                    "tier": confidence_tier,
+                    "cv_pr_auc": regional_pr_auc,
+                    "threshold_exceeded": threshold_exceeded,
+                    "warning": confidence_warning,
+                },
                 "data_freshness": {
                     "latest_weather_timestamp": str(latest_wx_time) if latest_wx_time else None,
                     "weather_age_hours": round(wx_age_hours, 1),
