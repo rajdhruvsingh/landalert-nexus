@@ -519,10 +519,12 @@ class TestScientificGateInvariants(unittest.TestCase):
         cur = self.conn.cursor()
         cur.execute("SELECT COUNT(*) FROM public.historical_landslides WHERE is_synthetic = false")
         all_real = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM public.historical_landslides WHERE is_synthetic = false AND hazard_type != 'rainfall_slope_failure'")
+        non_rainfall_count = cur.fetchone()[0]
         cur.close()
         self.assertEqual(
-            real_count, all_real - glof_count,
-            "Real rainfall event count must strictly exclude GLOF events."
+            real_count, all_real - non_rainfall_count,
+            "Real rainfall event count must strictly exclude non-rainfall events (including GLOF)."
         )
 
     def test_blocked_model_cannot_be_activated_by_cmd_activate(self):

@@ -266,10 +266,20 @@ class LandslideRiskInferenceEngine:
             regional_pr_auc = reg_info.get("cv_pr_auc", 0.6755)
 
             # Conjunction gate for SEVERE evacuation alerts:
-            # In low-confidence regions, SEVERE tier requires empirical threshold exceedance or physical sensor validation.
             threshold_exceeded = bool(feats.get("threshold_exceedance_flag", 0) == 1 or feats.get("rain_3d_vs_e_thr", 0) >= 1.0)
             effective_risk_level = risk_level
             confidence_warning = None
+            physical_override = False
+
+            # Dual-Gate Safety Override:
+            # If 3-day rainfall exceeds the empirical geotechnical threshold (Das et al. 2018),
+            # physical pore pressure exceeds shear resistance. Floor score at 76 (SEVERE)
+            # to guarantee that dangerous storms are never suppressed by statistical ML false negatives.
+            if threshold_exceeded:
+                physical_override = True
+                if risk_score < 76.0:
+                    risk_score = 76.0
+                    effective_risk_level = "SEVERE"
 
             if risk_level == "SEVERE" and confidence_tier == "low" and not threshold_exceeded:
                 effective_risk_level = "HIGH"
@@ -287,6 +297,8 @@ class LandslideRiskInferenceEngine:
             top_cat = explanation["top_categories"][0]["category"].replace("_", " ")
             secondary_cats = [c["category"].replace("_", " ") for c in explanation["top_categories"][1:3]]
 
+            override_note = " [PHYSICAL GEOTECHNICAL THRESHOLD EXCEEDED → SEVERE ALERT ENFORCED]" if physical_override else ""
+
             narrative = (
                 f"Main risk driver: {top_cat}. Secondary contributors: {', '.join(secondary_cats)}. "
                 f"Detail — 72-hr rainfall: {feats['rain_1d']:.1f}mm / 3-day {feats['rain_3d']:.1f}mm "
@@ -294,7 +306,7 @@ class LandslideRiskInferenceEngine:
                 f"Soil moisture: {feats['soil_moisture_latest']*100.0:.1f}% ({sm_status}). "
                 f"Terrain slope: {float(z_row.get('slope_p90_deg', z_row['mean_slope_deg'])):.1f}° (p90 hazard slope). "
                 f"Model: {self.artifact.model_version} (ML Probability: {proba:.3f}, Regional Confidence: {confidence_tier.upper()} [PR-AUC {regional_pr_auc}]). "
-                f"Combined operational score: {risk_score}/100 → {effective_risk_level}."
+                f"Combined operational score: {risk_score}/100 → {effective_risk_level}.{override_note}"
             )
 
             return {
@@ -309,6 +321,7 @@ class LandslideRiskInferenceEngine:
                 "risk_score": risk_score,
                 "risk_level": effective_risk_level,
                 "raw_risk_level": risk_level,
+                "physical_override": physical_override,
                 "explanation_narrative": narrative,
                 "factor_attribution": explanation,
                 "canonical_features": feats,

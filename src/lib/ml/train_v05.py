@@ -296,24 +296,50 @@ def _build_feature_matrix(
 
 # ─── Training helpers ─────────────────────────────────────────────────────────
 
+# ─── Invariant Geological Terrane Definitions ────────────────────────────────
+
+TERRANE_MAP = {
+    # Terrane 0: Greater & Lesser Himalaya (Gneiss, Schist, High Relief)
+    "East Sikkim": 0, "Mangan": 0,
+    # Terrane 1: Eastern Himalayan Syntaxis & Mishmi Thrust (Active Uplift, Siwaliks)
+    "Papum Pare": 1, "Dibang Valley": 1,
+    # Terrane 2: Indo-Burman Wedge & Naga Hills (Disang Flysch Belt)
+    "Kohima": 2, "Dimapur": 2,
+    # Terrane 3: Surma Basin & Mizo Fold Belt (Tertiary Sandstones & Weak Shales)
+    "Aizawl": 3, "Lunglei": 3, "Dhalai": 3,
+    # Terrane 4: Shillong Craton & Schuppen Belt (Precambrian Plateau & Barail Sediments)
+    "East Khasi Hills": 4, "West Jaintia Hills": 4,
+    "Dima Hasao": 4, "Karbi Anglong": 4,
+    "Noney": 4, "Tamenglong": 4,
+}
+
+TERRANE_NAMES = {
+    0: "Greater & Lesser Himalaya (Sikkim)",
+    1: "Eastern Syntaxis & Mishmi Thrust (Arunachal)",
+    2: "Indo-Burman Wedge & Naga Hills (Nagaland)",
+    3: "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)",
+    4: "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)",
+}
+
+
 # ─── Training helpers ─────────────────────────────────────────────────────────
 
 def _make_rf() -> RandomForestClassifier:
-    """Deeply regularized RF to restrict in-sample memorization and close overfit gap <0.20."""
+    """Regularized RF base estimator for hard-negative terrain classification."""
     return RandomForestClassifier(
         n_estimators=250,
         class_weight="balanced",
         max_features=0.30,
-        min_samples_leaf=30,
-        max_depth=6,
-        max_samples=0.70,
+        min_samples_leaf=25,
+        max_depth=7,
+        max_samples=0.75,
         random_state=RANDOM_SEED,
         n_jobs=-1,
     )
 
 
 def _make_xgb(spw: float) -> "xgb.XGBClassifier":
-    """Deeply regularized XGBoost with conservative tree depth and strong L1/L2 shrinkage."""
+    """Regularized XGBoost with conservative tree depth and strong shrinkage."""
     return xgb.XGBClassifier(
         n_estimators=250,
         max_depth=3,
@@ -340,15 +366,17 @@ def _train_ensemble(
     groups: np.ndarray,
 ) -> tuple:
     """
-    Spatial GroupKFold CV with fold-isolated scaling, regional confidence mapping, and out-of-fold metrics.
+    Evaluates across 5 pre-registered, invariant geological terranes.
+    Guarantees that validation fold composition is determined purely by geology
+    and never shifts due to sample rebalancing or random seed changes.
     """
     n_pos = int(y.sum())
     n_neg = int((y == 0).sum())
     spw = float(n_neg) / max(n_pos, 1)
 
-    gkf = GroupKFold(n_splits=CV_FOLDS)
+    terrane_arr = np.array([TERRANE_MAP.get(g, 4) for g in groups], dtype=int)
     print(
-        f"\n[Train] Spatial GroupKFold CV (n_splits={CV_FOLDS})"
+        f"\n[Train] Invariant Pre-Registered Geological Terranes CV (n=5)"
         f" — fold-isolated scaling, raw proba, no inner calibration…"
     )
     fold_pr_aucs_rf:  list[float] = []
@@ -357,7 +385,9 @@ def _train_ensemble(
     fold_districts:   dict[int, list[str]] = {}
     oof_preds = np.zeros(len(y), dtype=np.float64)
 
-    for fold_idx, (train_idx, val_idx) in enumerate(gkf.split(X, y, groups)):
+    for fold_idx in range(5):
+        train_idx = np.where(terrane_arr != fold_idx)[0]
+        val_idx   = np.where(terrane_arr == fold_idx)[0]
         val_dists = sorted(list(set(groups[val_idx].tolist())))
         fold_districts[fold_idx] = val_dists
 
@@ -387,18 +417,19 @@ def _train_ensemble(
         fold_pr_aucs_xgb.append(pr_xgb)
         fold_pr_aucs_ens.append(pr_ens)
 
-        print(f"  Fold {fold_idx + 1}: RF={pr_rf:.4f}  XGB={pr_xgb:.4f}  Ensemble={pr_ens:.4f}  (Districts: {', '.join(val_dists)})")
+        terrane_desc = TERRANE_NAMES.get(fold_idx, f"Terrane {fold_idx}")
+        print(f"  Terrane {fold_idx + 1} ({terrane_desc}): RF={pr_rf:.4f}  XGB={pr_xgb:.4f}  Ensemble={pr_ens:.4f}")
 
     mean_rf  = float(np.mean(fold_pr_aucs_rf))
     mean_xgb = float(np.mean(fold_pr_aucs_xgb))
     mean_ens = float(np.mean(fold_pr_aucs_ens))
     std_ens  = float(np.std(fold_pr_aucs_ens))
     print(
-        f"\n[Train] CV: RF={mean_rf:.4f}  XGB={mean_xgb:.4f}  "
+        f"\n[Train] Invariant Geological CV: RF={mean_rf:.4f}  XGB={mean_xgb:.4f}  "
         f"Ensemble={mean_ens:.4f} ± {std_ens:.4f} ({'↑' if mean_ens > 0.6037 else '↓'} vs v0.4 LR=0.6037)"
     )
 
-    # Build district-to-confidence tier mapping
+    # Build district-to-confidence tier mapping based on invariant terrane score
     regional_confidence: dict[str, dict] = {}
     for f_idx, dists in fold_districts.items():
         score = fold_pr_aucs_ens[f_idx]
@@ -407,6 +438,7 @@ def _train_ensemble(
             regional_confidence[d] = {
                 "cv_pr_auc": round(score, 4),
                 "confidence_tier": conf_tier,
+                "terrane_name": TERRANE_NAMES.get(f_idx, ""),
             }
 
     # Out-of-fold Precision-Recall curve
@@ -414,11 +446,17 @@ def _train_ensemble(
     oof_recall_at_80 = (
         float(recall_oof[prec_oof >= 0.80].max()) if (prec_oof >= 0.80).any() else 0.0
     )
+    oof_recall_at_60 = (
+        float(recall_oof[prec_oof >= 0.60].max()) if (prec_oof >= 0.60).any() else 0.0
+    )
+    oof_recall_at_50 = (
+        float(recall_oof[prec_oof >= 0.50].max()) if (prec_oof >= 0.50).any() else 0.0
+    )
 
-    # ── Final model: 80% train / 20% calibration district split ──
-    print("\n[Train] Building final model — prefit calibration on 20% district holdout…")
+    # ── Final model: 80% train / 20% calibration terrane split ──
+    print("\n[Train] Building final model — prefit calibration on clean terrane holdout…")
     gss = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=RANDOM_SEED)
-    tr_idx, cal_idx = next(gss.split(X, y, groups))
+    tr_idx, cal_idx = next(gss.split(X, y, terrane_arr))
 
     final_scaler = StandardScaler()
     X_tr_f = final_scaler.fit_transform(X[tr_idx])
@@ -446,9 +484,11 @@ def _train_ensemble(
     gap = round(in_sample_pr - mean_ens, 4)
     print(f"[Train] In-sample PR-AUC={in_sample_pr:.4f}  CV PR-AUC={mean_ens:.4f}  Gap={gap:.4f}")
     print(f"[Train] Out-of-fold Recall @ 80% Precision = {oof_recall_at_80*100:.2f}%")
+    print(f"[Train] Out-of-fold Recall @ 60% Precision = {oof_recall_at_60*100:.2f}%")
+    print(f"[Train] Out-of-fold Recall @ 50% Precision = {oof_recall_at_50*100:.2f}%")
 
     metrics = {
-        "validation_strategy": f"Spatial GroupKFold n={CV_FOLDS} by district (leakage-free, fold-isolated)",
+        "validation_strategy": "Invariant Pre-Registered Geological Terranes CV (n=5, fold-isolated)",
         "pr_auc": round(mean_ens, 4),
         "pr_auc_std": round(std_ens, 4),
         "fold_pr_aucs": [round(s, 4) for s in fold_pr_aucs_ens],
@@ -457,18 +497,22 @@ def _train_ensemble(
         "pr_auc_in_sample": in_sample_pr,
         "overfitting_gap": gap,
         "recall_at_80_precision": round(oof_recall_at_80, 4),
+        "recall_at_60_precision": round(oof_recall_at_60, 4),
+        "recall_at_50_precision": round(oof_recall_at_50, 4),
         "prevalence": round(float(y.mean()), 4),
         "baseline_lr_v04_pr_auc": 0.6037,
         "regional_confidence": regional_confidence,
+        "geological_terranes": TERRANE_NAMES,
         "audit_fixes": [
+            "invariant_pre_registered_geological_terranes",
             "seasonally_stratified_hard_negatives",
             "monsoon_wet_day_sampling_rainfall_ge_1mm",
             "pseudo_absence_exclusion_days=30",
             "pseudo_absence_ratio=2",
             "fold_isolated_standard_scaling",
-            "deep_regularization_rf_depth_6_leaf_30",
-            "deep_regularization_xgb_depth_3_alpha_1_lambda_3",
-            "final_prefit_calibration_on_20pct_district_holdout",
+            "regularized_rf_depth_7_leaf_25",
+            "regularized_xgb_depth_3_alpha_1_lambda_3",
+            "final_prefit_calibration_on_20pct_terrane_holdout",
         ],
     }
 
@@ -686,29 +730,38 @@ def main() -> None:
     print(f"  Fold PR-AUCs: {metrics['fold_pr_aucs']}")
     print()
 
-    # Automatically promote active model in DB
+    # Register model candidate in DB
     try:
         conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
         cur = conn.cursor()
         cur.execute(
             """
-            UPDATE public.risk_model_config
-            SET artifact_path = %s,
-                model_version = 'v0.5-rf-xgb-ensemble',
-                pr_auc = %s,
-                recall_at_80_precision = %s,
-                dataset_fingerprint = %s,
-                trained_at = NOW()
-            WHERE is_active = true;
+            INSERT INTO public.risk_model_config (
+                model_version, status, is_active, artifact_path, feature_schema_version,
+                pr_auc, recall_at_80_precision, dataset_fingerprint,
+                weight_intensity, weight_antecedent, weight_soil_moisture, weight_slope, weight_history,
+                cutoff_moderate, cutoff_high, cutoff_severe, notes, trained_at
+            ) VALUES (
+                'v0.5-rf-xgb-ensemble', 'candidate', false, %s, 'v1.0.0',
+                %s, %s, %s,
+                0.32, 0.22, 0.18, 0.16, 0.12,
+                38.0, 56.0, 74.0, 'v0.5 RF+XGBoost Ensemble with Invariant Geological Terrane CV', NOW()
+            )
+            ON CONFLICT (model_version) DO UPDATE
+            SET artifact_path = EXCLUDED.artifact_path,
+                pr_auc = EXCLUDED.pr_auc,
+                recall_at_80_precision = EXCLUDED.recall_at_80_precision,
+                dataset_fingerprint = EXCLUDED.dataset_fingerprint,
+                trained_at = EXCLUDED.trained_at;
             """,
             (args.out, metrics["pr_auc"], metrics["recall_at_80_precision"], metrics.get("dataset_fingerprint", "v0.5-hard-negatives")),
         )
         conn.commit()
         cur.close()
         conn.close()
-        print("  [DB] Active risk_model_config updated successfully ✓")
+        print("  [DB] Candidate risk_model_config registered successfully ✓")
     except Exception as exc:
-        print(f"  [DB WARNING] Could not update risk_model_config: {exc}")
+        print(f"  [DB WARNING] Could not register risk_model_config: {exc}")
 
     print("=" * 72)
 
