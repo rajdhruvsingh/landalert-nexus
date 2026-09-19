@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
 
 from apps.core.responses import api_response, api_error
 from apps.gis.models import RiskZone
@@ -12,6 +15,7 @@ from .spatial import (
     get_spatial_cells_by_state,
     get_spatial_cells_by_district,
     evaluate_cell_risk,
+    evaluate_cells_batch_ml,
     derive_location_spatial_risk,
 )
 
@@ -50,17 +54,34 @@ class RiskPredictionView(APIView):
             except Exception:
                 return api_error("asOfDate must be a valid ISO 8601 date string", "INVALID_DATE", 400)
 
+        local_slope_param = request.query_params.get("localSlope") or request.query_params.get("local_slope_deg")
+        facet_type_param = request.query_params.get("facetType") or request.query_params.get("facet_type")
+        local_slope = None
+        if local_slope_param:
+            try:
+                local_slope = float(local_slope_param)
+            except ValueError:
+                pass
+
         try:
             engine = get_inference_engine()
-            res = engine.predict_zone(zone_id=zone_id, as_of_date=as_of_date)
+            res = engine.predict_zone(
+                zone_id=zone_id,
+                as_of_date=as_of_date,
+                local_slope_deg=local_slope,
+                facet_type=facet_type_param,
+            )
             return api_response(res)
         except Exception as e:
+            logger.exception("[ML Inference Exception] Failed predicting risk for zone %s: %s", zone_id, e)
             # Fallback to RiskZone DB row if ML engine fails unexpectedly
             zone = RiskZone.objects.filter(id=zone_id).first()
             if not zone:
                 return api_error("Zone not found", "ZONE_NOT_FOUND", 404)
             fallback = {
                 "status": "FALLBACK",
+                "data_quality": "DEGRADED_FALLBACK",
+                "warning": f"ML inference engine exception: {str(e)}",
                 "zone_id": zone.id,
                 "zone_name": zone.zone_name,
                 "district": zone.district,
@@ -69,7 +90,7 @@ class RiskPredictionView(APIView):
                 "probability": round(zone.risk_score / 100.0, 4),
                 "risk_score": zone.risk_score,
                 "risk_level": zone.current_risk_level,
-                "explanation_narrative": zone.explanation or f"Operational risk for zone {zone_id}",
+                "explanation_narrative": zone.explanation or f"Operational risk for zone {zone_id} (fallback degraded)",
                 "factor_attribution": {"top_categories": []},
                 "canonical_features": {},
                 "data_freshness": {"soil_moisture_status": zone.soil_moisture_status},
@@ -91,14 +112,14 @@ class ForecastProjectionsView(APIView):
         except ValueError:
             return api_error("Invalid zone ID format", "INVALID_ZONE_ID", 400)
 
-        # Allow query params for simulated / test rainfall
+        # Allow query params for simulated / test rainfall; if omitted, streams live gridded NWP ensemble
         r24 = request.query_params.get("r24")
         r48 = request.query_params.get("r48")
         r72 = request.query_params.get("r72")
 
-        val_24 = float(r24) if r24 is not None else 18.5
-        val_48 = float(r48) if r48 is not None else 34.0
-        val_72 = float(r72) if r72 is not None else 52.0
+        val_24 = float(r24) if r24 is not None else None
+        val_48 = float(r48) if r48 is not None else None
+        val_72 = float(r72) if r72 is not None else None
 
         projection = project_zone_risk_forecast(zone, val_24, val_48, val_72)
         return api_response(projection)
@@ -168,7 +189,7 @@ class SpatialRiskView(APIView):
 
         # Return regional spatial risk summary across representative cells
         cells = get_all_spatial_cells()
-        evaluations = [evaluate_cell_risk(c, active_zones) for c in cells]
+        evaluations = evaluate_cells_batch_ml(cells, active_zones)
         return api_response({
             "status": "success",
             "evaluated_cells_count": len(evaluations),

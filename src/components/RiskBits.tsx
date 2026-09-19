@@ -238,13 +238,63 @@ export function ScientificLimitationBadge() {
       className="inline-flex items-center gap-1.5 rounded border border-border bg-secondary/40 px-2 py-0.5 font-sans text-[0.68rem] text-muted-foreground"
       title={t(
         "risk_bits.scientific_boundary_title",
-        "Limited verified positive landslide training samples (N=8 events, 2016-2024). Operational decisions should be coupled with ground-truth inspections.",
+        "Empirical benchmark evaluated on N=352 confirmed events (14%-16% precision, 1 hit per 6-7 alarms). Human-in-the-loop review mandatory.",
       )}
     >
       <span>
-        {t("risk_bits.scientific_boundary_text", "Scientific boundary: N=8 real landslide events (PR-AUC: 0.5934)")}
+        {t("risk_bits.scientific_boundary_text", "Scientific boundary: N=352 confirmed events (Human review mandatory)")}
       </span>
     </div>
+  );
+}
+
+export function RegionalGroundTruthQualityBadge({
+  tier,
+  district,
+  state,
+  mlOperational,
+}: {
+  tier?: string;
+  district?: string;
+  state?: string;
+  mlOperational?: boolean;
+}) {
+  const isMizoTripura =
+    tier === "insufficient_data" ||
+    state?.toLowerCase().includes("mizoram") ||
+    state?.toLowerCase().includes("tripura");
+  const isArunachal =
+    tier === "low" || state?.toLowerCase().includes("arunachal");
+
+  if (isMizoTripura || mlOperational === false) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded border border-destructive/50 bg-destructive/10 px-2 py-0.5 font-mono text-[0.68rem] text-destructive font-medium"
+        title="NO ACTIVE MONITORING BY DESIGN: LandAlert-Nexus provides zero reliable early warning coverage in Mizoram and Tripura due to data starvation (N=33 confirmed events). All alert triggers are suppressed. Absence of alerts must NOT be interpreted as absence of landslide risk."
+      >
+        <span>⛔ ZERO COVERAGE (Absence of Alerts ≠ Absence of Risk)</span>
+      </span>
+    );
+  }
+
+  if (isArunachal) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.68rem] text-amber-500 font-medium"
+        title="Eastern Syntaxis / Arunachal: Only 44 confirmed failure events. ML risk is capped; empirical threshold confirmation mandatory before issuing Severe warnings."
+      >
+        <span>⚠️ Provisional Ground Truth (N=44)</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[0.68rem] text-primary font-medium"
+      title="Calibrated highway transit corridors (Sikkim, Nagaland, Assam/Meghalaya). Verified ground truth N=72-108."
+    >
+      <span>✓ Moderate Ground Truth (Highway Corridors)</span>
+    </span>
   );
 }
 

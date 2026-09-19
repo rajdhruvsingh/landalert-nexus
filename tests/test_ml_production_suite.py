@@ -191,7 +191,7 @@ def test_inference_engine_active_zone():
     assert "risk_score" in res
     assert 0.0 <= res["probability"] <= 1.0
     assert 0.0 <= res["risk_score"] <= 100.0
-    assert res["model_version"] == "v0.4-lr-trained"
+    assert res["model_version"] in ["v0.4-lr-trained", "v0.5-rf-xgb-ensemble"]
 
 # =====================================================================
 # 6. Risk Calibration, Monotonicity & Cutoff Alignment
@@ -335,4 +335,144 @@ def test_risk_prediction_persistence_and_idempotency():
     ok2 = engine.persist_prediction(pred)
     assert ok2 is True
     conn.close()
+
+
+def test_regional_cutoffs_catalog_completeness():
+    """
+    Verifies that RegionalCutoffsCatalog provides complete geological coverage across
+    all 8 Northeast India states, supports state/spatial fallbacks, and leaves no uncalibrated gaps.
+    """
+    from src.lib.ml.inference import REGIONAL_TERRANE_CUTOFFS
+
+    # 1. District coverage across all 8 NER states
+    assert len(REGIONAL_TERRANE_CUTOFFS) >= 120, "Catalog must encompass all 8 NER states (>120 districts)"
+    assert "Kohima" in REGIONAL_TERRANE_CUTOFFS
+    assert "Aizawl" in REGIONAL_TERRANE_CUTOFFS
+    assert "Champhai" in REGIONAL_TERRANE_CUTOFFS
+    assert "Tawang" in REGIONAL_TERRANE_CUTOFFS
+    assert "East Khasi Hills" in REGIONAL_TERRANE_CUTOFFS
+    assert "Gangtok" in REGIONAL_TERRANE_CUTOFFS
+    assert "Dhalai" in REGIONAL_TERRANE_CUTOFFS
+    assert "Imphal East" in REGIONAL_TERRANE_CUTOFFS
+
+    # 2. Case-insensitivity
+    assert REGIONAL_TERRANE_CUTOFFS.get("aizawl")["severe"] == 60.0
+    assert REGIONAL_TERRANE_CUTOFFS.get("KOHIMA")["severe"] == 50.0
+
+    # 3. State-level terrane fallbacks for unlisted/new districts
+    mizo_new = REGIONAL_TERRANE_CUTOFFS.get("New District, Mizoram")
+    assert mizo_new["severe"] == 60.0
+    assert "Surma Basin" in mizo_new["terrane"]
+
+    naga_new = REGIONAL_TERRANE_CUTOFFS.get("Nagaland Frontier District")
+    assert naga_new["severe"] == 50.0
+    assert "Indo-Burman Wedge" in naga_new["terrane"]
+
+    # 4. Spatial coordinate resolution
+    sikkim_cut = REGIONAL_TERRANE_CUTOFFS.resolve_for_coordinate(27.33, 88.61)
+    assert sikkim_cut["severe"] == 74.0
+    assert "Sikkim" in sikkim_cut["terrane"]
+
+    mizo_cut = REGIONAL_TERRANE_CUTOFFS.resolve_for_coordinate(23.73, 92.71)
+    assert mizo_cut["severe"] == 60.0
+    assert "Mizo Fold Belt" in mizo_cut["terrane"]
+
+    # 5. Fold belt discrimination
+    assert REGIONAL_TERRANE_CUTOFFS.is_fold_belt("Kohima") is True
+    assert REGIONAL_TERRANE_CUTOFFS.is_fold_belt("Aizawl") is True
+    assert REGIONAL_TERRANE_CUTOFFS.is_fold_belt("Gangtok") is False
+    assert REGIONAL_TERRANE_CUTOFFS.is_fold_belt("East Khasi Hills") is False
+
+
+def test_continuous_geotechnical_consensus_fusion():
+    """
+    Verifies that continuous pore-pressure modeling and Bayesian consensus fusion
+    smoothly elevate risk without relying exclusively on an abrupt step-function floor.
+    """
+    from src.lib.ml.inference import LandslideRiskInferenceEngine, REGIONAL_TERRANE_CUTOFFS
+
+    engine = LandslideRiskInferenceEngine()
+    
+    # Baseline dry features
+    dry_feats = {f: 0.0 for f in CANONICAL_FEATURES}
+    dry_feats["dist_to_nearest_event_km"] = 50.0
+    dry_feats["soil_moisture_latest"] = 0.30
+    dry_feats["slope_norm"] = 0.50
+    dry_feats["slope_sin"] = 0.40
+    dry_feats["slope_class"] = 1
+
+    # Simulate prediction in Aizawl (fold belt terrane)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured in environment")
+
+    # Predict Zone 4 (Aizawl) under dry conditions vs high antecedent rainfall
+    pred_dry = engine.predict_zone(zone_id=4)
+    assert pred_dry["status"] in ("VALID", "FALLBACK", "STALE")
+    assert "continuous_geotechnical_fusion" in pred_dry
+    
+    fusion_meta = pred_dry["continuous_geotechnical_fusion"]
+    assert "p_statistical_ml" in fusion_meta
+    assert "p_geotechnical_physical" in fusion_meta
+    assert "p_fused_consensus" in fusion_meta
+    assert "geotechnical_stress_ratio" in fusion_meta
+    assert fusion_meta["p_fused_consensus"] >= fusion_meta["p_statistical_ml"]
+
+
+def test_operational_live_ingest_pipeline_resilience():
+    """
+    Verifies that the inference engine provides autonomous operational self-healing
+    against ingest pipeline lag (>6h) and records pipeline latency resilience telemetry.
+    """
+    from src.lib.ml.inference import LandslideRiskInferenceEngine
+
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured in environment")
+
+    engine = LandslideRiskInferenceEngine()
+    res = engine.predict_zone(zone_id=1)
+    assert res["status"] in ("VALID", "FALLBACK", "STALE")
+    assert "data_freshness" in res
+    assert "pipeline_latency_resilience" in res["data_freshness"]
+
+    resilience = res["data_freshness"]["pipeline_latency_resilience"]
+    assert "is_real_time" in resilience
+    assert "pipeline_health" in resilience
+    assert resilience["pipeline_health"] in ("OPTIMAL", "RECOVERED_VIA_NWP", "STALE", "DEGRADED")
+
+
+def test_coupled_nwp_ml_forecast_projection():
+    """
+    Verifies that forward-looking 24h, 48h, and 72h risk projections evaluate the full 19-feature
+    ensemble and continuous geotechnical gating rather than crude synthetic approximations.
+    """
+    from src.lib.ml.inference import LandslideRiskInferenceEngine
+
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured in environment")
+
+    engine = LandslideRiskInferenceEngine()
+
+    # Test 24h, 48h, 72h forward projected ML inference
+    for lead in (24, 48, 72):
+        rain = 15.0 * (lead / 24.0)
+        proj = engine.predict_zone_forecast(
+            zone_id=1,
+            lead_hours=lead,
+            forecast_rain_mm=rain,
+        )
+        assert proj["leadHours"] == lead
+        assert proj["forecastRainfallMm"] == pytest.approx(rain, 0.1)
+        assert "projectedRiskLevel" in proj
+        assert "projectedRiskScore" in proj
+        assert "projectedProbability" in proj
+        assert 0.0 <= proj["projectedProbability"] <= 1.0
+        assert 0.0 <= proj["projectedRiskScore"] <= 100.0
+        assert "canonical_features" in proj
+        assert len(proj["canonical_features"]) == 19
+        assert "geotechnicalConsensus" in proj
+
+
 

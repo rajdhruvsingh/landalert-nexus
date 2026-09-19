@@ -38,6 +38,7 @@ import {
   FreshnessBadge,
   MLAttributionCard,
   ScientificLimitationBadge,
+  RegionalGroundTruthQualityBadge,
   ForecastRiskBadge,
 } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
@@ -653,6 +654,12 @@ function ZonePage() {
               </span>
             )}
             <ScientificLimitationBadge />
+            <RegionalGroundTruthQualityBadge
+              tier={mlPrediction?.regional_confidence?.tier}
+              district={zone.district}
+              state={zone.state}
+              mlOperational={mlPrediction?.regional_confidence?.ml_model_operational}
+            />
             <FreshnessBadge
               ageHours={mlPrediction?.data_freshness?.weather_age_hours}
               status={zone.soil_moisture_status as "measured" | "stale" | "fallback" | "missing"}
@@ -668,12 +675,30 @@ function ZonePage() {
           {mlPrediction && (
             <span className="font-mono text-[0.7rem] text-muted-foreground">
               {mlPrediction.probability !== null
-                ? `${t("zone_detail.ml_probability")}: ${(mlPrediction.probability * 100).toFixed(1)}%`
-                : "ML Probability: Unavailable"}
+                ? `${mlPrediction.regional_confidence?.ml_model_operational === false ? "Physics Screening Risk" : t("zone_detail.ml_probability")}: ${(mlPrediction.probability * 100).toFixed(1)}%`
+                : "Risk Probability: Unavailable"}
             </span>
           )}
         </div>
       </header>
+
+      {mlPrediction?.regional_confidence?.tier === "insufficient_data" && (
+        <div className="mt-3 flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
+          <span className="font-semibold uppercase tracking-wider">⛔ Insufficient Ground Truth Coverage</span>
+          <span className="text-foreground/90">
+            — {mlPrediction.regional_confidence.warning}
+          </span>
+        </div>
+      )}
+
+      {mlPrediction?.regional_confidence?.tier === "low" && (
+        <div className="mt-3 flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs text-amber-300">
+          <span className="font-semibold uppercase tracking-wider">⚠ Provisional Ground Truth Coverage</span>
+          <span className="text-amber-200">
+            — {mlPrediction.regional_confidence.warning}
+          </span>
+        </div>
+      )}
 
       {mlPrediction?.status === "STALE" && (
         <div className="mt-3 flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 font-mono text-xs text-amber-300">

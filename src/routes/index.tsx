@@ -30,6 +30,7 @@ import {
   FreshnessBadge,
   MLAttributionCard,
   ScientificLimitationBadge,
+  RegionalGroundTruthQualityBadge,
   ForecastRiskBadge,
   PrioritizationScoreBadge,
 } from "@/components/RiskBits";
@@ -1244,9 +1245,16 @@ function Dashboard() {
                         ageHours={selectedMl?.data_freshness?.weather_age_hours}
                         status={selected.soil_moisture_status as any}
                       />
+                      <RegionalGroundTruthQualityBadge
+                        tier={selectedMl?.regional_confidence?.tier}
+                        district={selected.district}
+                        state={selected.state}
+                        mlOperational={selectedMl?.regional_confidence?.ml_model_operational}
+                      />
                       {selectedMl && (
                         <span className="font-mono text-xs text-primary font-medium">
-                          ML Risk: {(selectedMl.probability !== null ? (selectedMl.probability * 100).toFixed(1) + "%" : "Unavailable")} ({selectedMl.risk_level})
+                          {selectedMl.regional_confidence?.ml_model_operational === false ? "Physics Risk: " : "ML Risk: "}
+                          {(selectedMl.probability !== null ? (selectedMl.probability * 100).toFixed(1) + "%" : "Unavailable")} ({selectedMl.risk_level})
                         </span>
                       )}
                       {data.activeModel && (

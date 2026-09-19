@@ -33,235 +33,294 @@
   },
   "parameters": {
     "rf_feature_importances": [
-      0.0020451903899973037,
-      0.0034290675336480963,
-      0.006871571303951884,
-      0.011279025673781798,
-      0.040913561526102704,
-      0.05086279743339547,
-      0.013944883931254742,
-      0.00037224922579464563,
-      0.0038885889151153994,
-      0.019825733361955814,
-      0.01317209654615674,
-      0.019749303817161123,
-      0.016401955959958713,
-      0.006769817732829262,
-      0.12365297313660291,
-      0.051999590211750206,
-      0.21110199499980226,
-      0.17053999789843233,
-      0.23317960040230856
+      0.028024927867600056,
+      0.06871871442265269,
+      0.09067065115086023,
+      0.03991872467451121,
+      0.04947253983954186,
+      0.018597731822762132,
+      0.09436253955401776,
+      0.015917620225447612,
+      0.07624270969333627,
+      0.05157130219463394,
+      0.062249273971500534,
+      0.05207896787037637,
+      0.05170254491611869,
+      0.02138279100396529,
+      0.06389488953792126,
+      0.1910244509710277,
+      0.012592792062212576,
+      0.01097367896571201,
+      0.0006031492558018348
     ],
     "xgb_feature_importances": [
-      0.008859073743224144,
-      0.009110569022595882,
-      0.028315283358097076,
-      0.013310035690665245,
-      0.022361209616065025,
-      0.03436850383877754,
-      0.015712961554527283,
-      0.012138950638473034,
-      0.011861269362270832,
-      0.03320339322090149,
-      0.01956837810575962,
-      0.03838836029171944,
-      0.0441921167075634,
-      0.034989356994628906,
-      0.05179251730442047,
-      0.06507573276758194,
-      0.06404620409011841,
-      0.07390619069337845,
-      0.4187999367713928
+      0.02524123713374138,
+      0.12248355150222778,
+      0.051134705543518066,
+      0.029659640043973923,
+      0.028494367375969887,
+      0.03592434898018837,
+      0.207437664270401,
+      0.03788675367832184,
+      0.0648610070347786,
+      0.03660044074058533,
+      0.0288378968834877,
+      0.11794879287481308,
+      0.0,
+      0.0,
+      0.0596139058470726,
+      0.11130793392658234,
+      0.022185003384947777,
+      0.020382650196552277,
+      0.0
     ],
     "scaler_mean": [
-      15.138738738738855,
-      44.110672917815585,
-      99.15563522706378,
-      206.93478580621456,
-      403.0320922963756,
-      60.08119139547783,
-      132.67732460926769,
-      0.27072991358705645,
-      0.1041336363409759,
-      0.6049831157688289,
-      0.007484429859030979,
-      0.4034313905742277,
-      0.30523881309775325,
-      0.6903842618128332,
-      6.290081050500907,
-      0.9583563154991727,
-      -0.24547413473908658,
-      -0.6047664115323029,
-      0.7118036403750689
+      17.521401515151513,
+      49.51193181818185,
+      110.0917613636366,
+      220.40681818181824,
+      430.068087121212,
+      63.047443181818245,
+      144.11813163461858,
+      0.3087121212121212,
+      0.1170986108877868,
+      0.7312618945133147,
+      0.23762040589220973,
+      0.4307954545454538,
+      0.3256095209121521,
+      0.7490530303030303,
+      4.785666827724772,
+      0.22592897727272712,
+      -0.16736192527353855,
+      -0.4141308332578497,
+      0.6164772727272727
     ],
     "scaler_scale": [
-      22.164714573339765,
-      53.74272037816247,
-      101.86473978465504,
-      178.02084079409713,
-      305.481154654598,
-      47.914709908415084,
-      110.61930275789692,
-      0.4443368401068807,
-      0.12394444863855596,
-      0.15093771049044435,
-      0.07165902021399898,
-      0.2546421688612141,
-      0.18685792844078353,
-      0.7261064487402111,
-      10.805553260844507,
-      0.17467049611696983,
-      0.6390052128074709,
-      0.4070287147871768,
-      0.45292297129189474
+      27.485276298179613,
+      64.7119100090985,
+      127.7120729530226,
+      212.37270601546354,
+      383.31028118417646,
+      52.2536490415708,
+      138.61077821054758,
+      0.46196206275931,
+      0.15055269205591665,
+      0.16797577666625335,
+      0.3954543683238584,
+      0.24743178320873216,
+      0.1805185223658714,
+      0.7452495089036443,
+      10.533667378491977,
+      0.2370820317639395,
+      0.6547237188395194,
+      0.6097724911004451,
+      0.48624381223622676
     ]
   },
   "cutoffs": {
     "moderate": 38.0,
     "high": 56.0,
-    "severe": 74.0,
-    "regional_cutoffs": {
-      "Indo-Burman Wedge & Naga Hills (Nagaland)": {
-        "districts": ["Kohima", "Dimapur"],
-        "moderate": 20.0,
-        "high": 32.0,
-        "severe": 50.0
+    "severe": 74.0
+  },
+  "metrics": {
+    "clean_macro_province_cv_pr_auc": 0.6839775238572485,
+    "clean_macro_province_cv_roc_auc": 0.810744608729339,
+    "clean_benchmark_recall": 0.6846590909090909,
+    "clean_benchmark_precision_2to1": 0.5906862745098039,
+    "true_empirical_weekly_prevalence": 0.06829931972789116,
+    "operating_point_a_balanced_recall": {
+      "dw_recall": 0.6724738675958188,
+      "dw_fpr": 0.23520710059171598,
+      "operational_weekly_precision": 0.1732717387128941,
+      "far_ratio": "1 hit per 5.77 weekly advisories",
+      "seasonal_advisories": 108.23778368806511
+    },
+    "operating_point_b_high_spec": {
+      "dw_recall": 0.44947735191637633,
+      "dw_fpr": 0.06656804733727811,
+      "operational_weekly_precision": 0.3310918286608495,
+      "far_ratio": "1 hit per 3.02 weekly advisories",
+      "seasonal_advisories": 37.86086771265008
+    },
+    "operational_weekly_precision_true_base_rate": 0.1732717387128941,
+    "operational_weekly_far": "1 hit per 5.77 weekly advisories",
+    "bootstrap_95_ci": {
+      "roc_auc": [
+        0.78270571442546,
+        0.8404782413332293
+      ],
+      "pr_auc": [
+        0.6332250676443885,
+        0.7362542997265543
+      ],
+      "recall": [
+        0.6358620389149449,
+        0.7366948641158592
+      ],
+      "precision_2to1": [
+        0.5439419790278663,
+        0.6383532180135831
+      ]
+    },
+    "unmasked_5_terrane_metrics": {
+      "0": {
+        "name": "Terrane 0 (Sikkim / Darjeeling)",
+        "n_pos": 95,
+        "n_neg": 78,
+        "roc_auc": 0.7921727395411606,
+        "pr_auc": 0.8491928437698344,
+        "ci_95": {
+          "roc": [
+            0.7225891304825387,
+            0.7917787634200767,
+            0.8578422700192088
+          ],
+          "pr": [
+            0.7816986961387047,
+            0.8487965545659087,
+            0.9018318510501676
+          ],
+          "recall": [
+            0.6,
+            0.7048783677517532,
+            0.7978723404255319
+          ],
+          "prec": [
+            0.6346036585365853,
+            0.7267008531961294,
+            0.8144525997310623
+          ]
+        }
       },
-      "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)": {
-        "districts": ["Aizawl", "Lunglei", "Dhalai"],
-        "moderate": 26.0,
-        "high": 42.0,
-        "severe": 60.0
+      "1": {
+        "name": "Terrane 1 (Eastern Syntaxis / Arunachal)",
+        "n_pos": 44,
+        "n_neg": 98,
+        "roc_auc": 0.7868738404452691,
+        "pr_auc": 0.6712845091813663,
+        "ci_95": {
+          "roc": [
+            0.697132646445539,
+            0.7871042459444385,
+            0.8644954680735931
+          ],
+          "pr": [
+            0.5095416027302859,
+            0.6740157483382397,
+            0.8026792182828385
+          ],
+          "recall": [
+            0.5135135135135135,
+            0.6597850107174981,
+            0.790757818765036
+          ],
+          "prec": [
+            0.43741155660377357,
+            0.5640015326788678,
+            0.6939413265306121
+          ]
+        }
+      },
+      "2": {
+        "name": "Terrane 2 (Naga-Patkai / Nagaland & Manipur)",
+        "n_pos": 113,
+        "n_neg": 165,
+        "roc_auc": 0.8410834003754357,
+        "pr_auc": 0.7722622543036738,
+        "ci_95": {
+          "roc": [
+            0.7925166593167007,
+            0.8412206738060358,
+            0.8896240323352
+          ],
+          "pr": [
+            0.6843258963358992,
+            0.7758495371878928,
+            0.8552271017472308
+          ],
+          "recall": [
+            0.5640756302521008,
+            0.6560073762941991,
+            0.7400185185185185
+          ],
+          "prec": [
+            0.6836734693877551,
+            0.769083640350555,
+            0.8536653877774733
+          ]
+        }
+      },
+      "3": {
+        "name": "Terrane 3 (Surma Basin / Mizoram & Tripura)",
+        "n_pos": 33,
+        "n_neg": 163,
+        "roc_auc": 0.7304331660159882,
+        "pr_auc": 0.30974956870789183,
+        "ci_95": {
+          "roc": [
+            0.6470205258349665,
+            0.7293524382950389,
+            0.8023917172395476
+          ],
+          "pr": [
+            0.20706782566098342,
+            0.33019229681454465,
+            0.4804793579485997
+          ],
+          "recall": [
+            0.12190243902439024,
+            0.26735357448373476,
+            0.40915775401069515
+          ],
+          "prec": [
+            0.16,
+            0.3434791984374704,
+            0.5416666666666666
+          ]
+        }
+      },
+      "4": {
+        "name": "Terrane 4 (Shillong Plateau / Meghalaya & Assam)",
+        "n_pos": 67,
+        "n_neg": 200,
+        "roc_auc": 0.871268656716418,
+        "pr_auc": 0.7454079021868104,
+        "ci_95": {
+          "roc": [
+            0.8105626888613586,
+            0.8718969261558733,
+            0.9248391540535975
+          ],
+          "pr": [
+            0.6412823510672504,
+            0.7494321538294121,
+            0.849381716432654
+          ],
+          "recall": [
+            0.859364983974359,
+            0.9256961080191827,
+            0.9848484848484849
+          ],
+          "prec": [
+            0.3560359025032938,
+            0.4331850568646846,
+            0.5133424657534247
+          ]
+        }
       }
     }
   },
-  "metrics": {
-    "validation_strategy": "Invariant Pre-Registered Geological Terranes CV (n=5, fold-isolated)",
-    "pr_auc": 0.7017,
-    "pr_auc_std": 0.0701,
-    "fold_pr_aucs": [
-      0.7848,
-      0.782,
-      0.6353,
-      0.6207,
-      0.6859
-    ],
-    "pr_auc_rf_only": 0.704,
-    "pr_auc_xgb_only": 0.6894,
-    "pr_auc_in_sample": 0.8609,
-    "overfitting_gap": 0.1592,
-    "recall_at_80_precision": 0.1813,
-    "recall_at_60_precision": 0.6702,
-    "recall_at_50_precision": 0.8827,
-    "prevalence": 0.3333,
-    "baseline_lr_v04_pr_auc": 0.6037,
-    "regional_confidence": {
-      "East Sikkim": {
-        "cv_pr_auc": 0.7848,
-        "confidence_tier": "high",
-        "terrane_name": "Greater & Lesser Himalaya (Sikkim)"
-      },
-      "Mangan": {
-        "cv_pr_auc": 0.7848,
-        "confidence_tier": "high",
-        "terrane_name": "Greater & Lesser Himalaya (Sikkim)"
-      },
-      "Dibang Valley": {
-        "cv_pr_auc": 0.782,
-        "confidence_tier": "high",
-        "terrane_name": "Eastern Syntaxis & Mishmi Thrust (Arunachal)"
-      },
-      "Papum Pare": {
-        "cv_pr_auc": 0.782,
-        "confidence_tier": "high",
-        "terrane_name": "Eastern Syntaxis & Mishmi Thrust (Arunachal)"
-      },
-      "Dimapur": {
-        "cv_pr_auc": 0.6353,
-        "confidence_tier": "moderate",
-        "terrane_name": "Indo-Burman Wedge & Naga Hills (Nagaland)"
-      },
-      "Kohima": {
-        "cv_pr_auc": 0.6353,
-        "confidence_tier": "moderate",
-        "terrane_name": "Indo-Burman Wedge & Naga Hills (Nagaland)"
-      },
-      "Aizawl": {
-        "cv_pr_auc": 0.6207,
-        "confidence_tier": "moderate",
-        "terrane_name": "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)"
-      },
-      "Dhalai": {
-        "cv_pr_auc": 0.6207,
-        "confidence_tier": "moderate",
-        "terrane_name": "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)"
-      },
-      "Lunglei": {
-        "cv_pr_auc": 0.6207,
-        "confidence_tier": "moderate",
-        "terrane_name": "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)"
-      },
-      "Dima Hasao": {
-        "cv_pr_auc": 0.6859,
-        "confidence_tier": "moderate",
-        "terrane_name": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-      },
-      "East Khasi Hills": {
-        "cv_pr_auc": 0.6859,
-        "confidence_tier": "moderate",
-        "terrane_name": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-      },
-      "Karbi Anglong": {
-        "cv_pr_auc": 0.6859,
-        "confidence_tier": "moderate",
-        "terrane_name": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-      },
-      "Noney": {
-        "cv_pr_auc": 0.6859,
-        "confidence_tier": "moderate",
-        "terrane_name": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-      },
-      "Tamenglong": {
-        "cv_pr_auc": 0.6859,
-        "confidence_tier": "moderate",
-        "terrane_name": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-      },
-      "West Jaintia Hills": {
-        "cv_pr_auc": 0.6859,
-        "confidence_tier": "moderate",
-        "terrane_name": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-      }
-    },
-    "geological_terranes": {
-      "0": "Greater & Lesser Himalaya (Sikkim)",
-      "1": "Eastern Syntaxis & Mishmi Thrust (Arunachal)",
-      "2": "Indo-Burman Wedge & Naga Hills (Nagaland)",
-      "3": "Surma Basin & Mizo Fold Belt (Mizoram & Tripura)",
-      "4": "Shillong Craton & Schuppen Belt (Meghalaya, Assam, Manipur)"
-    },
-    "audit_fixes": [
-      "invariant_pre_registered_geological_terranes",
-      "seasonally_stratified_hard_negatives",
-      "monsoon_wet_day_sampling_rainfall_ge_1mm",
-      "pseudo_absence_exclusion_days=30",
-      "pseudo_absence_ratio=2",
-      "fold_isolated_standard_scaling",
-      "regularized_rf_depth_7_leaf_25",
-      "regularized_xgb_depth_3_alpha_1_lambda_3",
-      "final_prefit_calibration_on_20pct_terrane_holdout"
-    ]
-  },
-  "dataset_fingerprint": "d2f0ddc196fab21df4a95c8d88823a58bc4a2b4571fe4f745dea875fc214c6ff",
+  "dataset_fingerprint": "tier1-clean-n352-zenodo-nasa-only",
   "sample_counts": {
-    "positives": 4203,
-    "pseudo_absences": 8406,
-    "total": 12609
+    "raw_db_events": 27927,
+    "positives": 352,
+    "pseudo_absences": 704,
+    "total": 1056
   },
   "provenance": {
-    "created_at": "2026-09-17T14:55:45.510331+00:00",
-    "git_commit": "914d0a2fa770ba9c04ce0b73391d66fb8e408785",
-    "xgboost_version": "2.1.4",
-    "notes": "Production model v0.5-rf-xgb-ensemble. RF (300 trees, Platt-calibrated) + XGBoost (300 rounds, Platt-calibrated), 70% RF / 30% XGB blend. Trained on 4203 real NER rainfall-triggered landslides and 8406 pseudo-absences. Validation: Spatial GroupKFold n=5 by district. CV PR-AUC = 0.7017 (vs 0.6037 baseline with LR v0.4). COOLR/GSI retraining trigger: re-evaluate when >= 200 new events are ingested."
+    "created_at": "2026-09-19T04:58:22.439316+00:00",
+    "git_commit": "8695126a92871b49b9b2a3b62f821d1b570e98d5",
+    "status": "QUARANTINED_RESEARCH_ONLY",
+    "notes": "Trained exclusively on Tier 1 confirmed events (NASA GLC + Zenodo Heijenk et al., N=352). Bypassed in production inference."
   }
 }

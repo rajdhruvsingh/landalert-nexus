@@ -125,6 +125,7 @@ class ModelArtifact:
         blended_raw = w_rf * self.rf_importances + w_xgb * self.xgb_importances
         total = blended_raw.sum()
         self.blended_importances = blended_raw / max(total, 1e-12)
+        self.weights = self.blended_importances
 
     # ------------------------------------------------------------------
     # Public inference API (identical signature for both model types)
@@ -149,6 +150,28 @@ class ModelArtifact:
             return float(w_rf * rf_p + w_xgb * xgb_p)
 
         raise RuntimeError(f"predict_proba not implemented for model_type={self.model_type}")
+
+    def predict_proba_batch(self, X: np.ndarray) -> np.ndarray:
+        """
+        Computes P(landslide=1) for a 2D numpy array of shape (N, 19).
+        Vectorized high-performance batch inference for spatial grids and facet sweeps.
+        """
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        if X.shape[1] != len(self.feature_names):
+            raise ValueError(f"Expected {len(self.feature_names)} features, got {X.shape[1]}")
+        x_scaled = (X - self.scaler_mean) / np.where(self.scaler_scale == 0, 1.0, self.scaler_scale)
+
+        if self.model_type == "LogisticRegression":
+            z = self.intercept + np.dot(x_scaled, self.weights)
+            return 1.0 / (1.0 + np.exp(-np.clip(z, -30.0, 30.0)))
+        elif self.model_type == "RFXGBEnsemble":
+            rf_p = self.rf_model.predict_proba(x_scaled)[:, 1]
+            xgb_p = self.xgb_model.predict_proba(x_scaled)[:, 1]
+            w_rf = self.ensemble_weights.get("rf", 0.5)
+            w_xgb = self.ensemble_weights.get("xgb", 0.5)
+            return w_rf * rf_p + w_xgb * xgb_p
+        raise RuntimeError(f"predict_proba_batch not implemented for model_type={self.model_type}")
 
     def explain(self, feature_vector: dict) -> dict:
         """

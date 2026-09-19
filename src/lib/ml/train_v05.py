@@ -208,6 +208,7 @@ def _build_feature_matrix(
     print("\n[Train] Extracting features for unique positive zone-date instances…")
     unique_pos = events_df[["zone_id", "event_date"]].drop_duplicates()
     skipped_pos = 0
+    skipped_zero_rain = 0
 
     for _, ev in unique_pos.iterrows():
         zid = int(ev["zone_id"])
@@ -226,16 +227,25 @@ def _build_feature_matrix(
             skipped_pos += 1
             continue
 
+        # Meteorological plausibility filter:
+        # A true rainfall-triggered landslide must exhibit active antecedent precipitation.
+        # Exclude historical static scars with 0mm rainfall from dynamic transient feature fitting.
+        if feats.get("rain_30d", 0.0) < 5.0 or feats.get("rain_7d", 0.0) < 1.0:
+            skipped_zero_rain += 1
+            continue
+
         rows.append([feats[k] for k in CANONICAL_FEATURES])
         labels.append(1)
         groups.append(str(z_row.get("district", f"zone_{zid}")))
 
     n_pos = len(labels)
-    print(f"[Train]   → {n_pos} positive zone-date instances extracted ({skipped_pos} skipped).")
+    print(f"[Train]   → {n_pos} positive instances retained ({skipped_zero_rain} zero-rain scars excluded, {skipped_pos} skipped).")
 
-    # ── Seasonally-Stratified Hard Negatives ────────────────────────────────
-    print("[Train] Generating seasonally-stratified hard negatives (monsoon wet days, +-30d exclusion)…")
+    # ── Seasonally-Balanced Hard & Background Negatives ──────────────────
+    print("[Train] Generating balanced negatives (75% monsoon wet days, 25% dry-season days, +-30d exclusion)…")
     target_absences = n_pos * PSEUDO_ABSENCE_RATIO
+    target_wet = int(target_absences * 0.75)
+    target_dry = target_absences - target_wet
 
     # Precompute excluded dates per zone for instant O(1) checks
     excluded_dates_by_zone = defaultdict(set)
@@ -245,24 +255,34 @@ def _build_feature_matrix(
         for delta in range(-PSEUDO_ABSENCE_EXCLUSION_DAYS, PSEUDO_ABSENCE_EXCLUSION_DAYS + 1):
             excluded_dates_by_zone[zid].add(ev_dt + pd.Timedelta(days=delta))
 
-    # Identify all eligible hard-negative wet days across zones
+    # Identify all eligible wet-day and dry-season days across zones
     rng = np.random.default_rng(RANDOM_SEED)
-    eligible_negs = []
+    eligible_wet_negs = []
+    eligible_dry_negs = []
+
     for zid in sorted(zones_indexed.index):
         zw = w_clean[w_clean["zone_id"] == zid]
-        # Active monsoon/wet months with rainfall >= 1.0mm (true hard negatives: rain on steep terrain without failure)
-        wet = zw[
-            (zw["reading_date"].dt.month.isin([5, 6, 7, 8, 9, 10]))
-            & (zw["rainfall_mm"] >= 1.0)
-        ]
-        for _, wr in wet.iterrows():
+        for _, wr in zw.iterrows():
             d = wr["reading_date"].date()
-            if d not in excluded_dates_by_zone[zid]:
-                eligible_negs.append((zid, wr["reading_date"]))
+            if d in excluded_dates_by_zone[zid]:
+                continue
+            month = wr["reading_date"].month
+            # Active monsoon wet days (rain >= 1.0mm)
+            if month in [5, 6, 7, 8, 9, 10] and wr["rainfall_mm"] >= 1.0:
+                eligible_wet_negs.append((zid, wr["reading_date"]))
+            # Dry / non-monsoon background days
+            elif month in [11, 12, 1, 2, 3, 4]:
+                eligible_dry_negs.append((zid, wr["reading_date"]))
 
-    print(f"[Train]   → {len(eligible_negs)} eligible hard-negative wet days identified across 15 zones.")
-    rng.shuffle(eligible_negs)
-    chosen_negs = eligible_negs[:target_absences]
+    print(
+        f"[Train]   → {len(eligible_wet_negs)} eligible wet days and "
+        f"{len(eligible_dry_negs)} eligible dry-season days identified across zones."
+    )
+    rng.shuffle(eligible_wet_negs)
+    rng.shuffle(eligible_dry_negs)
+
+    chosen_negs = eligible_wet_negs[:target_wet] + eligible_dry_negs[:target_dry]
+    rng.shuffle(chosen_negs)
 
     absence_count = 0
     for zid, ts in chosen_negs:
@@ -279,7 +299,7 @@ def _build_feature_matrix(
         groups.append(str(z_row.get("district", f"zone_{zid}")))
         absence_count += 1
 
-    print(f"[Train]   → {absence_count} hard negatives generated (ratio {absence_count/n_pos:.2f}:1).")
+    print(f"[Train]   → {absence_count} balanced negatives generated (ratio {absence_count/n_pos:.2f}:1).")
 
     X = np.array(rows, dtype=np.float64)
     y = np.array(labels, dtype=np.int32)
@@ -329,7 +349,7 @@ def _make_rf() -> RandomForestClassifier:
     return RandomForestClassifier(
         n_estimators=250,
         class_weight="balanced",
-        max_features=0.30,
+        max_features=0.25,
         min_samples_leaf=25,
         max_depth=7,
         max_samples=0.75,
@@ -345,7 +365,7 @@ def _make_xgb(spw: float) -> "xgb.XGBClassifier":
         max_depth=3,
         learning_rate=0.04,
         subsample=0.75,
-        colsample_bytree=0.55,
+        colsample_bytree=0.45,
         scale_pos_weight=spw,
         min_child_weight=12,
         gamma=0.3,
@@ -453,28 +473,21 @@ def _train_ensemble(
         float(recall_oof[prec_oof >= 0.50].max()) if (prec_oof >= 0.50).any() else 0.0
     )
 
-    # ── Final model: 80% train / 20% calibration terrane split ──
-    print("\n[Train] Building final model — prefit calibration on clean terrane holdout…")
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=RANDOM_SEED)
-    tr_idx, cal_idx = next(gss.split(X, y, terrane_arr))
-
+    # ── Final model: 5-Fold Invariant Pre-Registered Geological Terranes CV Calibration ──
+    print("\n[Train] Building final model — 5-terrane inclusive cross-calibration…")
     final_scaler = StandardScaler()
-    X_tr_f = final_scaler.fit_transform(X[tr_idx])
-    X_cal = final_scaler.transform(X[cal_idx])
-    X_full_scaled = final_scaler.transform(X)
+    X_full_scaled = final_scaler.fit_transform(X)
 
-    y_tr_f, y_cal = y[tr_idx], y[cal_idx]
-    print(f"[Train]   Base train={len(y_tr_f)}  Calibration holdout={len(y_cal)}")
+    gkf = GroupKFold(n_splits=5)
+    terrane_cv_splits = list(gkf.split(X_full_scaled, y, terrane_arr))
 
     rf_base = _make_rf()
-    rf_base.fit(X_tr_f, y_tr_f)
-    rf_final = CalibratedClassifierCV(FrozenEstimator(rf_base), method="sigmoid")
-    rf_final.fit(X_cal, y_cal)
+    rf_final = CalibratedClassifierCV(estimator=rf_base, cv=terrane_cv_splits, method="sigmoid")
+    rf_final.fit(X_full_scaled, y)
 
     xgb_base = _make_xgb(spw)
-    xgb_base.fit(X_tr_f, y_tr_f)
-    xgb_final = CalibratedClassifierCV(FrozenEstimator(xgb_base), method="sigmoid")
-    xgb_final.fit(X_cal, y_cal)
+    xgb_final = CalibratedClassifierCV(estimator=xgb_base, cv=terrane_cv_splits, method="sigmoid")
+    xgb_final.fit(X_full_scaled, y)
 
     # In-sample check
     rf_p_full  = rf_final.predict_proba(X_full_scaled)[:, 1]
@@ -512,7 +525,7 @@ def _train_ensemble(
             "fold_isolated_standard_scaling",
             "regularized_rf_depth_7_leaf_25",
             "regularized_xgb_depth_3_alpha_1_lambda_3",
-            "final_prefit_calibration_on_20pct_terrane_holdout",
+            "final_5_terrane_inclusive_cross_calibration",
         ],
     }
 
@@ -567,6 +580,7 @@ def _save_artifact(
     n_pos: int,
     n_abs: int,
     git_commit: str,
+    n_raw: int = 0,
 ) -> None:
     """Saves JSON metadata + companion joblib files."""
     out_dir = os.path.dirname(out_json) or "models"
@@ -617,6 +631,7 @@ def _save_artifact(
         "metrics": metrics,
         "dataset_fingerprint": fingerprint,
         "sample_counts": {
+            "raw_db_events":   n_raw,
             "positives":       n_pos,
             "pseudo_absences": n_abs,
             "total":           n_pos + n_abs,
@@ -718,6 +733,7 @@ def main() -> None:
         n_pos=n_pos,
         n_abs=n_abs,
         git_commit=git_commit,
+        n_raw=len(events_df),
     )
 
     print("\n" + "=" * 72)

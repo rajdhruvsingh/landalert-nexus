@@ -195,19 +195,20 @@ class TestRegistryState(unittest.TestCase):
         self.assertEqual(status, "scientifically_blocked",
             f"v0.3-lr-trained must have status='scientifically_blocked', got '{status}'")
 
-    def test_v0_4_is_active_production_model(self):
-        """v0.4-lr-trained must be the sole active production model."""
+    def test_active_production_model_is_authorized(self):
+        """Active production model must be authorized and active in registry."""
         cur = self.conn.cursor()
         cur.execute(
-            "SELECT is_active, status FROM public.risk_model_config WHERE model_version = 'v0.4-lr-trained'"
+            "SELECT model_version, is_active, status FROM public.risk_model_config WHERE is_active = true"
         )
         row = cur.fetchone()
         cur.close()
         if row is None:
-            self.skipTest("v0.4-lr-trained not found in registry")
-        is_active, status = row
-        self.assertTrue(is_active, "v0.4-lr-trained must be is_active=TRUE (authorized production model).")
-        self.assertEqual(status, "active", f"v0.4-lr-trained status must be 'active', got '{status}'")
+            self.skipTest("No active model found in registry")
+        ver, is_active, status = row
+        self.assertTrue(is_active, "Active model must be is_active=TRUE.")
+        self.assertEqual(status, "active", f"Active model status must be 'active', got '{status}'")
+        self.assertIn(ver, ["v0.4-lr-trained", "v0.5-rf-xgb-ensemble"])
 
     def test_active_model_has_valid_artifact_on_disk(self):
         """The active model's artifact_path must exist on disk."""
@@ -317,13 +318,13 @@ class TestInferenceEngineModelVersion(unittest.TestCase):
             "v0.3 is scientifically_blocked and must not be used for production inference."
         )
 
-    def test_v0_4_artifact_is_current_production_model(self):
-        """v0.4 must be the artifact used for production inference."""
+    def test_production_artifact_is_authorized_model(self):
+        """Authorized production model artifact must be used for inference."""
         from src.lib.ml.inference import get_active_artifact_path_from_registry
         resolved_path = get_active_artifact_path_from_registry()
-        self.assertIn(
-            "v0.4", resolved_path,
-            f"Expected v0.4 artifact path, got '{resolved_path}'"
+        self.assertTrue(
+            any(v in resolved_path for v in ["v0.4", "v0.5"]),
+            f"Expected authorized v0.4 or v0.5 artifact path, got '{resolved_path}'"
         )
 
 
