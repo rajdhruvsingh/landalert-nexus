@@ -9,8 +9,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Capacitor } from "@capacitor/core";
-import { Geolocation as CapGeolocation } from "@capacitor/geolocation";
 
 export interface CachedLocation {
   lat: number;
@@ -56,43 +54,7 @@ export async function captureGlobalUserLocation(force = false): Promise<CachedLo
     return sessionLocationCache;
   }
 
-  // 1. Native Mobile Platform (Capacitor)
-  const isNative = Capacitor.isNativePlatform();
-  if (isNative) {
-    try {
-      const perm = await CapGeolocation.checkPermissions();
-      if (perm.location !== "granted") {
-        const req = await CapGeolocation.requestPermissions();
-        if (req.location !== "granted") {
-          return null;
-        }
-      }
-
-      const pos = await CapGeolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 10000,
-      });
-
-      const res: CachedLocation = {
-        lat: Number(pos.coords.latitude.toFixed(5)),
-        lng: Number(pos.coords.longitude.toFixed(5)),
-        accuracy: Number(pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : "5.0"),
-        capturedAt: new Date(pos.timestamp).toISOString(),
-      };
-
-      sessionLocationCache = res;
-      saveStoredLocation(res);
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("landalert-location-captured", { detail: res }));
-      }
-      return res;
-    } catch (err) {
-      console.warn("[captureGlobalUserLocation] Native Geolocation failed, trying browser API:", err);
-    }
-  }
-
-  // 2. Web Browser Fallback (navigator.geolocation)
+  // Web Browser Geolocation API (navigator.geolocation)
   const hasNavGeo = typeof navigator !== "undefined" && Boolean(navigator.geolocation);
   if (!hasNavGeo) return null;
 

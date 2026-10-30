@@ -254,10 +254,10 @@ export function RegionalGroundTruthQualityBadge({
   state,
   mlOperational,
 }: {
-  tier?: string;
-  district?: string;
-  state?: string;
-  mlOperational?: boolean;
+  tier?: string | undefined;
+  district?: string | undefined;
+  state?: string | undefined;
+  mlOperational?: boolean | undefined;
 }) {
   const isMizoTripura =
     tier === "insufficient_data" ||

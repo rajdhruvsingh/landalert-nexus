@@ -56,6 +56,14 @@ export interface RiskPredictionResult {
   };
   inference_timestamp: string;
   persisted?: boolean;
+  regional_confidence?: {
+    tier?: string;
+    warning?: string;
+    ml_model_operational?: boolean;
+    operational_ratio?: string;
+    empirical_positive_count?: number;
+    recommended_policy?: string;
+  };
 }
 
 export interface PredictionErrorResponse {
