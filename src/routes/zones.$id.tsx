@@ -1425,7 +1425,7 @@ function ZonePage() {
                       const u =
                         m.url ||
                         (m.storagePath
-                          ? `https://shkpwbqcbeqlybdrhczq.supabase.co/storage/v1/object/public/field-observation-media/${m.storagePath}`
+                          ? `/api/field-observations/media/${m.storagePath}`
                           : undefined);
                       if (u && !urls.includes(u)) {
                         urls.push(u);

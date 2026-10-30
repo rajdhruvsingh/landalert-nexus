@@ -35,7 +35,7 @@ import {
 
 import { getOfflineOverviewFallback } from "@/lib/offline-manager";
 
-const overviewQuery = queryOptions({
+const overviewQuery = queryOptions<any>({
   queryKey: ["overview"],
   networkMode: "always",
   queryFn: async () => {

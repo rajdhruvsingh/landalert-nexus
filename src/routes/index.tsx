@@ -69,7 +69,7 @@ import { getUserAuthorizationState, type AppUserRole } from "@/lib/auth-domains"
 import { getObservationStatusMeta } from "@/lib/observation-status";
 import { getOfflineOverviewFallback, getQueuedObservations, getSyncedObservations } from "@/lib/offline-manager";
 
-const overviewQuery = queryOptions({
+const overviewQuery = queryOptions<any>({
   queryKey: ["overview"],
   networkMode: "always",
   queryFn: async () => {

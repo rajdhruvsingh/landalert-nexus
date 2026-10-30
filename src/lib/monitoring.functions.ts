@@ -29,6 +29,25 @@ export type SlideRow = Database["public"]["Tables"]["historical_landslides"]["Ro
 export type ModelConfigRow = Database["public"]["Tables"]["risk_model_config"]["Row"];
 export type ObservationRow = Database["public"]["Tables"]["field_observations"]["Row"];
 
+export interface OverviewResult {
+  zones: ZoneRow[];
+  roads: RoadRow[];
+  alerts: AlertRow[];
+  activeModel: ModelConfigRow | null;
+  candidateModel: ModelConfigRow | null;
+  observations: ReturnType<typeof sanitizeObservationList>;
+}
+
+export interface ZoneDetailResult {
+  zone: ZoneRow | null;
+  readings: ReadingRow[];
+  roads: RoadRow[];
+  slides: SlideRow[];
+  alerts: AlertRow[];
+  activeModel: ModelConfigRow | null;
+  observations: ReturnType<typeof sanitizeObservationList>;
+}
+
 let dbPool: any = null;
 async function getDbPool() {
   if (!dbPool && process.env["DATABASE_URL"]) {
@@ -46,7 +65,35 @@ async function getDbPool() {
   return dbPool;
 }
 
-export const getOverview = createServerFn({ method: "GET" }).handler(async () => {
+export const getOverview = createServerFn({ method: "GET" }).handler(async (): Promise<OverviewResult> => {
+  // Authoritative Postgres direct query (standard PostgreSQL)
+  const pool = await getDbPool();
+  if (pool) {
+    try {
+      const [zRes, rRes, aRes, mRes, cRes, oRes] = await Promise.all([
+        pool.query("SELECT * FROM risk_zones ORDER BY risk_score DESC"),
+        pool.query("SELECT * FROM road_segments"),
+        pool.query("SELECT * FROM alerts ORDER BY dispatched_at DESC LIMIT 30"),
+        pool.query("SELECT * FROM risk_model_config WHERE is_active = true LIMIT 1"),
+        pool.query(
+          "SELECT * FROM risk_model_config WHERE is_active = false AND status IN ('validated', 'candidate') ORDER BY trained_at DESC LIMIT 1"
+        ),
+        pool.query("SELECT * FROM field_observations ORDER BY observed_at DESC LIMIT 20"),
+      ]);
+      return {
+        zones: zRes.rows || [],
+        roads: rRes.rows || [],
+        alerts: aRes.rows || [],
+        activeModel: mRes.rows[0] || null,
+        candidateModel: cRes.rows[0] || null,
+        observations: sanitizeObservationList(oRes.rows || []),
+      };
+    } catch (pgErr) {
+      console.error("[getOverview] Postgres query error:", pgErr);
+    }
+  }
+
+  // Fallback to Supabase if configured
   try {
     const sb = publicClient();
     const [zones, roads, alerts, modelConfig, candidateConfig, observations] = await Promise.all([
@@ -75,34 +122,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
       };
     }
   } catch {
-    // Proceed to Postgres fallback if available
-  }
-
-  // Authoritative Postgres fallback
-  const pool = await getDbPool();
-  if (pool) {
-    try {
-      const [zRes, rRes, aRes, mRes, cRes, oRes] = await Promise.all([
-        pool.query("SELECT * FROM risk_zones ORDER BY risk_score DESC"),
-        pool.query("SELECT * FROM road_segments"),
-        pool.query("SELECT * FROM alerts ORDER BY dispatched_at DESC LIMIT 30"),
-        pool.query("SELECT * FROM risk_model_config WHERE is_active = true LIMIT 1"),
-        pool.query(
-          "SELECT * FROM risk_model_config WHERE is_active = false AND status IN ('validated', 'candidate') ORDER BY trained_at DESC LIMIT 1"
-        ),
-        pool.query("SELECT * FROM field_observations ORDER BY observed_at DESC LIMIT 20"),
-      ]);
-      return {
-        zones: zRes.rows || [],
-        roads: rRes.rows || [],
-        alerts: aRes.rows || [],
-        activeModel: mRes.rows[0] || null,
-        candidateModel: cRes.rows[0] || null,
-        observations: sanitizeObservationList(oRes.rows || []),
-      };
-    } catch (pgErr) {
-      console.error("[getOverview] Postgres fallback query error:", pgErr);
-    }
+    // Both failed
   }
 
   return {
@@ -117,69 +137,130 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
 
 export const getZoneDetail = createServerFn({ method: "GET" })
   .validator((data: { id: number }) => ({ id: Number(data.id) }))
-  .handler(async ({ data }) => {
-    const sb = publicClient();
-    const [zone, readings, roads, slides, alerts, modelConfig, observations] = await Promise.all([
-      sb.from("risk_zones").select("*").eq("id", data.id).maybeSingle(),
-      sb
-        .from("weather_readings")
-        .select("*")
-        .eq("zone_id", data.id)
-        .order("reading_time", { ascending: true }),
-      sb.from("road_segments").select("*").eq("zone_id", data.id),
-      sb
-        .from("historical_landslides")
-        .select("*")
-        .eq("zone_id", data.id)
-        .order("event_date", { ascending: false }),
-      sb
-        .from("alerts")
-        .select("*")
-        .eq("zone_id", data.id)
-        .order("dispatched_at", { ascending: false })
-        .limit(10),
-      sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
-      sb
-        .from("field_observations")
-        .select("*")
-        .eq("zone_id", data.id)
-        .order("observed_at", { ascending: false })
-        .limit(10),
-    ]);
-    return {
-      zone: zone.data ?? null,
-      readings: readings.data ?? [],
-      roads: roads.data ?? [],
-      slides: slides.data ?? [],
-      alerts: alerts.data ?? [],
-      activeModel: modelConfig.data ?? null,
-      observations: sanitizeObservationList(observations.data ?? []),
-    };
+  .handler(async ({ data }): Promise<ZoneDetailResult> => {
+    // Authoritative Postgres direct query (standard PostgreSQL)
+    const pool = await getDbPool();
+    if (pool) {
+      try {
+        const [zRes, wRes, rRes, sRes, aRes, mRes, oRes] = await Promise.all([
+          pool.query("SELECT * FROM risk_zones WHERE id = $1 LIMIT 1", [data.id]),
+          pool.query("SELECT * FROM weather_readings WHERE zone_id = $1 ORDER BY reading_time ASC", [data.id]),
+          pool.query("SELECT * FROM road_segments WHERE zone_id = $1", [data.id]),
+          pool.query("SELECT * FROM historical_landslides WHERE zone_id = $1 ORDER BY event_date DESC", [data.id]),
+          pool.query("SELECT * FROM alerts WHERE zone_id = $1 ORDER BY dispatched_at DESC LIMIT 10", [data.id]),
+          pool.query("SELECT * FROM risk_model_config WHERE is_active = true LIMIT 1"),
+          pool.query("SELECT * FROM field_observations WHERE zone_id = $1 ORDER BY observed_at DESC LIMIT 10", [data.id]),
+        ]);
+        return {
+          zone: zRes.rows[0] || null,
+          readings: wRes.rows || [],
+          roads: rRes.rows || [],
+          slides: sRes.rows || [],
+          alerts: aRes.rows || [],
+          activeModel: mRes.rows[0] || null,
+          observations: sanitizeObservationList(oRes.rows || []),
+        };
+      } catch (pgErr) {
+        console.error("[getZoneDetail] Postgres query error:", pgErr);
+      }
+    }
+
+    try {
+      const sb = publicClient();
+      const [zone, readings, roads, slides, alerts, modelConfig, observations] = await Promise.all([
+        sb.from("risk_zones").select("*").eq("id", data.id).maybeSingle(),
+        sb
+          .from("weather_readings")
+          .select("*")
+          .eq("zone_id", data.id)
+          .order("reading_time", { ascending: true }),
+        sb.from("road_segments").select("*").eq("zone_id", data.id),
+        sb
+          .from("historical_landslides")
+          .select("*")
+          .eq("zone_id", data.id)
+          .order("event_date", { ascending: false }),
+        sb
+          .from("alerts")
+          .select("*")
+          .eq("zone_id", data.id)
+          .order("dispatched_at", { ascending: false })
+          .limit(10),
+        sb.from("risk_model_config").select("*").eq("is_active", true).maybeSingle(),
+        sb
+          .from("field_observations")
+          .select("*")
+          .eq("zone_id", data.id)
+          .order("observed_at", { ascending: false })
+          .limit(10),
+      ]);
+      return {
+        zone: zone.data ?? null,
+        readings: readings.data ?? [],
+        roads: roads.data ?? [],
+        slides: slides.data ?? [],
+        alerts: alerts.data ?? [],
+        activeModel: modelConfig.data ?? null,
+        observations: sanitizeObservationList(observations.data ?? []),
+      };
+    } catch {
+      return {
+        zone: null,
+        readings: [],
+        roads: [],
+        slides: [],
+        alerts: [],
+        activeModel: null,
+        observations: [],
+      };
+    }
   });
 
 export const getActiveModelConfig = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = publicClient();
-  const { data, error } = await sb
-    .from("risk_model_config")
-    .select("*")
-    .eq("is_active", true)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
+  const pool = await getDbPool();
+  if (pool) {
+    try {
+      const res = await pool.query("SELECT * FROM risk_model_config WHERE is_active = true LIMIT 1");
+      return res.rows[0] || null;
+    } catch {}
+  }
+  try {
+    const sb = publicClient();
+    const { data } = await sb
+      .from("risk_model_config")
+      .select("*")
+      .eq("is_active", true)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
 });
 
 export const getCandidateModelConfig = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = publicClient();
-  const { data, error } = await sb
-    .from("risk_model_config")
-    .select("*")
-    .eq("is_active", false)
-    .in("status", ["validated", "candidate"])
-    .order("trained_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
+  const pool = await getDbPool();
+  if (pool) {
+    try {
+      const res = await pool.query(
+        "SELECT * FROM risk_model_config WHERE is_active = false AND status IN ('validated', 'candidate') ORDER BY trained_at DESC LIMIT 1"
+      );
+      return res.rows[0] || null;
+    } catch {}
+  }
+  try {
+    const sb = publicClient();
+    const { data } = await sb
+      .from("risk_model_config")
+      .select("*")
+      .eq("is_active", false)
+      .in("status", ["validated", "candidate"])
+      .order("trained_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
 });
 
 /**
@@ -290,9 +371,21 @@ export const getSpatialGridServerFn = createServerFn({ method: "GET" })
     const { getAllSpatialCells, getSpatialCellsByState, getSpatialCellsByDistrict, evaluateCellRisk } = await import(
       "./spatial-risk.service"
     );
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
-    const activeZones = zonesData ?? [];
+    let activeZones: any[] = [];
+    const pool = await getDbPool();
+    if (pool) {
+      try {
+        const res = await pool.query("SELECT * FROM risk_zones");
+        activeZones = res.rows || [];
+      } catch {}
+    }
+    if (activeZones.length === 0) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+        activeZones = zonesData ?? [];
+      } catch {}
+    }
 
     let cells = getAllSpatialCells();
     if (data?.stateName && data.stateName !== "All") {
@@ -328,9 +421,21 @@ export const getLocationSpatialRiskServerFn = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { deriveLocationSpatialRisk } = await import("./spatial-risk.service");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
-    const activeZones = zonesData ?? [];
+    let activeZones: any[] = [];
+    const pool = await getDbPool();
+    if (pool) {
+      try {
+        const res = await pool.query("SELECT * FROM risk_zones");
+        activeZones = res.rows || [];
+      } catch {}
+    }
+    if (activeZones.length === 0) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: zonesData } = await supabaseAdmin.from("risk_zones").select("*");
+        activeZones = zonesData ?? [];
+      } catch {}
+    }
 
     return deriveLocationSpatialRisk(
       data.name,

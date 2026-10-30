@@ -1,0 +1,35 @@
+# =============================================================================
+# docker-compose.db.yml — Standalone Pure PostgreSQL Service
+# =============================================================================
+# Run a dedicated, self-hosted PostgreSQL database with PostGIS:
+# docker compose -f docker-compose.db.yml up -d
+#
+# Connection string:
+# DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5432/landalert
+# =============================================================================
+
+version: "3.8"
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: landalert-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-landalert}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - landalert-pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d landalert"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  landalert-pgdata:
+    driver: local
