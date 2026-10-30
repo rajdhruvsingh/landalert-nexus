@@ -195,3 +195,4 @@ class LogoutView(APIView):
             "ok": True,
             "message": "Logged out successfully",
         })
+
