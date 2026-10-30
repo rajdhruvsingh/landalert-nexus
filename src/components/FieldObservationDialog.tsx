@@ -21,7 +21,7 @@ import {
 import { useOnlineStatus, useConnectivityStatus, queueObservation, pruneQueue } from "@/lib/offline-manager";
 import { submitFieldObservationsServerFn } from "@/lib/monitoring.functions";
 import type { FieldObservationInput } from "@/lib/sync.service";
-import { supabase } from "@/integrations/supabase/client";
+import { authService } from "@/lib/auth-service";
 import { getUserAuthorizationState } from "@/lib/auth-domains";
 import { Camera, Video, Upload, Volume2, Eye, Play } from "lucide-react";
 import { ObservationCameraModal } from "@/components/ObservationCameraModal";
@@ -82,17 +82,13 @@ interface MediaItem {
   url?: string;
 }
 
-// Helper to ensure an authenticated Supabase session exists before media upload
+// Helper to ensure an authenticated session exists before media upload
 export async function ensureAuthenticatedSession() {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await authService.getSession();
     if (session) return session;
-    const { data: anonData, error } = await supabase.auth.signInAnonymously();
-    if (!error && anonData?.session) {
-      return anonData.session;
-    }
   } catch (err) {
-    console.warn("Anonymous auth session establishment failed:", err);
+    console.warn("Auth session check failed:", err);
   }
   return null;
 }
@@ -144,11 +140,11 @@ export function FieldObservationDialog({ initialZoneId, trigger, onSuccess }: Pr
   const [consentChecked, setConsentChecked] = useState<boolean>(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) {
         const authState = getUserAuthorizationState({
           email: session.user.email,
-          user_metadata: session.user.user_metadata,
+          user_metadata: session.user.user_metadata ?? null,
         });
         setUserRole(authState.role);
         setObserverId(session.user.email.split("@")[0] ?? "field_observer");

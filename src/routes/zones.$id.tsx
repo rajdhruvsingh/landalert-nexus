@@ -47,7 +47,7 @@ import { intensityThresholdMmPerDay, moistureThresholdMm, riskColor, type RiskLe
 import { Button } from "@/components/ui/button";
 import { ShieldAlert, Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { authService } from "@/lib/auth-service";
 import {
   Dialog,
   DialogContent,
@@ -348,13 +348,13 @@ function ZonePage() {
   const [dispatchAuthorized, setDispatchAuthorized] = useState<boolean>(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    authService.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         try {
           const authState = await getUserAuthorizationServerFn({
             data: {
               email: session.user.email ?? "",
-              user_metadata: session.user.user_metadata,
+              user_metadata: session.user.user_metadata ?? null,
               token: session.access_token,
             },
           });
@@ -366,13 +366,13 @@ function ZonePage() {
         }
       }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         try {
           const authState = await getUserAuthorizationServerFn({
             data: {
               email: session.user.email ?? "",
-              user_metadata: session.user.user_metadata,
+              user_metadata: session.user.user_metadata ?? null,
               token: session.access_token,
             },
           });
@@ -412,7 +412,7 @@ function ZonePage() {
     setDispatching(true);
     setDispatchStatus(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await authService.getSession();
       const res: any = await dispatchAlertServerFn({
         data: {
           zoneId: zone.id,

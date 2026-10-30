@@ -12,10 +12,9 @@ import { FieldObservationDialog } from "./FieldObservationDialog";
 import { AuthDialog } from "./AuthDialog";
 import { OfflineBanner } from "./OfflineBanner";
 import { Search, ChevronDown, UserCheck, Shield, Phone } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { authService, type AuthUser } from "@/lib/auth-service";
 import { getUserAuthorizationState } from "@/lib/auth-domains";
 import { searchGeography, type SearchResultItem } from "@/lib/geography";
-import type { User } from "@supabase/supabase-js";
 import { captureGlobalUserLocation } from "@/hooks/useUserLocation";
 import "@/lib/i18n";
 
@@ -24,11 +23,11 @@ export function ConsoleNav() {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null;
       setUser(u);
       if (u) {
@@ -38,7 +37,7 @@ export function ConsoleNav() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = authService.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
       setUser(u);
       if (u) {

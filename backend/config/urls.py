@@ -10,6 +10,7 @@ from apps.core.views import spa_index_view, api_404_view
 
 urlpatterns = [
     # API endpoints
+    path("api/", include("apps.authentication.urls")),
     path("api/", include("apps.monitoring.urls")),
     path("api/", include("apps.risk.urls")),
     path("api/", include("apps.alerts.urls")),

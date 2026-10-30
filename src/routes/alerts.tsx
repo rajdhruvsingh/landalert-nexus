@@ -12,7 +12,7 @@ import { RiskBadge } from "@/components/RiskBits";
 import { PanelSkeleton, RouteError } from "@/components/ConsoleShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { authService } from "@/lib/auth-service";
 import { LocalsAlertsPanel } from "@/components/LocalsAlertsPanel";
 import { getUserAuthorizationState, type AppUserRole } from "@/lib/auth-domains";
 import { ShieldAlert, Lock } from "lucide-react";
@@ -167,14 +167,14 @@ function AlertsPage() {
   const [userRole, setUserRole] = useState<string>("PUBLIC_USER");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
         const state = getUserAuthorizationState(session.user);
         setUserRole(state.role);
       }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
         const state = getUserAuthorizationState(session.user);
@@ -200,12 +200,12 @@ function AlertsPage() {
   const [dispatchAuthorized, setDispatchAuthorized] = useState<boolean>(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       const authState = getUserAuthorizationState(session?.user ?? null);
       setViewerRole(authState.role);
       setDispatchAuthorized(Boolean(session?.user?.user_metadata?.["dispatch_authorized"]));
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
       const authState = getUserAuthorizationState(session?.user ?? null);
       setViewerRole(authState.role);
       setDispatchAuthorized(Boolean(session?.user?.user_metadata?.["dispatch_authorized"]));
@@ -235,7 +235,7 @@ function AlertsPage() {
     setDispatching(true);
     setDispatchResult(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await authService.getSession();
       const res: any = await dispatchAlertServerFn({
         data: {
           zoneId: targetZoneId,
@@ -277,7 +277,7 @@ function AlertsPage() {
     setRetracting(true);
     setRetractResult(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await authService.getSession();
       await retractAlertServerFn({
         data: {
           alertId: selectedAlertToRetract,

@@ -286,3 +286,58 @@ class TestAlertsAndObservations:
         assert resp.status_code == 302
         assert "https://example.supabase.co/storage/v1/object/public/field-media/non-existent-file-999.jpg" in resp.headers["Location"]
 
+
+@pytest.mark.django_db
+class TestNativeAuthentication:
+    """Tests for native PostgreSQL / Django authentication endpoints (/api/auth/*)."""
+
+    def test_register_and_login_flow(self, client):
+        import time
+        email = f"officer_{int(time.time())}@gsi.gov.in"
+        password = "SecurePassword123!"
+
+        # 1. Register official
+        reg_resp = client.post("/api/auth/register", {
+            "email": email,
+            "password": password,
+            "fullName": "Test Geologist",
+            "institution": "Geological Survey of India",
+        }, content_type="application/json")
+        assert reg_resp.status_code == 201
+        reg_data = reg_resp.json()
+        assert reg_data["ok"] is True
+        assert "token" in reg_data
+        assert reg_data["user"]["role"] == "VERIFIED_OFFICIAL"
+
+        # 2. Login with correct credentials
+        login_resp = client.post("/api/auth/login", {
+            "email": email,
+            "password": password,
+        }, content_type="application/json")
+        assert login_resp.status_code == 200
+        login_data = login_resp.json()
+        assert login_data["ok"] is True
+        token = login_data["token"]
+
+        # 3. Access /api/auth/me using issued JWT
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+        me_resp = client.get("/api/auth/me", **headers)
+        assert me_resp.status_code == 200
+        me_data = me_resp.json()
+        assert me_data["authenticated"] is True
+        assert me_data["user"]["email"] == email
+
+        # 4. Login with incorrect password
+        bad_login = client.post("/api/auth/login", {
+            "email": email,
+            "password": "WrongPassword!",
+        }, content_type="application/json")
+        assert bad_login.status_code == 401
+        assert bad_login.json()["code"] == "INVALID_CREDENTIALS"
+
+        # 5. Logout
+        logout_resp = client.post("/api/auth/logout")
+        assert logout_resp.status_code == 200
+        assert logout_resp.json()["ok"] is True
+
+

@@ -62,8 +62,7 @@ import {
   MapPinOff,
   RotateCw,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import { authService, type AuthUser } from "@/lib/auth-service";
 import { useUserLocation } from "@/hooks/useUserLocation";
 import { getUserAuthorizationState, type AppUserRole } from "@/lib/auth-domains";
 import { getObservationStatusMeta } from "@/lib/observation-status";
@@ -147,7 +146,7 @@ function Dashboard() {
   // Session-derived role for observation review gating (same pattern as AuthDialog)
   const [viewerRole, setViewerRole] = useState<AppUserRole>("PUBLIC_USER");
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [locationBannerDismissed, setLocationBannerDismissed] = useState(false);
 
   // Risk map layer visibility controls (controlled from header dropdown)
@@ -184,18 +183,18 @@ function Dashboard() {
 
   useEffect(() => {
     // Read initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       const authState = getUserAuthorizationState(session?.user ?? null);
       setViewerRole(authState.role);
       setAccessToken(session?.access_token ?? null);
-      setCurrentUser(session?.user ?? null);
+      setCurrentUser((session?.user as any) ?? null);
     });
     // Keep in sync with sign-in / sign-out events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
       const authState = getUserAuthorizationState(session?.user ?? null);
       setViewerRole(authState.role);
       setAccessToken(session?.access_token ?? null);
-      setCurrentUser(session?.user ?? null);
+      setCurrentUser((session?.user as any) ?? null);
     });
     return () => subscription.unsubscribe();
   }, []);

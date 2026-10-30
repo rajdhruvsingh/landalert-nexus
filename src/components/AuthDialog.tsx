@@ -11,8 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import { authService, type AuthUser } from "@/lib/auth-service";
 
 import { getUserAuthorizationState } from "@/lib/auth-domains";
 import { captureGlobalUserLocation } from "@/hooks/useUserLocation";
@@ -21,7 +20,7 @@ import { useTranslation } from "react-i18next";
 export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,7 +29,7 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
 
   useEffect(() => {
     // Check active session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         captureGlobalUserLocation();
@@ -39,7 +38,7 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = authService.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         captureGlobalUserLocation();
@@ -55,13 +54,13 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
     setError(null);
     setInfo(null);
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await authService.signInWithPassword({
         email: email.trim(),
         password,
       });
 
-      if (authError) {
-        setError(authError.message);
+      if (authError || !data?.user) {
+        setError(authError?.message || "Invalid credentials");
       } else {
         setUser(data.user);
         setInfo("Signed in successfully.");
@@ -76,78 +75,15 @@ export function AuthDialog({ trigger }: { trigger?: React.ReactNode }) {
   }
 
   async function handleGoogleSignIn() {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          skipBrowserRedirect: true,
-          ...(typeof window !== "undefined" ? { redirectTo: window.location.origin } : {}),
-        },
-      });
-
-      if (oauthError) {
-        console.error("[AuthDialog] Supabase Google OAuth initialization error:", oauthError);
-        setError(
-          "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
-        );
-        return;
-      }
-
-      if (!data?.url) {
-        setError(
-          "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
-        );
-        return;
-      }
-
-      // Pre-flight validation: check if the OAuth provider is active in Supabase before navigating
-      try {
-        const probeRes = await fetch(data.url, { method: "GET", redirect: "manual" });
-        if (!probeRes.ok && probeRes.status >= 400) {
-          const errData = (await probeRes.json().catch(() => null)) as {
-            code?: number;
-            error_code?: string;
-            msg?: string;
-          } | null;
-
-          console.error("[AuthDialog] Supabase Google OAuth provider is not configured/enabled:", {
-            status: probeRes.status,
-            error: errData,
-          });
-
-          setError(
-            "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
-          );
-          return;
-        }
-
-        // Provider is enabled and ready to redirect
-        if (typeof window !== "undefined") {
-          window.location.assign(data.url);
-        }
-      } catch (probeErr) {
-        // Cross-origin redirect to accounts.google.com during manual fetch indicates provider is active
-        console.info("[AuthDialog] Pre-flight redirect observed, proceeding to provider:", probeErr);
-        if (typeof window !== "undefined") {
-          window.location.assign(data.url);
-        }
-      }
-    } catch (err) {
-      console.error("[AuthDialog] Unexpected Google OAuth exception:", err);
-      setError(
-        "Google sign-in is currently unavailable. Please use your official email/password sign-in or try again later.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    setError(
+      "Google OAuth is disabled in standalone PostgreSQL mode. Please use your official institutional email and password to sign in.",
+    );
   }
 
   async function handleSignOut() {
     setLoading(true);
     try {
-      await supabase.auth.signOut();
+      await authService.signOut();
       setUser(null);
       setInfo("Signed out successfully.");
       setTimeout(() => setOpen(false), 1000);

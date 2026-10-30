@@ -4,6 +4,7 @@ from django.db import models
 class UserProfile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     email = models.CharField(max_length=255, unique=True)
+    password_hash = models.TextField(null=True, blank=True)
     full_name = models.TextField(null=True, blank=True)
     institution = models.TextField(null=True, blank=True)
     department = models.TextField(null=True, blank=True)
