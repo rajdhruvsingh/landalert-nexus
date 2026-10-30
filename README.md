@@ -3,9 +3,10 @@
 **SIH26001 — AI-Augmented Multi-Hazard Landslide Early Warning, Geodetic Monitoring & Emergency Response System**
 
 [![Production Status](https://img.shields.io/badge/deployment-production_render-success?style=for-the-badge&logo=render)](https://landalert-nexus.onrender.com)
-[![Test Suite](https://img.shields.io/badge/tests-322_passed_%7C_26_suites-emerald?style=for-the-badge&logo=vitest)](src/lib/)
-[![TypeScript](https://img.shields.io/badge/codebase-TypeScript_5.9-blue?style=for-the-badge&logo=typescript)](tsconfig.json)
-[![Architecture](https://img.shields.io/badge/framework-TanStack_Start_SSR_%2B_Supabase-orange?style=for-the-badge&logo=react)](src/routes/)
+[![Test Suite](https://img.shields.io/badge/tests-402_passed-emerald?style=for-the-badge&logo=pytest)](backend/tests/)
+[![Python](https://img.shields.io/badge/backend-Django_5_%7C_DRF-092E20?style=for-the-badge&logo=django)](backend/)
+[![Database](https://img.shields.io/badge/database-PostgreSQL_16_%2B_PostGIS-336791?style=for-the-badge&logo=postgresql)](docker-compose.db.yml)
+[![TypeScript](https://img.shields.io/badge/frontend-React_19_%2B_TypeScript-blue?style=for-the-badge&logo=typescript)](src/)
 [![PWA](https://img.shields.io/badge/offline-PWA_%2B_IndexedDB_Sync-purple?style=for-the-badge&logo=pwa)](public/sw.js)
 [![Accessibility](https://img.shields.io/badge/languages-9_NER_Locales-red?style=for-the-badge)](src/locales/)
 
@@ -39,25 +40,25 @@ flowchart TB
         SENT2["Copernicus Sentinel-2\n(True-Color & NDVI Imagery)"]
     end
 
-    subgraph CoreEngine["Scientific Ingestion & Processing Core"]
-        INGEST["Weather & Sensor Ingestion Pipeline\n(/api/ingest-weather)"]
+    subgraph CoreBackend["Django 5 REST Framework & Scientific Engine"]
+        AUTH["Native Institutional Auth (/api/auth/*)\n(PBKDF2 Hashing · Signed HS256 JWT)"]
+        INGEST["Weather & Sensor Ingestion Pipeline\n(/api/monitoring/ingest-weather)"]
         PHYSICS["Regional Hydrological Thresholds\n(Monga-Ganguli 2024/2026 + Das 2018)"]
-        ML_REG["Postgres ML Model Registry\n(v0.2/v0.3-lr-trained · 19 Canonical Features)"]
-        RECOMPUTE["Deterministic Risk Recomputation\n(recompute_risk() / PL/pgSQL)"]
+        ML_REG["Postgres ML Model Registry & Inference\n(/api/risk/evaluate · 19 Canonical Features)"]
+        ALERTS["Alert Dispatch & Triage Engine\n(/api/alerts/dispatch · Audit Logging)"]
         INSAR_WORKER["Decoupled InSAR Async Engine\n(ISCE2 topsApp + SNAPHU + MintPy)"]
     end
 
-    subgraph DataStorage["Supabase High-Availability Data Layer"]
-        PG[("PostgreSQL 15+ Engine")]
-        RLS["Row-Level Security Policies"]
-        STORAGE["S3-Compatible Object Storage\n(Field Photos & Audio Notes)"]
-        TABLES["risk_zones · weather_readings\nfield_observations · historical_landslides\ninsar_deformation_products"]
+    subgraph DataStorage["PostgreSQL 16 + PostGIS Spatial Engine"]
+        PG[("PostgreSQL 16 + PostGIS Database")]
+        TABLES["risk_zones · weather_readings\nfield_observations · historical_landslides\ninsar_deformation_products · user_profiles"]
+        MIGRATIONS["Pure Versioned SQL Migrations\n(15+ Core Relational Tables)"]
     end
 
-    subgraph Application["Lightweight Edge Web App (Render Node/Nitro SSR)"]
-        ROUTER["Nitro Server API Router\n(CSRF Protection · Rate Limiting · Validation)"]
-        SSR["TanStack Start SSR React Shell\n(ConsoleNav · MapCanvas · Dialogs)"]
-        CACHE_PROXY["Satellite Tile & Audio Proxy\n(24h In-Memory / HTTP Cache)"]
+    subgraph Application["Edge Web Application & PWA"]
+        CLIENT["React 19 + TanStack Router SPA\n(ConsoleNav · MapCanvas · Dialogs)"]
+        AUTH_SVC["Standalone authService\n(Cross-Tab Sync · LocalStorage Caching)"]
+        CACHE_PROXY["Satellite Tile & Media Proxy\n(24h In-Memory / HTTP Cache)"]
     end
 
     subgraph EdgeClients["Edge Devices & Operational Field Units"]
@@ -79,22 +80,19 @@ flowchart TB
 
     INGEST --> PG
     INSAR_WORKER --> TABLES
-    PHYSICS --> RECOMPUTE
-    ML_REG --> RECOMPUTE
-    PG --> RECOMPUTE
+    PHYSICS --> ML_REG
+    PG <--> CoreBackend
 
-    TABLES --> ROUTER
-    STORAGE --> ROUTER
-    RLS --> ROUTER
-    ROUTER --> SSR
-    CACHE_PROXY --> SSR
+    CoreBackend <--> CLIENT
+    AUTH_SVC <--> AUTH
 
-    SSR --> DESK
-    SSR --> FIELD
-    SSR --> PUBLIC
+    CLIENT --> DESK
+    CLIENT --> FIELD
+    CLIENT --> PUBLIC
 
     FIELD -.->|Offline Sync Queue| INGEST
-    DESK -->|Authorized Dispatch| MSG91
+    DESK -->|Authorized Dispatch| ALERTS
+    ALERTS --> MSG91
     BRO --> INGEST
 ```
 
@@ -104,14 +102,15 @@ flowchart TB
 
 | Layer | Primary Technology | Purpose & Architectural Role |
 | :--- | :--- | :--- |
-| **Frontend Framework** | React 19, TanStack Start, TanStack Router | Modern SSR application architecture with type-safe routing, hydration caching, and SEO optimization. |
+| **Backend & REST API** | Django 5.2, Django REST Framework, Gunicorn | High-performance Python backend serving `/api/*` endpoints, JSON envelopes, ML inference, and spatial business logic. |
+| **Authentication & RBAC** | Native Django Auth, PyJWT, PBKDF2 SHA-256 | Independent authentication with signed 7-day HS256 JWTs, auto-evaluation of institutional domains (`@gsi.gov.in`, `@ndma.gov.in`), and audit logging. |
+| **Database & GIS** | PostgreSQL 16 + PostGIS 3.4 | Standalone spatial relational database running via Docker Compose or native connection; PostGIS indexing (`GIST`) for geofencing and proximity calculations. |
+| **Frontend Framework** | React 19, TanStack Router, TypeScript 5.9 | Fully decoupled SPA/PWA architecture with type-safe routing, hydration caching, and modular component isolation. |
 | **State & Data Fetching** | TanStack Query (React Query v5) | Asynchronous query caching, optimistic UI mutations, and server-action synchronization. |
 | **Geospatial Mapping** | Leaflet, React-Leaflet, CartoDB Tiles | Interactive high-performance GIS dashboard featuring multi-layered risk centroids, hazard circles, and satellite overlays. |
 | **Design & Accessibility** | Tailwind CSS v4, Radix UI Primitives, Lucide Icons | Responsive glassmorphism interface, dark/light theme persistence, screen-reader landmarks, and Atkinson Hyperlegible typography. |
-| **Backend & Ingestion** | Nitro (H3), TanStack Start Server Functions | Embedded edge server running API routes, CSRF token validation, input sanitization, and rate limiting. |
-| **Database & Auth** | Supabase (PostgreSQL 15+), PostgREST, GoTrue Auth | Relational datastore with Row-Level Security (RLS), ACID transactions, and role-based access control (Citizen vs. Official). |
-| **Offline Architecture** | ServiceWorker, Cache API, IndexedDB | Comprehensive offline shell caching, idempotent mutation queues, and automatic background retry engine. |
-| **ML & Analytics** | Scikit-Learn, NumPy, Pandas, PL/pgSQL | 19-feature logistic regression hazard scoring, spatial proximity matrices, and calibrated probability estimators. |
+| **Offline Architecture** | ServiceWorker (`sw.js`), Cache API, IndexedDB | Offline shell precaching (`offline-shell.html`), idempotent mutation queues, and automatic background retry engine for field geologists. |
+| **ML & Analytics** | Scikit-Learn, XGBoost, Pandas, NumPy, psycopg2 | 19-feature logistic regression hazard scoring, spatial `GroupKFold` cross-validation, and calibrated probability estimators in Jupyter. |
 | **InSAR & Earth Observation** | ISCE2 (`topsApp.py`), SNAPHU, MintPy, GDAL | Dedicated geodetic processing architecture generating millimeter-scale ground displacement grids. |
 | **Telecommunications** | MSG91 Flow API, TRAI DLT Engine | Telecom Regulatory Authority of India (TCCCPR 2018) compliant emergency SMS broadcast delivery. |
 | **Build & Test Suite** | Vite 8, TypeScript 5.9, Vitest | Fast bundling, strict static type safety, and 322 automated unit, integration, and security tests. |
@@ -189,9 +188,27 @@ Incident commanders must triage limited rescue personnel across widespread simul
 
 ```
 landalert-nexus/
-├── src/
+├── backend/                        # Django 5 & Django REST Framework (DRF) backend
+│   ├── apps/
+│   │   ├── authentication/         # Native PBKDF2 auth, signed JWTs & domain verification
+│   │   ├── monitoring/             # Risk zones, live telemetry & weather readings
+│   │   ├── risk/                   # Real-time ML inference & hydrological evaluations
+│   │   ├── alerts/                 # Emergency alert dispatch, retraction & audit logging
+│   │   └── core/                   # SPA routing, CORS & error handling
+│   ├── config/                     # Django settings, WSGI/ASGI & root url routing
+│   ├── tests/                      # Automated Django REST API test suites
+│   └── manage.py                   # Django CLI management executable
+├── ml-notebooks/                   # Jupyter ML modeling & scientific calibration
+│   └── 01_risk_calibration.ipynb   # Raw database schema exploration, EDA, GroupKFold & training
+├── scripts/                        # Production deployment, ingest & evaluation scripts
+│   ├── start-production.sh         # Dual-process entrypoint (Gunicorn Django + Web App)
+│   ├── backfill_weather_open_meteo.py # Open-Meteo ERA5-Land historical data backfill
+│   ├── ingest_gsi_inventory.py     # GSI Bhukosh historical landslide inventory ingester
+│   └── generate-sw-manifest.mjs    # Automated precache manifest injector for ServiceWorker
+├── src/                            # Decoupled React 19 Frontend SPA / PWA
 │   ├── components/                 # Reusable UI, Map & Dialog components
 │   │   ├── ConsoleShell.tsx        # Global navigation, search bar & auth listeners
+│   │   ├── AuthDialog.tsx          # Standalone login/register dialog
 │   │   ├── FieldObservationDialog  # Offline-first observation submission & camera modal
 │   │   ├── LanguageSwitcher.tsx    # 9-language i18n switcher dropdown
 │   │   ├── MapCanvas.tsx           # Leaflet interactive map canvas with custom controls
@@ -202,17 +219,16 @@ landalert-nexus/
 │   │   ├── useConnectivityStatus.ts# Online/offline network telemetry detector
 │   │   └── useSyncQueue.ts         # IndexedDB mutation queue hook
 │   ├── lib/
-│   │   ├── api.router.ts           # Nitro server API routes with CSRF & rate limiting
+│   │   ├── auth-service.ts         # Native JWT auth client with localStorage caching
 │   │   ├── alert.service.ts        # Automated risk evaluation & dispatch generator
 │   │   ├── geography.ts            # NER administrative hierarchy (8 states, 120+ districts)
 │   │   ├── insar.ts                # Geodetic InSAR product models & QC verification
-│   │   ├── ml.service.ts           # 19-feature extraction & logistic regression scoring
+│   │   ├── ml/                     # ML inference engine & feature engineering pipelines
 │   │   ├── prioritization.service  # Multi-factor emergency response triage engine
 │   │   ├── risk.ts                 # Hydrological threshold equations & explanation generator
-│   │   ├── translation.service.ts  # Regional Indic translation pipelines
-│   │   └── sms/                    # TRAI DLT-compliant SMS gateway integration
+│   │   └── translation.service.ts  # Regional Indic translation pipelines
 │   ├── locales/                    # Full translations for all 9 regional languages
-│   └── routes/                     # TanStack Start file-system routes
+│   └── routes/                     # TanStack Router file-system routes
 │       ├── __root.tsx              # Application root shell, meta tags, and SW registration
 │       ├── index.tsx               # Primary Command Center GIS dashboard
 │       ├── alerts.tsx              # Operational alerts console & dispatch history
@@ -226,12 +242,11 @@ landalert-nexus/
 │   ├── DATA_SOURCES.md             # Ground-truth citations, DEM derivations & data links
 │   ├── MODEL_EVALUATION.md         # Scientific ML evaluation, PR-AUC & leakage audits
 │   ├── SATELLITE_INSAR_PIPELINE.md # Detailed SAR interferometric processing architecture
-│   ├── RESPONSE_PRIORITIZATION.md  # Formulation & rationale for incident dispatch triage
-│   └── EXTERNAL_INTEGRATIONS_PENDING.md # Institutional MOUs & real-world prerequisites
-├── supabase/
-│   ├── migrations/                 # Versioned PostgreSQL database schema & PL/pgSQL
-│   └── seed.sql                    # Initial risk zones, thresholds, and verified events
-└── tests/                          # 26 comprehensive Vitest automated test suites
+│   └── RESPONSE_PRIORITIZATION.md  # Formulation & rationale for incident dispatch triage
+├── supabase/migrations/            # Pure PostgreSQL / PostGIS database migrations
+├── docker-compose.db.yml           # Standalone PostGIS 16 Docker Compose service
+├── requirements.txt                # Pinned Python backend and ML dependencies
+└── tests/                          # Scientific gate and ML production test suites
 ```
 
 ---
@@ -239,9 +254,10 @@ landalert-nexus/
 ## 7. Local Development & Installation
 
 ### Prerequisites
+- **Python**: $\ge 3.11$ (3.11 – 3.13 supported)
 - **Node.js**: $\ge 20.17.0$ (Node 22 LTS recommended)
-- **Package Manager**: `npm`
-- **Supabase CLI** (optional for local database emulation): [Installation Guide](https://supabase.com/docs/guides/cli)
+- **Docker & Docker Compose**: (Recommended for running the local PostGIS database)
+- **PostgreSQL**: Version 15 or 16 with PostGIS extension
 
 ### Setup Instructions
 
@@ -251,51 +267,81 @@ landalert-nexus/
    cd landalert-nexus
    ```
 
-2. **Install Dependencies**:
+2. **Start the Database (PostgreSQL + PostGIS)**:
+   You can spin up the standalone PostGIS database container with all migrations auto-mounted:
+   ```bash
+   docker compose -f docker-compose.db.yml up -d
+   ```
+   *The database is now accessible at `postgresql://postgres:postgres@localhost:5432/landalert`.*
+
+3. **Set Up the Python Environment & Dependencies**:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+4. **Install Node Frontend Dependencies**:
    ```bash
    npm install
    ```
 
-3. **Configure Environment Variables**:
+5. **Configure Environment Variables**:
    Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
    ```
-   Provide the following credentials:
+   Configure the essential settings:
    ```env
-   SUPABASE_URL=https://<your-project-id>.supabase.co
-   SUPABASE_ANON_KEY=<your-anon-key>
-   SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+   # PostgreSQL Connection (standalone)
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/landalert
 
-   # Optional External Integrations
+   # Django & Authentication Secrets
+   DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
+   JWT_SECRET=super-secret-jwt-signing-key
+   DEBUG=True
+
+   # Optional External Feeds
    MSG91_AUTH_KEY=<your-msg91-key>
    VITE_GEMINI_API_KEY=<your-gemini-key>
-   SENTINEL_HUB_INSTANCE_ID=<your-instance-id>
    ```
 
-4. **Start the Development Server**:
-   ```bash
-   npm run dev
-   ```
-   The application will be accessible at `http://localhost:3000`.
+6. **Start the Development Services**:
+   - **Terminal 1: Start Django Backend**:
+     ```bash
+     source .venv/bin/activate
+     python backend/manage.py runserver 8000
+     ```
+   - **Terminal 2: Start Frontend Dev Server**:
+     ```bash
+     npm run dev
+     ```
+   The application dashboard will be live at `http://localhost:3000`.
 
 ---
 
 ## 8. Verification & Test Suite
 
-The repository maintains an exhaustive suite of **322 automated tests across 26 test files**, covering unit threshold physics, ML data isolation, CSRF protection, InSAR quality criteria, and offline database persistence.
+The repository maintains an automated test matrix spanning both Python scientific & API suites as well as Vitest frontend suites.
 
-### Run All Tests
+### 1. Run Python Backend & Scientific ML Tests (Pytest)
+Executes all 80 tests covering native DRF authentication, scientific safety gates, data leakage audits, and ML production inferences:
+```bash
+.venv/bin/pytest backend/tests/ tests/
+```
+
+### 2. Run Frontend & PWA Tests (Vitest)
+Executes unit tests covering threshold math, IndexedDB sync, and offline storage queues:
 ```bash
 npm test
 ```
 
-### Run Static Typechecking
+### 3. Run Static Typechecking
 ```bash
 npm run typecheck
 ```
 
-### Production Build Validation
+### 4. Build Production Client & Service Worker Manifest
 ```bash
 npm run build
 ```
